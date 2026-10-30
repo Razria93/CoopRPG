@@ -9,6 +9,43 @@
 - **최소 양식:** 조사·검토의 기본 순서는 AGENTS를 따르며 관측 날짜·대상·방법·결과·판정 한계를 기존 표나 짧은 기록으로 남긴다. 후속 선택·작업은 Roadmap의 해당 항목을 참조한다. 공통 명령을 추가할 때는 작업 경로·도구/구성·사전 조건·명령·실행 결과를 함께 남기고 후보와 검증된 명령을 구분한다.
 - **검증:** 이관 기록과 이번 관측, 파일 존재와 실행 성공, 조사한 범위와 미확인 범위를 구분한다. 변동 가능한 정보는 사용 전에 필요한 항목만 재확인하며 문서 편집일을 재측정일로 쓰지 않는다. 읽기 조사 결과 확인을 이유로 설치·빌드를 실행하지 않는다.
 
+## UE 5.8.4 소스·Setup 준비 결과 — 2026-10-30
+
+**결과:** DSYEOM의 `C:\UE\5.8.4`에서 공식 `Setup.bat`을 실행해 기본 옵션의 의존성을 준비했다. GitDependencies 재검사는 누락 없이 종료했고 동봉 .NET 실행·기존 빌드 도구 파일·엔진 등록을 확인했다. VC++ 설치는 더 최신인 기존 런타임 때문에 거절됐으며, GameInput도 기존 최신 파일을 유지하는 조건에 해당한다. 이를 모두 신규 설치 성공으로 표현하지 않는다. **프로젝트 생성·빌드·게임 시험은 미실시이며 D01-H/V01은 미검증**이다.
+
+### 대상·실행과 확인 근거
+
+- **앞선 소스 확보:** 사용자 허용으로 공식 `https://github.com/EpicGames/UnrealEngine.git`의 `5.8.4-release`를 깊이 1로 확보했다. 태그 객체 `82f8143183f2244176f775ad5a13e8a0224c8f81`, 기준 커밋 `f45729c0b6f097038e72b52d366a62baeca3275b`, Build.version 5.8.4를 확인했다. 소스 확보 당시 224,010개 추적 파일·clean·`git fsck --full` 통과를 확인했으며 이번 Setup 후에도 HEAD·태그의 커밋 일치와 추적 파일 변경 없음을 재확인했다.
+- **프로젝트 이력:** 앞선 문서 4개 검토·로컬 커밋은 `35a027895d1157e235d20caaaea7a2d8e0bbcd06` (`docs: 데스크탑 이관과 환경 구성 채택 반영`)이다. 이번 시작 시 작업 트리는 clean이었다. 이번 요청에는 커밋·업로드가 포함되지 않는다.
+- **실행:** 2026-10-30 20:19:06~20:29:41 KST, 작업 경로 `C:\UE\5.8.4`, 명령 `cmd /d /c Setup.bat`. 공식 스크립트를 수정하지 않았고 플랫폼 제외·강제 덮어쓰기 옵션 없이 실행했다. 실행 경과 약 10분 35초이며 개발 생산성 측정값이 아니다.
+- **의존성:** 134,157/134,157개, 다운로드 31,104.9MiB 완료. Setup 종료 코드 0, 표준 오류 출력 없음. 이어 같은 경로에서 `Engine\Binaries\DotNET\GitDependencies\win-x64\GitDependencies.exe --dry-run`을 실행해 종료 코드 0과 Add/Update/Remove 항목 없음을 확인했다. 기본 플랫폼 필터·매니페스트 기준 검사이며 모든 플랫폼 준비나 전체 파일의 별도 바이트 재해시를 뜻하지 않는다.
+- **Setup 부수 구성:** 엔진 저장소의 `post-checkout`·`post-merge` 훅이 GitDependencies를 호출하도록 작성됐다. `HKCU\Software\Epic Games\Unreal Engine\Builds`에 `C:/UE/5.8.4`가 등록된 것을 확인했다. 이후 이 엔진 저장소의 checkout/merge는 훅을 실행할 수 있다.
+
+| 확인 항목 | 실제 관측·판정 |
+|---|---|
+| 동봉 .NET | `Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe --info`: SDK **10.0.203**, Host·ASP.NET Core·NETCore·WindowsDesktop 런타임 **10.0.7**, 동봉 MSBuild **18.3.3**. `GetDotnetPath.bat` 호출 후 DOTNET_ROOT가 이 동봉 경로이고 `--version`이 10.0.203임을 확인. 시스템 .NET 업그레이드는 하지 않음 |
+| 기존 VS·C++ | VS 2022 Community 17.14.14 (`devenv.exe` 17.14.36429.23), MSVC family 14.44.35207·`cl.exe` 제품 버전 **14.44.35216.0** / 파일 버전 19.44.35216.0. VS MSBuild 파일 버전 **17.14.23.42201**. 도구 파일 존재·버전 확인이며 UBT의 실제 선택·컴파일 성공은 미검증 |
+| Windows SDK | **10.0.26100.0**의 Windows.h·x64 kernel32.lib·rc.exe 존재 확인. rc.exe 파일 버전 10.0.26100.4654. 기존 SDK 변경 없음 |
+| VC++ x64 | 기존 설치 **14.51.36247.00** 유지. 동봉 14.50.35719.0 설치는 `0x80070666` / 종료 `0x666`으로 거절. 세부 원인·판정은 아래 참조 |
+| GameInput | 동봉 MSI 제품 버전 10.1.26100.6879의 MsiInstaller 이벤트 1033 상태 0·11707 성공 확인. 기존 `C:\Program Files\Microsoft GameInput\x64\gameinputredist.dll`·서비스 파일은 **4.0.302.0** 유지. 신규 패키지 등록 완료와 구분 |
+| 남은 공간 | 실행 전 20:18:40 **436.01GiB**, 준비·검사 후 20:31:14 **319.97GiB** (C: 전체 1,862.05GiB). 볼륨 여유 감소 약 **116.04GiB**. 엔진 폴더의 파일 논리 크기 합계 **118.86GiB**, 370,027파일(소스·.git·캐시·의존성 포함). 할당 크기와 다르며 볼륨 변화에는 다른 프로세스 영향도 포함 |
+| 임시 파일 | 사용자 TEMP `C:\Users\starb\AppData\Local\Temp`, 시스템 TEMP `C:\WINDOWS\TEMP`. 모두 C:이며 이번에 정리·이동하지 않음 |
+
+### 설치 예외 조사·판단
+
+**VC++:** Setup은 개별 사전 구성 설치기의 실패를 확인하지 않으므로 최종 종료 코드 0만으로 전부 성공했다고 판단할 수 없다. `dd_vcredist_amd64_20261030202939.log`에서 “newer version is installed”와 `0x80070666`을 확인했다. 설치 전후 레지스트리의 Installed=1·14.51.36247.00이 동일하고 기존 런타임이 동봉 14.50 및 채택 컴파일러 14.44보다 최신이다. [Microsoft의 v14 호환성 안내](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170)에 따라 기존 런타임을 유지했다. 제거·다운그레이드·반복 설치는 하지 않았으며 실제 게임 실행 호환성은 추후 검증한다.
+
+**GameInput:** 성공 이벤트가 있지만 동봉 ProductCode의 MSI ProductState는 -1이고 기존 설치 목록은 4.0.302.0이었다. 재설치 없이 MSI 데이터베이스를 읽어 `AppSearch`가 `Program Files\Microsoft GameInput\x64\gameinputredist.dll`의 최소 버전 3.1.26100.6879를 검사하고, `NOT Installed AND NEWERFILEVERSIONDETECTED`이면 `CA_Downgrade_ExitEarlyWithSuccess`로 조기 성공 종료함을 확인했다. 실제 파일 4.0.302.0은 해당 조건을 충족한다. 따라서 관측 결과는 최신 파일 보존 경로와 일치한다. MSI 상세 실행 로그는 없어 분기 실행 자체의 직접 로그는 확보하지 못했다. Windows 기본 GameInputSvc는 수동 시작·중지 상태이고 기본 서비스 파일은 0.2309.26100.9278이었다. 서비스 실행이나 입력 장치 시험은 하지 않았다.
+
+**로컬 원시 근거:** Setup 표준 출력·오류는 `C:\Users\starb\Documents\Codex\2026-10-30\cooprpg-c-cooprpg-git-git-lfs-2\work\ue584-setup-20261030.stdout.log`와 같은 이름의 `.stderr.log`, VC++ 로그는 `C:\Users\starb\AppData\Local\Temp\dd_vcredist_amd64_20261030202939.log`에 있다. GameInput은 Windows Application/MsiInstaller의 20:29:40~41 이벤트와 동봉 MSI 조건을 대조했다. 원시 로그는 로컬에만 있고 저장소에 추가·업로드하지 않았다. TEMP 로그의 장기 보존은 보장하지 않는다.
+
+### 한계·다음 행동
+
+- 400GiB는 준비 시작 전 계획 목표로, 준비 후 유지해야 할 공식 최소 여유 공간이 아니다. 남은 319.97GiB만으로 Editor/Server/Game 빌드·쿠킹의 최대 점유를 확정하지 않는다. 다음 작업 직전 다시 측정하고 각 빌드 단계의 증가량을 확인한다.
+- Setup은 엔진 실행 파일을 빌드하지 않는다. `GenerateProjectFiles`, UBT/컴파일, 게임 프로젝트 생성·게임 시험은 실행하지 않았다. `C:\CoopRPG\Game`도 없다.
+- 사용자 영상에 접근·이동·삭제하지 않았다. 개인 스킬·Git LFS 업데이트/저장소 설정·Handoff·커밋·업로드도 하지 않았다.
+- 남은 준비·다음 실행 범위는 [Roadmap의 다음 작업 카드](../Roadmap.md#다음-작업-카드--제안)를 따른다. 기존 도구와 의존성 확인을 첫 빌드 성공으로 올리지 않는다.
+
 ## 데스크탑 이관·구성 채택과 공간 재확인 — 2026-10-30
 
 **결과:** Git을 통한 데스크탑 저장소 이관을 마쳤고 사용자가 UE 5.8.4와 기존 VS 2022 도구 조합을 채택했다. 구성 채택과 실제 준비·빌드 성공은 별개다. 이전 노트북 기록은 아래에 당시 상태로 보존한다.
