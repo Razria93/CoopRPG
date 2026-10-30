@@ -69,7 +69,7 @@ CoopRPG / 2026-10-30. **목적:** 피처 브랜치의 변경을 재현 가능한
 
 **문서 운용 판단:** 문서화는 필요하지만 설정을 복사한 장문의 매뉴얼과 작업마다 별도 보고서를 만드는 것은 권하지 않는다. 이 절은 목적·구조·판정·보완 원칙, Roadmap은 도입 상태·다음 일, Environment는 실측·실제로 검증된 명령, 개별 시험은 아래 시험 기록 양식을 맡는다. 구현 후 제안과 실제 구성을 맞추고, 규칙 변경 이유와 과거 실패 근거를 보존한다. 최신 명령은 실행 스크립트를 원본으로 삼고 문서에는 사용 조건·연결만 둔다.
 
-**남은 선택·조사:** 초기 단계형 구성은 사용자 채택이고 현재 P2 로컬 리뷰·수정·재검증·커밋까지 허용됐고 main 머지·원격 실행·설정은 보류됐다. 유료/전용 러너 비용이 필요해지면 그때 조율한다. 4주 기준일·주당 작업일은 기존 D04-S를 유지한다. CI의 실제 런타임·설정 가능 여부·첫 빌드 비용·Gauntlet 적용성·두 번째 PC 조건은 AI가 해당 착수 때 조사하며 지금 사용자에게 기술 정보 선택을 넘기지 않는다. [UE Automation Framework](https://dev.epicgames.com/documentation/en-us/unreal-engine/automation-test-framework-in-unreal-engine), [Gauntlet](https://dev.epicgames.com/documentation/en-us/unreal-engine/gauntlet-automation-framework-in-unreal-engine)
+**남은 선택·조사:** 초기 단계형 구성은 사용자 채택이고 현재 P2 브랜치 게시·PR 생성·실제 Actions 정상/실패/복구 검증까지 허용됐고 main 머지·보호 설정은 보류됐다. 유료/전용 러너 비용이 필요해지면 그때 조율한다. 4주 기준일·주당 작업일은 기존 D04-S를 유지한다. CI의 실제 런타임·설정 가능 여부·첫 빌드 비용·Gauntlet 적용성·두 번째 PC 조건은 AI가 해당 착수 때 조사하며 지금 사용자에게 기술 정보 선택을 넘기지 않는다. [UE Automation Framework](https://dev.epicgames.com/documentation/en-us/unreal-engine/automation-test-framework-in-unreal-engine), [Gauntlet](https://dev.epicgames.com/documentation/en-us/unreal-engine/gauntlet-automation-framework-in-unreal-engine)
 
 ## P1 로컬 저장소 검증 — 2026-10-30
 
@@ -141,6 +141,35 @@ CoopRPG / 2026-10-30. **목적:** 피처 브랜치의 변경을 재현 가능한
 - **결과 연결:** 각 단계 실행 전 기대 SHA/코드 해시를 읽고 하위 결과와 대조한다. 최종 요약에 CI 진입점·결과 계약·워크플로의 해시를 남긴다. 커밋 전 최종 통합 경로는 `Artifacts/Validation/p2-review-final-20261030/summary.json`, 로컬 커밋 후 clean 실행 경로는 `Artifacts/Validation/p2-committed-20261030/summary.json`이다. 실제 완료·실패와 대상 HEAD는 각 JSON을 원본으로 확인하며 아직 없는 파일을 성공 근거로 쓰지 않는다.
 - **판정 한계:** 이 리뷰는 같은 AI의 코드·원시 근거 재검토와 실제 실패 재현이다. 독립된 사람/외부 리뷰, GitHub 스키마/러너·Action 실행이나 원격 머지 차단을 대체하지 않는다. 코드 자체를 악의적으로 바꿀 수 있는 작성자의 결과 위조까지 방어하는 신뢰 체계는 아니며 코드 리뷰·원격 실행 근거가 여전히 필요하다.
 - **다음:** 로컬 커밋 결과를 검토한 뒤 앞선 [원격 검증 순서](#실제-원격-검증-순서--후속-허용-필요)에 따라 별도 허용 범위를 정한다. 현재 main에 반영하거나 업로드하지 않는다.
+
+## P2 실제 Actions 정상·실패·복구 검증 — 2026-10-30
+
+**범위:** 사용자 허용으로 `ci/repository-validation`을 게시하고 [초안 PR #1](https://github.com/Razria93/CoopRPG/pull/1)을 만들었다. 실제 정상과 의도적 실패를 확인했고, 이 기록을 추가하는 복구 변경에서 오류 링크를 제거했다. 복구 커밋의 실제 SHA·run·최종 판정은 **PR 본문의 검증 표**를 원본으로 관리한다. 로컬 문서가 아직 없는 run의 성공을 예측한 것으로 해석하지 않는다. main 머지·보호 설정·프로젝트 생성·빌드·영상 작업은 이번 범위에서 제외했다.
+
+### 공유 범위와 실제 실행 근거
+
+- **미공유 P1 포함:** 원격 main `58b0735972ff312481603ea15741f2397549bb3a` 대비 최초 P2 게시 `4a36b490aa268fb0dc99453a434e0dd90b69c9c2`는 미공유 커밋 6개·변경 파일 13개였다. P1 구현 `9561350`·로컬 main 병합 `3c44c63`, 앞선 환경 문서와 P2를 함께 포함한다. 워크플로 파일만 별도 전송한 것이 아니다. 엔진·게임 자산·원시 로그·영상은 Git 전송 목록에 없다.
+- **실제 환경:** `windows-2022` 잡에서 checkout·통합 실행·요약 게시·아티팩트 업로드·최종 게이트를 확인했다. 요약의 PowerShell은 **7.6.9**, 잡 로그의 Git은 **2.56.0.windows.3**이었다. 정상에서는 P2 58개·P1 검사 6개·회귀 29개가 통과했다.
+- **SHA 구분:** run 메타데이터의 head_sha는 PR 소스 커밋이며 실제 checkout은 test merge commit이다. 정상 요약의 HEAD와 eventSha는 `0656e7d8055545e24a1112cc2c782a369e834f44`, PR head는 `4a36b49`·base는 `58b0735`였다. 실패 요약의 HEAD/eventSha는 `996423271ec775e8f698af6abf60a02b3279097a`, PR head는 `a38230e`였다. 두 실행 모두 dirty=false와 SHA 연결을 확인했다.
+
+| 사례 | 소스 커밋·실행 | 실제 판정 |
+|---|---|---|
+| 최초 정상 | `4a36b49` · [run 41070009818](https://github.com/Razria93/CoopRPG/actions/runs/41070009818) | 검사 잡·최종 `repository-validation` 모두 success |
+| 의도적 실패 | `a38230e5d7b55db60faf8ec167cd601e6099f2dd` · [run 41070375022](https://github.com/Razria93/CoopRPG/actions/runs/41070375022) | 검사 잡·최종 게이트 모두 failure, 요약/아티팩트 단계는 success |
+| 복구 | 오류 링크 제거와 이 기록을 포함한 커밋 · [PR #1 검증 표](https://github.com/Razria93/CoopRPG/pull/1) | 실제 복구 실행 완료 후 PR 본문에 SHA·run·결과를 기록 |
+
+### 실패·복구와 보관 범위
+
+실패 주입은 이 파일에 `P2-Remote-Probe-Missing.md`를 가리키는 링크 1개를 추가한 것이며 검증 코드·워크플로를 수정하지 않았다. 로컬에서도 documents.links 실패를 확인한 뒤 게시했다. 원격에서 workflow 단계는 통과했지만 repository 단계가 실패하고 fixtures는 사전 검사 실패로 결과를 만들지 못했다. 부모 통합 진입점은 종료 1, 최종 게이트도 실패했다. 현재 복구 변경에서는 주입 블록을 제거했다.
+
+정상 아티팩트 `repository-validation-41070009818-1`과 실패 아티팩트 `repository-validation-41070375022-1`을 실제로 내려받아 **summary.json·summary.md 두 파일만** 있음을 확인했다. 원시 Git 표본·.git·엔진·영상은 없었다. 메타데이터상 두 아티팩트는 생성 약 14일 후인 2026-11-13 만료 예정이다. 로컬 사본은 `Artifacts/Validation/p2-remote-20261030/normal/`·`failure/`에 보존한다. 복구 사본도 같은 상위 경로의 `recovery/`에 둔다. 이 로컬 원시 자료는 커밋하지 않는다.
+
+### 한계와 다음 판단
+
+- 이번 실행에서 실패 체크가 생기는 것은 확인했지만 main 브랜치 보호는 설정하지 않았다. 읽기 조회 당시 protected=false였으며, 실패 PR의 **머지 강제 차단**은 확인하지 않았다. PR은 초안·미병합으로 유지한다.
+- 전체 워크플로 취소·중복 실행 취소·외부 fork PR, checkout/업로드 장애는 이번 정상·링크 오류·복구 실행만으로 입증하지 않는다. 보호 설정도 별도 허용 뒤에 실제 체크 공급자·이름을 확인하고 적용한다.
+- 실패 요약의 단계 executed=0은 하위 결과가 계약에서 거절돼 집계되지 않은 값이다. 실제 하위 실행이 전혀 없었다는 뜻으로 쓰지 않고 잡 단계·로그와 함께 해석한다. 구체 오류 메시지의 공개 요약 보강은 후속 개선 후보로 남긴다.
+- 이 검증은 저장소 검사·검증기 회귀이며 UE 빌드·GAS·서버 접속 성공의 근거가 아니다. 기존 P3 이후와 4주 일정 가설은 미검증 상태를 유지한다.
 
 ## 현재 기록
 
@@ -237,7 +266,3 @@ CoopRPG / 2026-10-30. **목적:** 피처 브랜치의 변경을 재현 가능한
 AI는 반복 입력·실행·로그 비교를 도울 수 있다. 규칙을 복제한 별도 테스트 게임 대신 실제 게임 모듈을 쓰는 테스트 맵/입력 경로를 우선 검토한다. 직접 서버 함수 호출, 실제 클라이언트 요청, 수동 플레이를 별도 시험으로 기록한다. 사람의 UI·협동 완주 확인을 자동 시험 결과로 대체하지 않는다.
 
 성능 측정은 하드웨어·빌드·적 수·구간을 고정하고 서버 시간과 클라이언트 프레임을 구분한다. 서버/클라이언트를 한 PC에 함께 실행하면 자원 경쟁을 기록한다. 실제 문제를 발견했을 때만 수정 전후 개선을 주장한다.
-
-<!-- p2-remote-probe:start -->
-[의도적 CI 실패 시험](P2-Remote-Probe-Missing.md)
-<!-- p2-remote-probe:end -->
