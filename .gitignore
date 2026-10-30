@@ -1,0 +1,42 @@
+# IDE caches and per-user state
+.vs/
+*.suo
+*.VC.db
+*.VC.opendb
+*.vcxproj.user
+
+# Generated UE project files; keep tool and vendor source projects elsewhere.
+/Game/*.sln
+/Game/*.slnx
+/Game/*.vcxproj
+/Game/*.vcxproj.filters
+
+# Regenerable game output. Keep Config, Content, Source and Build inputs.
+/Game/Binaries/
+/Game/Intermediate/
+/Game/Saved/
+/Game/DerivedDataCache/
+/DerivedDataCache/
+
+# Plugin build inputs and required distribution binaries need individual review.
+# Do not blanket-ignore Plugins/**/Binaries or all DLL files.
+/Game/Plugins/**/Intermediate/
+/Game/Plugins/**/Saved/
+/Game/Plugins/**/DerivedDataCache/
+
+# Local packages, large raw evidence and retired temporary documents
+/Artifacts/
+/Docs/X/
+
+# Engine copies belong outside this repository.
+/Engine/
+/UnrealEngine/
+
+# Local credentials/settings and temporary files
+/.codex/
+/.aws/
+.env
+.env.*
+*.tmp
+*.temp
+*~

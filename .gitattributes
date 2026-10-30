@@ -1,0 +1,9 @@
+# Detect text by default; keep Markdown and policy files as LF on every host.
+* text=auto
+*.md text eol=lf
+/.gitignore text eol=lf
+/.gitattributes text eol=lf
+
+# Apply before the first Unreal binary asset is tracked.
+*.uasset filter=lfs diff=lfs merge=lfs -text
+*.umap filter=lfs diff=lfs merge=lfs -text
