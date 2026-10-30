@@ -1,6 +1,8 @@
 # Detect text by default; keep Markdown and policy files as LF on every host.
 * text=auto
 *.md text eol=lf
+*.ps1 text eol=lf
+*.psm1 text eol=lf
 /.gitignore text eol=lf
 /.gitattributes text eol=lf
 
