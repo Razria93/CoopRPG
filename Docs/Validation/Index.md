@@ -69,7 +69,7 @@ CoopRPG / 2026-10-30. **목적:** 피처 브랜치의 변경을 재현 가능한
 
 **문서 운용 판단:** 문서화는 필요하지만 설정을 복사한 장문의 매뉴얼과 작업마다 별도 보고서를 만드는 것은 권하지 않는다. 이 절은 목적·구조·판정·보완 원칙, Roadmap은 도입 상태·다음 일, Environment는 실측·실제로 검증된 명령, 개별 시험은 아래 시험 기록 양식을 맡는다. 구현 후 제안과 실제 구성을 맞추고, 규칙 변경 이유와 과거 실패 근거를 보존한다. 최신 명령은 실행 스크립트를 원본으로 삼고 문서에는 사용 조건·연결만 둔다.
 
-**남은 선택·조사:** 초기 단계형 구성은 사용자 채택이고 현재 P1만 실행 허용됐다. 유료/전용 러너 비용이 필요해지면 그때 조율한다. 4주 기준일·주당 작업일은 기존 D04-S를 유지한다. CI의 실제 런타임·설정 가능 여부·첫 빌드 비용·Gauntlet 적용성·두 번째 PC 조건은 AI가 해당 착수 때 조사하며 지금 사용자에게 기술 정보 선택을 넘기지 않는다. [UE Automation Framework](https://dev.epicgames.com/documentation/en-us/unreal-engine/automation-test-framework-in-unreal-engine), [Gauntlet](https://dev.epicgames.com/documentation/en-us/unreal-engine/gauntlet-automation-framework-in-unreal-engine)
+**남은 선택·조사:** 초기 단계형 구성은 사용자 채택이고 현재 P2 로컬 리뷰·수정·재검증·커밋까지 허용됐고 main 머지·원격 실행·설정은 보류됐다. 유료/전용 러너 비용이 필요해지면 그때 조율한다. 4주 기준일·주당 작업일은 기존 D04-S를 유지한다. CI의 실제 런타임·설정 가능 여부·첫 빌드 비용·Gauntlet 적용성·두 번째 PC 조건은 AI가 해당 착수 때 조사하며 지금 사용자에게 기술 정보 선택을 넘기지 않는다. [UE Automation Framework](https://dev.epicgames.com/documentation/en-us/unreal-engine/automation-test-framework-in-unreal-engine), [Gauntlet](https://dev.epicgames.com/documentation/en-us/unreal-engine/gauntlet-automation-framework-in-unreal-engine)
 
 ## P1 로컬 저장소 검증 — 2026-10-30
 
@@ -97,6 +97,50 @@ CoopRPG / 2026-10-30. **목적:** 피처 브랜치의 변경을 재현 가능한
 - **줄바꿈 보완:** Git이 PS 파일을 CRLF로 바꾸면 기록된 바이트 해시가 체크아웃 후 달라질 수 있어 `.gitattributes`에서 ps1/psm1을 LF로 고정했다. Git 속성 조회와 main 반영 후 코드 해시 대조로 확인한다.
 - **실제 저장소:** 문서 포함 리뷰 후 결과는 `Artifacts/Validation/p1-review-20261030/result.json`, main 반영 후 clean 상태의 결과는 `Artifacts/Validation/p1-main-20261030/result.json`에 별도로 남기는 실행 경로다. 성공 여부·HEAD·dirty 상태는 각 JSON을 원본으로 확인한다. 아직 생성되지 않은 경로를 성공 증거로 사용하지 않는다.
 - **리뷰의 한계:** 이 검토는 AI의 코드·근거 재검토와 실패 표본 추가이며 독립된 사람/외부 리뷰는 아니다. 29개 사례는 전체 Markdown·Git 정책의 무결함 증명이 아니며 앞선 명시적 검사 범위를 유지한다. 새 문법·자산 정책이나 실제 누락이 생기면 관련 사례로 보완한다. 게임 테스트 결과로 계산하지 않는다.
+
+## P2 Actions 로컬 준비 — 2026-10-30
+
+**초기 준비 상태:** `ci/repository-validation`에서 워크플로·로컬 실행 진입점·워크플로 시험을 준비했다. **로컬 준비와 실제 GitHub Actions 통과는 별개**다. 초기 준비 시점에는 업로드·PR 생성·원격 워크플로 실행·브랜치 보호·커밋/머지·프로젝트 생성·빌드를 수행하지 않았다. 후속 [로컬 리뷰](#p2-워크플로결과-리뷰--2026-10-30)에서 허용된 변경과 검증을 추가했다. 최종 로컬 결과는 아래 원시 JSON을 원본으로 확인하며 P2 전체 완료로 표시하지 않는다.
+
+### 구성·검증 범위
+
+- **워크플로:** [repository-validation.yml](../../.github/workflows/repository-validation.yml). main 대상 PR과 main push에서 동작하고 경로 필터·특권 이벤트·수동 실행은 두지 않는다. main용 push는 반영 후 회귀 확인이며 PR 시험은 기본 checkout의 test merge commit을 대상으로 한다. 실제 HEAD와 이벤트/PR head/base SHA를 결과에 남긴다.
+- **실행:** [Invoke-RepositoryCI.ps1](../../Tools/Validation/Invoke-RepositoryCI.ps1)이 워크플로 프로필 시험 → P1 저장소 검사 → P1 회귀를 실행한다. 종료 코드와 결과의 상태·예상/실행 수·실패 수를 함께 검사하며 한 단계라도 실패·누락이면 종료 1이다. 잡 15분·하위 실행 9분 제한이며 제한에 걸린 결과를 성공으로 바꾸지 않는다.
+- **최종 체크:** `repository-validation`은 검증 잡에 `needs`와 `always()`로 연결하고 실제 의존 결과가 `success`인 경우만 통과한다. 별도 checkout·인증은 없다. 실패·취소·생략·빈 값 등은 게이트 스크립트가 거절한다. GitHub 스케줄러·동시성 취소 때의 실제 체크 상태는 원격에서 확인해야 한다.
+- **권한·산출물:** 기본 `contents: read`, 게이트 권한 없음, checkout 인증 유지·LFS 객체·서브모듈 비활성, PR별 이전 실행 취소. 아티팩트는 `summary.json`·`summary.md` 두 파일만 14일 보관하도록 설정했다. 원시 Git 표본·.git·상세 로그·엔진·게임 자산을 아티팩트 경로에 넣지 않는다. 실행 로그는 GitHub 기본 잡 로그와 구분한다. 이번에는 업로드를 실행하지 않았다.
+- **외부 Actions 고정:** 공식 checkout v7.0.1의 `3d3c42e5aac5ba805825da76410c181273ba90b1`, upload-artifact v7.0.2의 `cf430e030ddbb5b0abf93d22962f4752f3646cd9`를 전체 SHA로 고정했다. 공식 릴리스·커밋·action.yml의 node24 및 사용 입력을 읽기 확인했다. 실행 성공·배포 코드 전체 감사의 증명은 아니다. [checkout 릴리스](https://github.com/actions/checkout/releases/tag/v7.0.1), [upload-artifact 릴리스](https://github.com/actions/upload-artifact/releases/tag/v7.0.2)
+- **표기·한계:** YAML의 JSON 하위 표기로 작성하고 strict JSON 파싱·중복 키 거절과 프로젝트 전용 구조/정책 검사를 한다. 외부 파서·actionlint 설치 없이 검증하려는 선택이다. `.yml`은 LF로 고정했다. 이는 전체 GitHub 스키마·표현식 평가·호스티드 러너/외부 Action 실행을 대신하지 않는다. YAML 블록 표기로 바꾸려면 파서·검증 방법도 함께 검토한다. [YAML 1.2.2](https://yaml.org/spec/1.2.2/), [GitHub 워크플로 문법](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
+
+### 로컬 결과와 근거
+
+- [워크플로 시험](../../Tools/Validation/Test-ActionsWorkflow.ps1)은 실제 파일 프로필, 잘못된 JSON·중복 키·권한 상승·필터·가변 태그·자격 증명 유지·LFS/서브모듈·self-hosted·실패 무시·게이트 우회·넓은 아티팩트 등의 변이, 실제 게이트 스크립트의 8개 상태, 실제 요약 게시 스크립트의 정상/누락을 포함한다. 확장 후 **32개**를 실행했다.
+- 최초 로컬 통합 `Artifacts/Validation/p2-local-20261030/summary.json`은 프로필 30개·P1 검사 6개·P1 회귀 29개 통과였다. 요약 게시 시험·코드 해시/범위 표시 보완 후 최종 통합은 `Artifacts/Validation/p2-final-20261030/summary.json`에 별도로 남긴다. 최종 JSON의 실제 상태·실행 수·코드 해시를 확인한다.
+- 격리된 표본에서 문서 오류, 종료 0이지만 시험 0개, 종료 0이지만 결과 누락을 주입해 모두 최종 종료 1·실패 요약을 확인했다. 최초 근거는 `Artifacts/Validation/p2-failure-fixtures-20261030/failure-cases.json`, 최종 진입점 재확인은 같은 표본의 `failure-cases-final.json`이다. 원시 표본을 실제 프로젝트 생성으로 계산하지 않으며 실제 저장소 입력·영상은 수정하지 않는다.
+- 로컬 결과는 dirty 상태의 준비 자료다. GitHub에서 체크 생성·최신 SHA 연결·실제 실패 차단·아티팩트 업로드·취소를 확인하기 전에는 원격 게이트 완료로 올리지 않는다. P1 진입점만 실행하면 P2 프로필 전체를 검사하지 않으므로 P2 전체 확인은 통합 진입점을 사용한다.
+
+### 실제 원격 검증 순서 — 후속 허용 필요
+
+1. **공유 기준선 검토:** 읽기 조회한 원격 main은 `58b0735972ff312481603ea15741f2397549bb3a`이며 로컬 P1 병합 기준선 `3c44c63784d9e044a72956d55b799b1c276eb20b`는 미공유다. 먼저 미공유 이력·공개 파일을 검토하고 P1 기준선을 별도 PR 등 합의한 방식으로 공유·반영하는 안을 권한다. 이력을 보존하면 P2의 차이를 분리하기 쉽다. P2 파일만 전송하면 필요한 P1 스크립트가 원격에 없으므로 완전한 Git 이력을 기준으로 전달한다. 현재 범위에서는 공유하지 않는다.
+2. **P2 리뷰·게시:** 새 원격 기준선을 반영해 P2 diff·로컬 결과를 다시 검토하고 허용 후 로컬 커밋·브랜치 게시·main 대상 PR을 만든다. 하나의 최초 PR에 미공유 전체를 담기로 선택하면 P1/P2가 함께 포함됨을 명시하고 전체 범위를 리뷰한다. 현재 Actions 정책은 enabled=true·allowed_actions=all·기본 토큰 read·PR 승인 권한 false를 읽기 확인했으며 실행 직전에 재확인한다.
+3. **정상·문서 변경 PR:** 실제 호스티드 Windows의 버전, pinned Actions, 검증/최종 체크 생성, test merge SHA와 PR head/base의 연결을 확인한다. 문서만 바꾼 후속 커밋에도 체크가 실행되는지 확인한다. 이전 SHA의 성공을 최신 커밋의 결과로 쓰지 않는다.
+4. **실패·복구·취소:** 통제한 깨진 링크 커밋으로 검사와 최종 게이트가 모두 실패하는지 확인하고, 수정 커밋에서 재실행해 성공하는지 확인한다. 실행 중 새 커밋·수동 취소 때 이전 실행이 성공으로 남지 않는지도 확인한다. 실패 커밋은 main에 반영하지 않는다. 원격 변이·취소도 해당 실행 허용 뒤에만 수행한다.
+5. **산출물·권한:** 성공/실패 때 요약에 검사 수·범위·SHA가 남고, 아티팩트에 요약 두 파일만 있으며 민감 정보·원시 표본이 없는지 확인한다. checkout 실패·결과 누락은 잡 실패와 누락 로그로 확인한다. 아티팩트·summary가 없으면 업로드 자체의 성공으로 처리하지 않는다.
+6. **보호는 마지막:** 실제로 생성된 유일한 체크 이름과 공급자를 확인한 뒤 별도 허용으로 main의 PR 경유·필수 `repository-validation`·리뷰 대화 해결·강제 푸시/삭제 제한 등을 구성한다. 가능하면 통제된 실패 PR의 머지 차단까지 재확인한다. 단독 운영의 자기 PR 승인 제한은 기존 기준을 따른다. 필수 체크는 최신 실행과 실제 source를 기준으로 선택하며 지금 미리 설정하지 않는다. [GitHub 필수 체크 안내](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks)
+
+## P2 워크플로·결과 리뷰 — 2026-10-30
+
+**결과:** 기존 워크플로·로컬 근거를 재검토해 CI 진입점의 결과 판정 누락을 재현·수정했다. 워크플로의 이벤트·권한·SHA 고정·요약 전용 업로드·최종 게이트 구성은 유지했다. 후속 사용자 허용은 **현재 브랜치의 로컬 커밋까지**이며 main 머지·업로드·원격 실행·보호 설정·게임 단계는 미실행이다.
+
+| 발견·영향 | 수정·재검증 |
+|---|---|
+| 최상위 상태/개수만 맞으면 불완전·다른 커밋·다른 범위·개별 실패 결과도 통과 | 공통 [결과 계약](../../Tools/Validation/CIResultValidation.psm1)에서 schema·scope·정수 개수·개별 상태/개수·이름 중복과 실행 전 고정한 HEAD/코드 해시를 확인. 입력 결과의 reparse 경로도 거절 |
+| GitHub 이벤트 SHA를 기록만 하고 실제 검사 HEAD와 대조하지 않음 | GitHub 실행 컨텍스트에서 push/PR 이벤트·실제 HEAD 일치·PR head/base 형식을 확인. 정상/잘못된 컨텍스트를 로컬 표본으로 확인했으며 실제 GitHub 값·스케줄러는 미검증 |
+
+- **재현:** `Artifacts/Validation/p2-review-before/review-cases.json`의 최소 통과 JSON·잘못된 targetHead·개별 실패/최상위 통과 모순·잘못된 scope 4건은 수정 전 모두 종료 0이었다. 수정 후 `p2-review-after/review-cases.json`에서 모두 종료 1을 확인했다. 형 엄격성 추가 후 최종 코드의 같은 사례는 `Artifacts/Validation/p2-review-final/review-cases.json`에 남긴다. 이전 근거를 삭제·덮어쓰지 않는다.
+- **검증 구성:** 기존 워크플로 시험 32개에 결과 계약·스키마/상태/범위 타입·개별 실패·누락/중복·0개·코드 해시/HEAD 불일치·GitHub 컨텍스트 등 26개를 추가해 **58개**로 확대했다. 통합 진입점은 P2 58개·P1 저장소 검사 6개·P1 회귀 29개를 실행한다. P1 코드·게임 범위는 변경하지 않았다.
+- **결과 연결:** 각 단계 실행 전 기대 SHA/코드 해시를 읽고 하위 결과와 대조한다. 최종 요약에 CI 진입점·결과 계약·워크플로의 해시를 남긴다. 커밋 전 최종 통합 경로는 `Artifacts/Validation/p2-review-final-20261030/summary.json`, 로컬 커밋 후 clean 실행 경로는 `Artifacts/Validation/p2-committed-20261030/summary.json`이다. 실제 완료·실패와 대상 HEAD는 각 JSON을 원본으로 확인하며 아직 없는 파일을 성공 근거로 쓰지 않는다.
+- **판정 한계:** 이 리뷰는 같은 AI의 코드·원시 근거 재검토와 실제 실패 재현이다. 독립된 사람/외부 리뷰, GitHub 스키마/러너·Action 실행이나 원격 머지 차단을 대체하지 않는다. 코드 자체를 악의적으로 바꿀 수 있는 작성자의 결과 위조까지 방어하는 신뢰 체계는 아니며 코드 리뷰·원격 실행 근거가 여전히 필요하다.
+- **다음:** 로컬 커밋 결과를 검토한 뒤 앞선 [원격 검증 순서](#실제-원격-검증-순서--후속-허용-필요)에 따라 별도 허용 범위를 정한다. 현재 main에 반영하거나 업로드하지 않는다.
 
 ## 현재 기록
 
