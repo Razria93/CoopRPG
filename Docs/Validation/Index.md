@@ -261,6 +261,50 @@ main push의 이벤트 before 경로는 실제 Git 표본으로 확인하지만 
 
 **판정 한계:** R01은 로컬 정상/실패 회귀와 실제 PR의 커밋 오류 차단으로 확인했다. 이 복구 커밋의 최종 성공은 실제 원격 결과를 확인한 뒤에만 주장한다. 보호 설정·실제 main push·취소/fork/장애·UE 빌드/게임 시험은 여전히 미검증이다. main 머지·설정 변경·브랜치 삭제·영상 작업은 하지 않았다.
 
+## main 보호·머지·동기화 확인 — 2026-11-02
+
+**확인 사실:** 사용자 허용으로 최소 main 보호·머지 후 원격 브랜치 자동 삭제를 적용하고 PR #1 초안을 해제해 merge commit `c2c685f517f1043fb57757847a3c2a5356dacb61`로 반영했다. 부모는 기존 main `58b0735`와 리뷰한 head `0e62d30`다. 보호 적용 아래 최신 체크 SUCCESS·MERGEABLE/CLEAN을 확인하고 expected head SHA를 지정해 병합했다.
+
+- **실제 main 실행:** [41387898227](https://github.com/Razria93/CoopRPG/actions/runs/41387898227)의 검사 잡·최종 게이트 success, P2 76·P1 6·회귀 36 passed. HEAD=eventSha=merge SHA, event=push, diffBaseSha=기존 main, diffBaseSource=push-before, dirty=false와 코드 해시를 대조했다. 이전 절의 main 미실행은 당시 상태이며 이 후속 실행과 구분한다.
+- **원격 정책:** PR 경유·필수 repository-validation(GitHub Actions app ID 15368)·strict·관리자 적용·대화 해결 필수, 승인 수 0, main 강제 push/삭제 금지. 원격 작업 브랜치 자동 삭제 true와 ci/repository-validation 부재를 확인했다. 다른 머지 방식의 허용 옵션은 변경하지 않았으며 merge commit을 운영 기본으로 사용한다.
+- **로컬:** clean 상태에서 fetch/prune·main 전환·fast-forward로 동기화했고 HEAD/main/origin/main/원격 main이 merge SHA로 일치했다. 머지 트리는 리뷰 head와 같고 main의 저장소 검사 6개도 통과했다. 로컬 작업 브랜치는 보존했다.
+- **근거:** [PR #1](https://github.com/Razria93/CoopRPG/pull/1)과 Git 제외 `Artifacts/Validation/p2-main-20261102/`의 summary.json·summary.md·evidence.json. 실제 업로드는 요약 두 파일뿐이고 artifact 13115928216의 메타데이터상 만료는 2026-11-16이다. 최초 보호 요청은 중복 체크 표현 때문에 HTTP 422로 거절됐고 checks 단일 형식으로 정정해 재조회했다.
+- **한계:** 별도 실패 PR로 보호 강제 차단을 재시험하지 않았다. 취소·fork·checkout/업로드 장애·UE 빌드/게임 동작은 여전히 미검증이다. 프로젝트 생성·빌드·영상 작업은 하지 않았다.
+
+## PR 운영 양식 구현 — 2026-11-02
+
+**대상·범위:** main `c2c685f` 기준의 로컬 docs/pr-workflow 브랜치. [PR 템플릿](../../.github/pull_request_template.md) 하나와 [운영 규칙](../../AGENTS.md#브랜치와-pr-운영)을 구현했다. 새 검증 스크립트·Actions·게임 코드는 추가하지 않는다. 새 브랜치 업로드·머지는 보류하며 PR #1의 기존 본문 정리만 별도 허용됐다.
+
+**검토·검증:** 문서 수정·결함 수정·게임 피처의 작성 예시로 필수 정보와 부담을 대조한다. 각 예시는 양식 검토 자료이며 실제 게임 실행 근거가 아니다. 파일·링크·앵커·Git 정책과 diff를 기존 저장소 검사로 확인하고 결과는 Git 제외 `Artifacts/Validation/pr-workflow-20261102/`에 보존한다. PR #1은 정리 전 원문을 로컬에 보존한 뒤 실행 URL·ID·전체 SHA·artifact ID·실패/복구·정책·미검증 범위를 대조하고 원격 재조회한다.
+
+**실제 결과:** 문서·기존 R01·미구현 게임 초안의 작성 예시 3개를 검토했다. 작은 변경의 축약, 실제 근거 재사용, 미실행 게임 시험의 머지 보류가 양식에 표현되며 불필요한 별도 Issue·빌드·새 자동화를 요구하지 않는다. 초기 저장소 검사 6개는 `repository-initial/result.json`에서 passed였다. 최종 문서의 재검사는 같은 상위 경로의 `repository-final/result.json`을 원본으로 확인한다. 두 실행 모두 base/HEAD는 c2c685f이고 미커밋 변경의 dirty 상태를 구분한다.
+
+PR #1은 정리 전 본문의 전체 SHA 14개·Actions URL 7개·기존 artifact ID 4개를 보존했다. 기존 evidence JSON과 대조해 실제 실행 7행의 source/tested SHA·판정과 artifact 7행을 확인했다. 네 항목으로 정리한 원격 본문을 재조회해 초안과 일치하고 PR 제목·closed/merged 상태·merge SHA가 바뀌지 않았음을 확인했다. 원문 JSON/Markdown·정리 본문·식별자 대조·작성 예시·review.json은 위 Git 제외 경로에 보존했다. 새 Actions·게임 시험을 실행하지 않았고 기존 76·6·36 등의 결과를 이번 실행으로 세지 않는다.
+
+**적용 상태·한계:** 로컬 파일 구현과 기본 브랜치의 템플릿 자동 적용을 구분한다. PR #1 본문은 머지 후 수동으로 새 구조에 정리하며 당시 템플릿을 사용했다고 소급하지 않는다. 기본 브랜치 반영 전 자동 삽입은 미검증이고 새 PR·새 Actions 실행은 만들지 않는다. 과거 검증 결과·당시 제한은 보존하고 후속 사실을 위 기록과 연결한다.
+
+### PR 가독성 후속 보완 — 2026-11-02
+
+**범위:** 같은 로컬 브랜치의 미커밋 4파일을 보존해 템플릿·작성 규칙에 첫 화면 요약·짧은 문단/목록·비교 표·선택적 접기와 중요 위험 노출 기준을 추가한다. PR #1은 기존 네 항목 아래 요약과 상세를 분리하되 전체 식별자·실행 결과·실패/복구·한계·당시/현재 상태를 보존한다. 가독성만을 이유로 기록을 삭제하지 않는다.
+
+**검증 방법:** 정리 전 원문 JSON을 보존하고 각 기존 절의 상세 내용·전체 SHA·run URL·artifact ID·전체 실제 실행 행을 대조한다. 접기 태그와 summary·Markdown 빈 줄·상위 제목·기본 화면의 결과/한계를 확인하고, 원격 저장 뒤 같은 본문과 PR 상태를 재조회한다. 실제 화면 확인 여부는 문법/구조 확인과 구분한다. 최종 검사·원문·후속 본문·대조 근거는 Git 제외 `Artifacts/Validation/pr-readability-20261102/`에 보존한다.
+
+**실제 결과:** 기존 전체 SHA 14개·고유 Actions URL 7개·artifact ID 7개와 7개 실행의 source/tested SHA·판정을 보존했다. 원문 네 절의 내용은 유지하되 긴 SHA 두 열의 표만 동일 데이터의 실행별 세로 목록으로 변환·대조했다. 기본 화면에는 상태·범위·정상/실패/복구/main 요약과 중요 미검증 사항을 두고 상세는 세 접기로 분리했다. 원격 재조회에서 본문 일치와 PR 제목·closed/merged 상태·merge SHA 불변을 확인했다.
+
+**실제 화면 검수:** GitHub 기본 화면 1280×720에서 요약 표·남은 문제를 확인하고 세 접기 영역을 각각 펼치고 닫았다. 최초 상세 표에서 사례명이 잘게 줄바꿈되는 문제를 발견해 세로 목록으로 수정한 뒤 다시 확인했다. pr-readability-summary.jpg와 pr-readability-details.jpg 화면 근거, UI/최종 대조 JSON을 위 경로에 보존한다. 좁은 화면·템플릿 자동 삽입은 확인하지 않았다. UI 점검은 Codex가 수행했으며 독립된 사람의 가독성 평가로 세지 않는다.
+
+초기 `repository-initial/result.json`의 저장소 검사 6개는 passed였다. 세로 목록 보완과 이 기록을 포함한 최종 문서는 같은 경로의 `repository-final-record/result.json`을 원본으로 확인한다. 기존 미커밋 변경 위의 편집이며 새 브랜치 업로드·머지·새 Actions·검증 코드 변경·프로젝트 생성·빌드·영상 작업은 하지 않았다.
+
+## PR 운영 양식 최종 리뷰·로컬 커밋 — 2026-11-02
+
+**대상:** main c2c685f 기준 docs/pr-workflow의 템플릿·AGENTS·Roadmap·이 색인 4파일. 초기 구현·가독성 보완의 변경을 보존해 검토했다. 결과는 구조적 필수 결함 없음이며, 템플릿에서 해당 변경에 필요한 검사만 선택하도록 명시하고 초기 미커밋 보류와 후속 커밋 허용을 구분했다. 작은 문서 PR에 게임 빌드·전체 미래 시험·별도 Issue·장문 양식을 일괄 요구하지 않는다.
+
+**검토 범위·근거:** 네 항목의 양식과 branch prefix/커밋 유형 구분, merge commit 기본과 실제 허용 옵션 구분, 원격 자동 삭제와 로컬 보존/정리 조건, 리뷰 지적/응답/판단 구분, 요약/상세와 중요 위험 노출을 대조했다. 이전 작성 예시·PR 식별자 대조·1280×720 화면 검수는 위 기록과 보존 자료를 재사용하며 이번에 새 UI 시험을 실행한 것으로 세지 않는다.
+
+**이번 검증:** 기존 저장소 검사와 추적/새 템플릿의 공백·제목 순서, staged 4파일·diff를 확인한다. 커밋 전 결과는 Git 제외 `Artifacts/Validation/pr-workflow-review-20261102/precommit/result.json`, 커밋 후 clean 검사와 HEAD/branch는 같은 상위 경로의 `committed/result.json`에서 실제 판정을 확인한다. 두 결과의 기준 SHA는 c2c685f이며 실제 커밋 SHA는 Git 이력·종료 보고를 따른다.
+
+**한계·상태:** 로컬 커밋까지만 허용됐다. 새 브랜치 원격 Actions·기본 템플릿 자동 삽입·좁은 화면은 미검증이다. 검증기/워크플로 코드는 바꾸지 않아 기존 회귀 76·36개를 새로 실행하지 않는다. 업로드·머지·원격 PR/설정 변경·프로젝트 생성·빌드·영상 작업은 하지 않는다.
+
 ## 현재 기록
 
 | 기록 | 종류·상태 | 한계 |
