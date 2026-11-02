@@ -9,6 +9,107 @@
 - **최소 양식:** 조사·검토의 기본 순서는 AGENTS를 따르며 관측 날짜·대상·방법·결과·판정 한계를 기존 표나 짧은 기록으로 남긴다. 후속 선택·작업은 Roadmap의 해당 항목을 참조한다. 공통 명령을 추가할 때는 작업 경로·도구/구성·사전 조건·명령·실행 결과를 함께 남기고 후보와 검증된 명령을 구분한다.
 - **검증:** 이관 기록과 이번 관측, 파일 존재와 실행 성공, 조사한 범위와 미확인 범위를 구분한다. 변동 가능한 정보는 사용 전에 필요한 항목만 재확인하며 문서 편집일을 재측정일로 쓰지 않는다. 읽기 조사 결과 확인을 이유로 설치·빌드를 실행하지 않는다.
 
+## R01 커밋 변경 검사 — 2026-11-02
+
+P1 직접 실행의 기본값은 기존 작업 트리 검사다. 커밋된 변경까지 검사하려면 `-DiffBase <전체 40자리 SHA>`를 지정한다. 통합 CI 진입점은 비교 기준을 반드시 정하고 P1에 전달하며, 결과의 diffBaseSha·diffMode를 실행 전 기대값과 대조한다.
+
+```powershell
+# C:\CoopRPG, PR #1의 현재 원격 main 기준 전체 변경과 미커밋 변경 검사
+pwsh -NoProfile -File .\Tools\Validation\Invoke-RepositoryCI.ps1 -DiffBase 58b0735972ff312481603ea15741f2397549bb3a
+```
+
+로컬 통합 기본값은 HEAD의 첫 부모이며 범위를 넓힐 때 명시적 SHA를 준다. GitHub PR은 test merge의 첫 부모=PR base·둘째 부모=PR head를 확인하고 base→실제 HEAD를 검사한다. main push는 이벤트 before→실제 HEAD를 검사해 여러 커밋의 push도 마지막 커밋만으로 축소하지 않는다. checkout은 fetch-depth=0으로 코드 이력을 확보하며 LFS 객체·서브모듈·인증 유지 비활성은 유지한다. 별도 네트워크 호출을 검증 스크립트에 추가하지 않았다.
+
+비교 SHA 부재·잘못된 형식·자기 자신·비조상·객체 누락·PR 부모 불일치는 실패 처리한다. 최초 루트 커밋·before가 0인 신규 브랜치 push·강제 비선형 push는 현재 지원 범위가 아니며 자동 성공으로 대체하지 않는다. 해당 main 이벤트의 실제 원격 실행은 main 미병합 상태에서 아직 검증하지 않았고 로컬 Git 표본과 구분한다. 결과·시험 수·실제 원격 판정은 [R01 기록](Index.md#r01-커밋된-변경-검사-보완--2026-11-02)을 따른다.
+
+## P2 GitHub 실행 환경 확인 — 2026-10-30
+
+**확인 사실:** [초안 PR #1](https://github.com/Razria93/CoopRPG/pull/1)의 실제 GitHub-hosted `windows-2022` 실행에서 정상·의도적 실패를 확인했다. PowerShell 7.6.9·Git 2.56.0.windows.3을 관측했으며 로컬 7.6.5와 버전을 구분한다. 결과·검사 대상 SHA·복구 판정의 원본은 [원격 검증 기록](Index.md#p2-실제-actions-정상실패복구-검증--2026-10-30)과 PR 본문이다.
+
+로컬 CI 통과를 원격 성공으로 승계하지 않고 실제 run·잡·아티팩트로 확인했다. main 병합·브랜치 보호·UE 빌드/게임 시험은 하지 않았다. 원격 아티팩트는 요약 두 파일만 내려받아 Git 제외 `Artifacts/Validation/p2-remote-20261030/`에 보존한다. 로그의 인증정보 원문을 문서에 복사하지 않는다.
+
+## P2 워크플로 로컬 실행 — 2026-10-30
+
+**대상:** DSYEOM의 PowerShell 7.6.5·기존 Git에서 P2 파일과 통합 진입점을 실행한다. GitHub-hosted Windows·node24 Action 실행은 미검증이다. 구성·결과·원격 확인 절차의 원본은 [P2 기록](Index.md#p2-actions-로컬-준비--2026-10-30)이다. 추가 패키지·러너를 설치하지 않았다.
+
+작업 경로 `C:\CoopRPG`에서 다음 명령을 사용한다.
+
+```powershell
+pwsh -NoProfile -File .\Tools\Validation\Test-ActionsWorkflow.ps1
+pwsh -NoProfile -File .\Tools\Validation\Invoke-RepositoryCI.ps1
+```
+
+첫 명령은 프로필·변이·게이트·요약 게시 시험만, 두 번째는 P2 시험·P1 검사·P1 회귀를 함께 실행한다. 결과와 로컬 상세 로그는 Git 제외 `Artifacts/Validation/`의 새 경로에 보존한다. 통합 명령의 `-OutputDirectory`도 해당 루트 아래 새 하위 폴더만 허용한다. 통과는 0, 단계 실패·결과 누락/0개 등은 비정상 종료로 차단하며 이미 있는 결과를 덮어쓰지 않는다.
+
+후속 로컬 리뷰에서 결과 계약과 GitHub 컨텍스트 검사를 추가했다. 하위 결과의 범위·HEAD·실행 전 코드 해시·개별 상태가 일치해야 통과하며 [리뷰 결과](Index.md#p2-워크플로결과-리뷰--2026-10-30)를 따른다. GitHub 컨텍스트가 잘못되거나 준비 자체에 실패하면 요약 생성 전 비정상 종료할 수 있다. 그 경우 요약 부재와 작업 로그를 실패 근거로 확인하며 성공으로 해석하지 않는다.
+
+통합 실행은 네트워크·업로드·Actions 스케줄러를 호출하지 않는다. 공개용 요약은 절대 로컬 경로·원시 표본을 포함하지 않게 분리했고 워크플로는 그 요약 두 파일만 아티팩트로 지정한다. 실제 게시 동작은 원격 검증 후 판단한다. 읽기 전용 원격 정책 조회와 로컬 시험을 원격 CI 실행으로 혼동하지 않는다.
+
+## P1 저장소 검증기 실행 — 2026-10-30
+
+**확인 범위:** DSYEOM의 PowerShell 7.6.5와 기존 Git에서 P1 로컬 저장소 검사·표본 검증을 실행했다. 후속 리뷰에서 검증기 1.0.1로 수정하고 회귀 29개를 확인했으며 [리뷰 결과](Index.md#p1-코드결과-리뷰--2026-10-30)를 따른다. 엔진 설치/변경·UE 실행·Actions·업로드는 하지 않았다. 판정 범위·표본 결과·원시 실행 ID·미확인은 [P1 결과](Index.md#p1-로컬-저장소-검증--2026-10-30)를 따른다.
+
+작업 경로 `C:\CoopRPG`에서 PowerShell 7로 실행한다. UE·GitHub 인증·Pester 등 추가 패키지가 필요하지 않다. Git HEAD가 있는 저장소 루트를 요구하며 기본 루트는 스크립트 위치에서 계산한다.
+
+```powershell
+pwsh -NoProfile -File .\Tools\Validation\Validate-Repository.ps1
+pwsh -NoProfile -File .\Tools\Validation\Test-RepositoryValidation.ps1
+```
+
+- 첫 명령은 저장소를 변경하지 않고 검사한 뒤 새 `Artifacts/Validation/<실행 ID>/result.json`에 결과를 쓴다. 두 번째 명령은 같은 제외 경로 아래에 작은 Git 표본 저장소와 `selftest.json`을 만든다. 표본 생성은 검사기 검증용이며 실제 프로젝트 생성·빌드와 구분한다. 표본 자료는 삭제하지 않고 보존하며 영상·다른 프로젝트에는 접근하지 않는다.
+- 저장소 검증 종료 코드: **0** 검사 통과, **1** 규칙 위반 발견, **2** Git/루트/출력 등 실행·기록 오류. 호출자는 종료 코드와 JSON의 범위·검사 결과를 함께 확인한다. 표본 검증은 모두 기대 결과이면 0, 기대 불일치이면 1이며 준비 실패도 비정상 종료한다. 각 표본 프로세스는 30초를 넘으면 자신이 시작한 프로세스만 종료해 실패 처리한다.
+- `-RepositoryRoot`로 다른 **검토 대상 저장소 루트**를 지정할 수 있다. `-OutputDirectory`는 해당 루트의 `Artifacts/Validation/` 아래 새 하위 폴더만 허용하며 기존 결과·reparse 경로를 거절한다. 결과 경로는 실행 출력에서 확인한다. 지정하지 않으면 실행 ID마다 분리된다.
+- 결과에는 dirty 여부를 남긴다. 미커밋 개발 실행을 clean 커밋의 검증으로 주장하지 않는다. 저장소 체크 통과를 게임 검증·원격 필수 체크 통과로 표현하지 않는다.
+- 파일 목록은 Git 기준으로 제한하며 무시된 파일을 전수 탐색하지 않는다. reparse 입력 경로는 실패 처리한다. 향후 검사 정책을 바꾸면 관련 실패 표본과 실제 저장소 검사로 다시 확인한다.
+
+## UE 5.8.4 소스·Setup 준비 결과 — 2026-10-30
+
+**결과:** DSYEOM의 `C:\UE\5.8.4`에서 공식 `Setup.bat`을 실행해 기본 옵션의 의존성을 준비했다. GitDependencies 재검사는 누락 없이 종료했고 동봉 .NET 실행·기존 빌드 도구 파일·엔진 등록을 확인했다. VC++ 설치는 더 최신인 기존 런타임 때문에 거절됐으며, GameInput도 기존 최신 파일을 유지하는 조건에 해당한다. 이를 모두 신규 설치 성공으로 표현하지 않는다. **프로젝트 생성·빌드·게임 시험은 미실시이며 D01-H/V01은 미검증**이다.
+
+### 대상·실행과 확인 근거
+
+- **앞선 소스 확보:** 사용자 허용으로 공식 `https://github.com/EpicGames/UnrealEngine.git`의 `5.8.4-release`를 깊이 1로 확보했다. 태그 객체 `82f8143183f2244176f775ad5a13e8a0224c8f81`, 기준 커밋 `f45729c0b6f097038e72b52d366a62baeca3275b`, Build.version 5.8.4를 확인했다. 소스 확보 당시 224,010개 추적 파일·clean·`git fsck --full` 통과를 확인했으며 이번 Setup 후에도 HEAD·태그의 커밋 일치와 추적 파일 변경 없음을 재확인했다.
+- **프로젝트 이력:** 앞선 문서 4개 검토·로컬 커밋은 `35a027895d1157e235d20caaaea7a2d8e0bbcd06` (`docs: 데스크탑 이관과 환경 구성 채택 반영`)이다. 이번 시작 시 작업 트리는 clean이었다. 이번 요청에는 커밋·업로드가 포함되지 않는다.
+- **실행:** 2026-10-30 20:19:06~20:29:41 KST, 작업 경로 `C:\UE\5.8.4`, 명령 `cmd /d /c Setup.bat`. 공식 스크립트를 수정하지 않았고 플랫폼 제외·강제 덮어쓰기 옵션 없이 실행했다. 실행 경과 약 10분 35초이며 개발 생산성 측정값이 아니다.
+- **의존성:** 134,157/134,157개, 다운로드 31,104.9MiB 완료. Setup 종료 코드 0, 표준 오류 출력 없음. 이어 같은 경로에서 `Engine\Binaries\DotNET\GitDependencies\win-x64\GitDependencies.exe --dry-run`을 실행해 종료 코드 0과 Add/Update/Remove 항목 없음을 확인했다. 기본 플랫폼 필터·매니페스트 기준 검사이며 모든 플랫폼 준비나 전체 파일의 별도 바이트 재해시를 뜻하지 않는다.
+- **Setup 부수 구성:** 엔진 저장소의 `post-checkout`·`post-merge` 훅이 GitDependencies를 호출하도록 작성됐다. `HKCU\Software\Epic Games\Unreal Engine\Builds`에 `C:/UE/5.8.4`가 등록된 것을 확인했다. 이후 이 엔진 저장소의 checkout/merge는 훅을 실행할 수 있다.
+
+| 확인 항목 | 실제 관측·판정 |
+|---|---|
+| 동봉 .NET | `Engine\Binaries\ThirdParty\DotNet\10.0\win-x64\dotnet.exe --info`: SDK **10.0.203**, Host·ASP.NET Core·NETCore·WindowsDesktop 런타임 **10.0.7**, 동봉 MSBuild **18.3.3**. `GetDotnetPath.bat` 호출 후 DOTNET_ROOT가 이 동봉 경로이고 `--version`이 10.0.203임을 확인. 시스템 .NET 업그레이드는 하지 않음 |
+| 기존 VS·C++ | VS 2022 Community 17.14.14 (`devenv.exe` 17.14.36429.23), MSVC family 14.44.35207·`cl.exe` 제품 버전 **14.44.35216.0** / 파일 버전 19.44.35216.0. VS MSBuild 파일 버전 **17.14.23.42201**. 도구 파일 존재·버전 확인이며 UBT의 실제 선택·컴파일 성공은 미검증 |
+| Windows SDK | **10.0.26100.0**의 Windows.h·x64 kernel32.lib·rc.exe 존재 확인. rc.exe 파일 버전 10.0.26100.4654. 기존 SDK 변경 없음 |
+| VC++ x64 | 기존 설치 **14.51.36247.00** 유지. 동봉 14.50.35719.0 설치는 `0x80070666` / 종료 `0x666`으로 거절. 세부 원인·판정은 아래 참조 |
+| GameInput | 동봉 MSI 제품 버전 10.1.26100.6879의 MsiInstaller 이벤트 1033 상태 0·11707 성공 확인. 기존 `C:\Program Files\Microsoft GameInput\x64\gameinputredist.dll`·서비스 파일은 **4.0.302.0** 유지. 신규 패키지 등록 완료와 구분 |
+| 남은 공간 | 실행 전 20:18:40 **436.01GiB**, 준비·검사 후 20:31:14 **319.97GiB** (C: 전체 1,862.05GiB). 볼륨 여유 감소 약 **116.04GiB**. 엔진 폴더의 파일 논리 크기 합계 **118.86GiB**, 370,027파일(소스·.git·캐시·의존성 포함). 할당 크기와 다르며 볼륨 변화에는 다른 프로세스 영향도 포함 |
+| 임시 파일 | 사용자 TEMP `C:\Users\starb\AppData\Local\Temp`, 시스템 TEMP `C:\WINDOWS\TEMP`. 모두 C:이며 이번에 정리·이동하지 않음 |
+
+### 설치 예외 조사·판단
+
+**VC++:** Setup은 개별 사전 구성 설치기의 실패를 확인하지 않으므로 최종 종료 코드 0만으로 전부 성공했다고 판단할 수 없다. `dd_vcredist_amd64_20261030202939.log`에서 “newer version is installed”와 `0x80070666`을 확인했다. 설치 전후 레지스트리의 Installed=1·14.51.36247.00이 동일하고 기존 런타임이 동봉 14.50 및 채택 컴파일러 14.44보다 최신이다. [Microsoft의 v14 호환성 안내](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170)에 따라 기존 런타임을 유지했다. 제거·다운그레이드·반복 설치는 하지 않았으며 실제 게임 실행 호환성은 추후 검증한다.
+
+**GameInput:** 성공 이벤트가 있지만 동봉 ProductCode의 MSI ProductState는 -1이고 기존 설치 목록은 4.0.302.0이었다. 재설치 없이 MSI 데이터베이스를 읽어 `AppSearch`가 `Program Files\Microsoft GameInput\x64\gameinputredist.dll`의 최소 버전 3.1.26100.6879를 검사하고, `NOT Installed AND NEWERFILEVERSIONDETECTED`이면 `CA_Downgrade_ExitEarlyWithSuccess`로 조기 성공 종료함을 확인했다. 실제 파일 4.0.302.0은 해당 조건을 충족한다. 따라서 관측 결과는 최신 파일 보존 경로와 일치한다. MSI 상세 실행 로그는 없어 분기 실행 자체의 직접 로그는 확보하지 못했다. Windows 기본 GameInputSvc는 수동 시작·중지 상태이고 기본 서비스 파일은 0.2309.26100.9278이었다. 서비스 실행이나 입력 장치 시험은 하지 않았다.
+
+**로컬 원시 근거:** Setup 표준 출력·오류는 `C:\Users\starb\Documents\Codex\2026-10-30\cooprpg-c-cooprpg-git-git-lfs-2\work\ue584-setup-20261030.stdout.log`와 같은 이름의 `.stderr.log`, VC++ 로그는 `C:\Users\starb\AppData\Local\Temp\dd_vcredist_amd64_20261030202939.log`에 있다. GameInput은 Windows Application/MsiInstaller의 20:29:40~41 이벤트와 동봉 MSI 조건을 대조했다. 원시 로그는 로컬에만 있고 저장소에 추가·업로드하지 않았다. TEMP 로그의 장기 보존은 보장하지 않는다.
+
+### 한계·다음 행동
+
+- 400GiB는 준비 시작 전 계획 목표로, 준비 후 유지해야 할 공식 최소 여유 공간이 아니다. 남은 319.97GiB만으로 Editor/Server/Game 빌드·쿠킹의 최대 점유를 확정하지 않는다. 다음 작업 직전 다시 측정하고 각 빌드 단계의 증가량을 확인한다.
+- Setup은 엔진 실행 파일을 빌드하지 않는다. `GenerateProjectFiles`, UBT/컴파일, 게임 프로젝트 생성·게임 시험은 실행하지 않았다. `C:\CoopRPG\Game`도 없다.
+- 사용자 영상에 접근·이동·삭제하지 않았다. 개인 스킬·Git LFS 업데이트/저장소 설정·Handoff·커밋·업로드도 하지 않았다.
+- 남은 준비·다음 실행 범위는 [Roadmap의 다음 작업 카드](../Roadmap.md#다음-작업-카드--제안)를 따른다. 기존 도구와 의존성 확인을 첫 빌드 성공으로 올리지 않는다.
+
+## 데스크탑 이관·구성 채택과 공간 재확인 — 2026-10-30
+
+**결과:** Git을 통한 데스크탑 저장소 이관을 마쳤고 사용자가 UE 5.8.4와 기존 VS 2022 도구 조합을 채택했다. 구성 채택과 실제 준비·빌드 성공은 별개다. 이전 노트북 기록은 아래에 당시 상태로 보존한다.
+
+- **이관 확인(이 채팅의 앞선 작업):** 실행 호스트 DSYEOM, 경로 `C:\CoopRPG`, 브랜치 main. 기준 커밋 `58b0735972ff312481603ea15741f2397549bb3a`와 로컬 HEAD·origin/main·당시 원격 main 일치, 4커밋·추적 파일 9개와 파일별 Git blob 바이트 일치, 작업 트리 clean을 확인했다. Handoff와 개인 스킬 배치는 하지 않았다.
+- **도구 대조(이 채팅의 앞선 읽기 조사):** 공식 태그 `5.8.4-release`가 `f45729c0b6f097038e72b52d366a62baeca3275b`를 가리킴을 데스크탑 GitHub CLI로 확인했다. VS 2022 Community 17.14.14, MSVC family 14.44.35207·실제 제품 버전 14.44.35216, SDK 10.0.26100.0을 확인했다. MSVC는 고정 소스의 선호 family에 속하고 금지 범위 밖이다. C++ 데스크톱·게임, .NET 데스크톱, 4.6.2 Targeting Pack·Unreal IDE/Debugger 등록과 ATL 주요 파일도 확인했다. 시스템 .NET SDK는 9.0.305이며 UE 동봉 .NET 10.0은 아직 준비하지 않았다.
+- **이번 실측:** 2026-10-30 19:45:06 KST, DSYEOM의 `Get-Volume -DriveLetter C` 결과 C: NTFS 전체 1,862.05GiB·여유 **431.39GiB**. 초기 계획 목표 400GiB보다 31.39GiB 많다. 사용자 TEMP는 `C:\Users\starb\AppData\Local\Temp`, 시스템 TEMP는 `C:\WINDOWS\TEMP`로 같은 볼륨이다.
+- **사용자 진술·작업 경계:** 사용자가 영상을 D:로 옮기는 중이라고 밝혔다. 이번 재확인은 볼륨·저장소·제안 경로만 조회했고 영상에 접근하거나 이동·삭제하지 않았다. 공간 확보의 수행 주체를 AI로 기록하지 않는다.
+- **상태·한계:** 이번 문서 갱신 전 main·기준 HEAD·clean 상태를 다시 확인했다. `C:\UE\5.8.4`와 `C:\CoopRPG\Game`은 없다. 400GiB는 공식 최소 요구나 실제 최대 점유량이 아닌 초기 계획 목표이며, 준비 단계마다 공간을 다시 측정한다. 엔진 소스/의존성 다운로드·설치·프로젝트 생성·빌드·게임 시험은 미실시다.
+- **다음 행동:** [Roadmap의 다음 작업 카드](../Roadmap.md#다음-작업-카드--제안)를 따른다. 소스 고정값과 도구의 채택을 실행 허가로 해석하지 않는다.
+
 ## GitHub 초기 공유 — 2026-10-30
 
 **결과:** 사용자 지시에 따라 [Razria93/CoopRPG](https://github.com/Razria93/CoopRPG)를 공개 빈 저장소로 생성하고 `origin` 연결·`main` 첫 업로드를 완료했다. 로컬 HEAD·`origin/main`·`git ls-remote`·GitHub ref API가 모두 **`b458e45faa65ce2980f0324a02c80b0bfb9457a7`**로 일치했다. `main`은 `origin/main`을 추적한다.

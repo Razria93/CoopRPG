@@ -1,0 +1,77 @@
+{
+  "name": "Repository validation",
+  "on": {
+    "pull_request": { "branches": ["main"] },
+    "push": { "branches": ["main"] }
+  },
+  "permissions": { "contents": "read" },
+  "concurrency": {
+    "group": "repository-validation-${{ github.event.pull_request.number || github.ref }}",
+    "cancel-in-progress": true
+  },
+  "defaults": { "run": { "shell": "pwsh" } },
+  "env": {
+    "GIT_LFS_SKIP_SMUDGE": "1",
+    "CI_EVENT_NAME": "${{ github.event_name }}",
+    "CI_EVENT_SHA": "${{ github.sha }}",
+    "CI_PR_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+    "CI_PR_BASE_SHA": "${{ github.event.pull_request.base.sha }}",
+    "CI_PUSH_BEFORE_SHA": "${{ github.event.before }}"
+  },
+  "jobs": {
+    "validate": {
+      "name": "repository-validation-details",
+      "runs-on": "windows-2022",
+      "timeout-minutes": 15,
+      "steps": [
+        {
+          "name": "Checkout tested commit",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "persist-credentials": false,
+            "fetch-depth": 0,
+            "lfs": false,
+            "submodules": false
+          }
+        },
+        {
+          "name": "Run repository validation and regression fixtures",
+          "run": "pwsh -NoProfile -File ./Tools/Validation/Invoke-RepositoryCI.ps1 -OutputDirectory ./Artifacts/Validation/ci"
+        },
+        {
+          "name": "Publish summary",
+          "if": "${{ always() && !cancelled() }}",
+          "run": "if (-not (Test-Path -LiteralPath 'Artifacts/Validation/ci/summary.md')) { throw 'CI summary missing.' }; Get-Content -LiteralPath 'Artifacts/Validation/ci/summary.md' -Raw | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY"
+        },
+        {
+          "name": "Upload summary only",
+          "if": "${{ always() && !cancelled() }}",
+          "uses": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+          "with": {
+            "name": "repository-validation-${{ github.run_id }}-${{ github.run_attempt }}",
+            "path": "Artifacts/Validation/ci/summary.json\nArtifacts/Validation/ci/summary.md",
+            "if-no-files-found": "error",
+            "retention-days": 14,
+            "include-hidden-files": false,
+            "overwrite": false
+          }
+        }
+      ]
+    },
+    "repository-validation": {
+      "name": "repository-validation",
+      "needs": ["validate"],
+      "if": "${{ always() }}",
+      "runs-on": "windows-2022",
+      "timeout-minutes": 2,
+      "permissions": {},
+      "env": { "CHECKS_RESULT": "${{ needs.validate.result }}" },
+      "steps": [
+        {
+          "name": "Require successful dependency",
+          "run": "if ($env:CHECKS_RESULT -ne 'success') { throw \"Repository validation dependency did not succeed: $env:CHECKS_RESULT\" }; Write-Host 'Repository validation gate passed.'"
+        }
+      ]
+    }
+  }
+}
