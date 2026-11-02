@@ -243,6 +243,24 @@ CoopRPG / 2026-10-30. **목적:** 피처 브랜치의 변경을 재현 가능한
 
 main push의 이벤트 before 경로는 실제 Git 표본으로 확인하지만 main을 변경하지 않으므로 실제 GitHub main push 성공으로 기록하지 않는다. 전체 워크플로 취소·fork·checkout/업로드 장애·보호 강제 차단·UE 빌드/게임 시험도 여전히 미검증이다. 이전 정상/실패/복구 근거와 R01 누락 재현은 당시 사실로 보존한다.
 
+### 실제 실행 근거 — 정상·커밋된 오류·복구
+
+최종 로컬 `r01-final-local-20261102/summary.json`은 P2 76·P1 6·회귀 36이 모두 passed였다. 로컬 실행은 head `b6fe4be`의 dirty 작업 트리였으며, 수정 커밋 `c05bbaa` 후 clean 상태에서 명시적 base 검사를 다시 통과했다. 그 수정 코드를 실제 GitHub에서 별도로 확인했다.
+
+| 사례 | PR 소스·실행 | 검사 잡·최종 게이트 |
+|---|---|---|
+| 수정 코드 정상 | `c05bbaaaca0515532cee58d6f25e6cadda57cbd1` · [41385731837](https://github.com/Razria93/CoopRPG/actions/runs/41385731837) | success / success |
+| 커밋된 공백 오류 | `90b8092d6228cf73d913fe936d0332bd377261c9` · [41385932575](https://github.com/Razria93/CoopRPG/actions/runs/41385932575) | failure / failure |
+| 복구 | 이 기록과 공백 제거를 포함한 후속 커밋 · [PR #1 최신 실행 표](https://github.com/Razria93/CoopRPG/pull/1) | 실제 실행 완료 뒤 PR 본문에 source/test merge SHA·run·판정 갱신 |
+
+실패 커밋은 README에 후행 공백 한 줄만 추가했다. 커밋 후 clean 상태의 작업 트리 전용 검사 6개는 통과했지만, base `58b0735`를 지정하면 `git.diff` 하나만 실패하고 종료 1이었다. 원격도 workflow 76·fixtures 36은 통과하고 repository 단계와 최종 게이트만 실패했다. 이전 링크 오류 시험과 달리 새 커밋 비교 경로만 실패시키는 조건이다. 워크플로·검증 소스 7개 해시는 정상/실패에서 동일하며 복구 때도 유지한다.
+
+정상 실제 HEAD/eventSha는 `4b076ec5e5db114cc9c4946890858a9a10c8a05d`다. 실패의 실제 SHA는 로컬 보존 요약과 PR 본문 표를 원본으로 확인한다. 모든 원격 요약에서 diffBaseSha=PR base=`58b0735972ff312481603ea15741f2397549bb3a`, diffBaseSource=`pull-request-base`, dirty=false와 소스 SHA를 대조한다. 실패한 repository 단계의 executed=0은 결과 계약에서 통과 집계하지 않은 값이며 검사 미실행을 뜻하지 않는다.
+
+아티팩트는 summary.json·summary.md 두 파일만 내려받아 `Artifacts/Validation/r01-remote-20261102/normal/`·`failure/`에 보존했다. 복구 자료도 같은 상위 경로의 `recovery/`에 보존한다. 원시 자료는 Git에서 제외하며 실제 실행별 코드 해시·잡·artifact ID·만료일은 같은 상위 폴더의 evidence JSON과 PR 본문을 따른다. 이 변경의 복구 실행 결과는 사후 PR 본문에 기록하며 문서 커밋을 반복해 SHA를 추격하지 않는다.
+
+**판정 한계:** R01은 로컬 정상/실패 회귀와 실제 PR의 커밋 오류 차단으로 확인했다. 이 복구 커밋의 최종 성공은 실제 원격 결과를 확인한 뒤에만 주장한다. 보호 설정·실제 main push·취소/fork/장애·UE 빌드/게임 시험은 여전히 미검증이다. main 머지·설정 변경·브랜치 삭제·영상 작업은 하지 않았다.
+
 ## 현재 기록
 
 | 기록 | 종류·상태 | 한계 |
