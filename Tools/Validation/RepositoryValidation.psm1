@@ -67,13 +67,19 @@ function New-RepositoryCheck {
 }
 function Invoke-RepositoryValidation {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$RepositoryRoot)
+    param([Parameter(Mandatory)][string]$RepositoryRoot, [string]$DiffBase = '')
     $started = [DateTimeOffset]::UtcNow
     $root = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd('\', '/')
     $top = (Invoke-RepositoryGit $root @('rev-parse', '--show-toplevel')).Text
     if ([IO.Path]::GetFullPath($top).TrimEnd('\', '/') -ne $root) { throw 'RepositoryRoot must be the Git repository root.' }
     if (Test-ReparsePath $root $root) { throw 'Reparse repository roots are unsupported.' }
     $head = (Invoke-RepositoryGit $root @('rev-parse', '--verify', 'HEAD')).Text
+    if ($DiffBase) {
+        if ($DiffBase -cnotmatch '^[0-9a-f]{40}$') { throw 'DiffBase must be a full lowercase commit SHA.' }
+        $resolvedBase = (Invoke-RepositoryGit $root @('rev-parse', '--verify', ($DiffBase + '^{commit}'))).Text
+        if ($resolvedBase -cne $DiffBase) { throw 'DiffBase commit identity mismatch.' }
+        [void](Invoke-RepositoryGit $root @('merge-base', '--is-ancestor', $DiffBase, $head))
+    }
     $status = (Invoke-RepositoryGit $root @('status', '--porcelain=v1', '--untracked-files=all')).Text
     $branch = (Invoke-RepositoryGit $root @('branch', '--show-current')).Text
     $inventory = (Invoke-RepositoryGit $root @('ls-files', '--cached', '--others', '--exclude-standard', '-z')).Text
@@ -198,14 +204,21 @@ function Invoke-RepositoryValidation {
     $checks.Add((New-RepositoryCheck 'configuration.syntax' $syntaxCount @($failures) 'JSON/uproject/uplugin and PowerShell parsing only; not semantic UE validation.'))
     $diff = Invoke-RepositoryGit $root @('diff', '--check', 'HEAD', '--') @(0, 2)
     $diffFailures = if ($diff.ExitCode -ne 0) { @('Tracked diff contains whitespace errors or conflict markers.') } else { @() }
-    $checks.Add((New-RepositoryCheck 'git.diff' 1 $diffFailures 'Untracked script syntax and links are checked separately.'))
+    $diffItems = 1
+    if ($DiffBase) {
+        $committedDiff = Invoke-RepositoryGit $root @('diff', '--check', $DiffBase, $head, '--') @(0, 2)
+        $diffItems++
+        if ($committedDiff.ExitCode -ne 0) { $diffFailures += 'Committed diff contains whitespace errors or conflict markers.' }
+    }
+    $checks.Add((New-RepositoryCheck 'git.diff' $diffItems $diffFailures 'Working tree plus explicit DiffBase-to-HEAD when supplied; no implicit empty-diff fallback.'))
     if ($checks.Count -ne 6) { throw 'Incomplete validation check set.' }
     $failed = @($checks | Where-Object status -eq 'failed').Count
     [pscustomobject]@{
-        schemaVersion = 1; validatorVersion = '1.0.1'
+        schemaVersion = 1; validatorVersion = '1.0.2'
         runId = $started.ToString('yyyyMMddTHHmmssfffZ') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
         startedAt = $started.ToString('o'); finishedAt = [DateTimeOffset]::UtcNow.ToString('o')
         scope = 'repository-only'; repositoryRoot = $root; head = $head; branch = $branch
+        diffBaseSha = $DiffBase; diffMode = $(if ($DiffBase) { 'committed-and-working-tree' } else { 'working-tree-only' })
         workingTreeDirty = [bool]$status; powerShellVersion = $PSVersionTable.PSVersion.ToString()
         validatorSha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
         inventoryCount = $paths.Count; plannedChecks = 6; executedChecks = $checks.Count

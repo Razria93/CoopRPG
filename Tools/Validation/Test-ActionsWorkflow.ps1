@@ -45,7 +45,7 @@ function Assert-Workflow([Collections.IDictionary]$w) {
     Assert-Keys $w.defaults @('run');Assert-Keys $w.defaults.run @('shell')
     Assert-Condition ($w.defaults.run.shell -ceq 'pwsh') 'Expected pwsh.'
     $envExpected=@{GIT_LFS_SKIP_SMUDGE='1';CI_EVENT_NAME='${{ github.event_name }}';CI_EVENT_SHA='${{ github.sha }}'
-        CI_PR_HEAD_SHA='${{ github.event.pull_request.head.sha }}';CI_PR_BASE_SHA='${{ github.event.pull_request.base.sha }}'}
+        CI_PR_HEAD_SHA='${{ github.event.pull_request.head.sha }}';CI_PR_BASE_SHA='${{ github.event.pull_request.base.sha }}';CI_PUSH_BEFORE_SHA='${{ github.event.before }}'}
     Assert-Keys $w.env @($envExpected.Keys)
     foreach($key in $envExpected.Keys){Assert-Condition ($w.env[$key] -ceq $envExpected[$key]) "Unexpected context mapping: $key"}
     Assert-Keys $w.jobs @('validate','repository-validation')
@@ -67,7 +67,7 @@ function Assert-Workflow([Collections.IDictionary]$w) {
     Assert-Keys $checkout @('name','uses','with')
     Assert-Condition ($checkout.uses -ceq 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1') 'Checkout must use reviewed v7.0.1 SHA.'
     Assert-Keys $checkout.with @('persist-credentials','fetch-depth','lfs','submodules')
-    Assert-Condition ($checkout.with['persist-credentials'] -ceq $false -and $checkout.with.lfs -ceq $false -and $checkout.with.submodules -ceq $false -and $checkout.with['fetch-depth'] -eq 1) 'Unsafe checkout settings.'
+    Assert-Condition ($checkout.with['persist-credentials'] -ceq $false -and $checkout.with.lfs -ceq $false -and $checkout.with.submodules -ceq $false -and $checkout.with['fetch-depth'] -eq 0) 'Unsafe checkout or incomplete comparison history.'
     Assert-Keys $execute @('name','run')
     Assert-Condition ($execute.run -ceq 'pwsh -NoProfile -File ./Tools/Validation/Invoke-RepositoryCI.ps1 -OutputDirectory ./Artifacts/Validation/ci') 'Unexpected validation entry point.'
     Assert-Condition ($summary['if'] -ceq '${{ always() && !cancelled() }}' -and $upload['if'] -ceq $summary['if']) 'Failure result collection condition changed.'
@@ -104,6 +104,7 @@ $mutations=@(
     @{name='no-concurrency-cancel';change={param($w)$w.concurrency['cancel-in-progress']=$false}},
     @{name='mutable-action-tag';change={param($w)$w.jobs.validate.steps[0].uses='actions/checkout@v7'}},
     @{name='persisted-credentials';change={param($w)$w.jobs.validate.steps[0].with['persist-credentials']=$true}},
+    @{name='missing-history';change={param($w)$w.jobs.validate.steps[0].with['fetch-depth']=1}},
     @{name='lfs-download';change={param($w)$w.jobs.validate.steps[0].with.lfs=$true}},
     @{name='submodules';change={param($w)$w.jobs.validate.steps[0].with.submodules=$true}},
     @{name='self-hosted';change={param($w)$w.jobs.validate['runs-on']='self-hosted'}},
@@ -161,6 +162,8 @@ $contracts=@(
     @{name='repository-inner-failure';body={$r=New-RepositoryContract;$r.checks[0].status='failed';Expect-Rejection {Assert-CIPhaseResult repository $r 0 @{}}}},
     @{name='repository-missing-check';body={$r=New-RepositoryContract;$r.checks=@($r.checks|Select-Object -First 5);Expect-Rejection {Assert-CIPhaseResult repository $r 0 @{}}}},
     @{name='repository-duplicate-check';body={$r=New-RepositoryContract;$r.checks[1].id=$r.checks[0].id;Expect-Rejection {Assert-CIPhaseResult repository $r 0 @{}}}},
+    @{name='repository-baseline-missing';body={Expect-Rejection {Assert-CIPhaseResult repository (New-RepositoryContract) 0 @{diffBaseSha=('a'*40)}}}},
+    @{name='repository-baseline-mismatch';body={$r=New-RepositoryContract;$r|Add-Member NoteProperty diffBaseSha ('b'*40);Expect-Rejection {Assert-CIPhaseResult repository $r 0 @{diffBaseSha=('a'*40)}}}},
     @{name='context-local';body={Assert-CIContext -Enabled $false}},
     @{name='context-push';body={Assert-CIContext -Enabled $true -EventName push -EventSha ('a'*40) -TargetHead ('a'*40)}},
     @{name='context-pr';body={Assert-CIContext -Enabled $true -EventName pull_request -EventSha ('a'*40) -TargetHead ('a'*40) -PrHeadSha ('b'*40) -PrBaseSha ('c'*40)}},
@@ -209,10 +212,61 @@ try{
         }
     }finally{Pop-Location}
 }finally{$env:GITHUB_STEP_SUMMARY=$savedSummary}
+function Baseline-Git([string[]]$Arguments) {
+    $text=@(& git --no-optional-locks -C $baselineRoot @Arguments 2>&1)
+    if($LASTEXITCODE -ne 0){throw "Baseline fixture Git failed: $($Arguments[0])"}
+    $text -join "`n"
+}
+$baselineRoot=Join-Path $output 'baseline-fixture'
+[void][IO.Directory]::CreateDirectory($baselineRoot)
+[void](Baseline-Git @('init','-q','-b','main'))
+foreach($pair in @(@('core.hooksPath','.git/no-fixture-hooks'),@('core.autocrlf','false'),
+    @('user.name','ValidationFixture'),@('user.email','fixture@example.invalid'),@('commit.gpgsign','false'))){
+    [void](Baseline-Git @('config',$pair[0],$pair[1]))
+}
+function Baseline-Commit([string]$File) {
+    [IO.File]::WriteAllText((Join-Path $baselineRoot $File),"fixture`n",[Text.UTF8Encoding]::new($false))
+    [void](Baseline-Git @('add','--',$File));[void](Baseline-Git @('commit','-q','-m','baseline fixture'))
+    Baseline-Git @('rev-parse','HEAD')
+}
+$ancestor=Baseline-Commit 'root.txt'
+[void](Baseline-Git @('checkout','-q','-b','feature'))
+$prHead=Baseline-Commit 'feature.txt'
+[void](Baseline-Git @('checkout','-q','main'))
+$prBase=Baseline-Commit 'base.txt'
+# A parent-looking message line must not be parsed as a commit header.
+[void](Baseline-Git @('merge','-q','--no-ff','--no-gpg-sign','-m',("test merge`n`nparent $ancestor"),'feature'))
+$mergeHead=Baseline-Git @('rev-parse','HEAD')
+[void](Baseline-Git @('checkout','-q','-b','unmerged'))
+$future=Baseline-Commit 'future.txt'
+[void](Baseline-Git @('checkout','-q','main'))
+function Resolve-Fixture([hashtable]$Options) {
+    $params=@{RepositoryRoot=$baselineRoot;TargetHead=$mergeHead;Enabled=$false}
+    foreach($key in $Options.Keys){$params[$key]=$Options[$key]}
+    Resolve-CIDiffBaseline @params
+}
+$baselineCases=@(
+    @{name='baseline-local-default';body={$b=Resolve-Fixture @{};Assert-Condition ($b.sha -ceq $prBase -and $b.source -ceq 'local-first-parent') 'Wrong local first parent.'}},
+    @{name='baseline-local-explicit';body={$b=Resolve-Fixture @{LocalDiffBase=$ancestor};Assert-Condition ($b.sha -ceq $ancestor) 'Explicit range lost.'}},
+    @{name='baseline-pr-merge';body={$b=Resolve-Fixture @{Enabled=$true;EventName='pull_request';PrBaseSha=$prBase;PrHeadSha=$prHead};Assert-Condition ($b.sha -ceq $prBase -and $b.source -ceq 'pull-request-base') 'Wrong PR baseline.'}},
+    @{name='baseline-pr-wrong-base';body={Expect-Rejection {Resolve-Fixture @{Enabled=$true;EventName='pull_request';PrBaseSha=$ancestor;PrHeadSha=$prHead}}}},
+    @{name='baseline-pr-wrong-head';body={Expect-Rejection {Resolve-Fixture @{Enabled=$true;EventName='pull_request';PrBaseSha=$prBase;PrHeadSha=$ancestor}}}},
+    @{name='baseline-pr-not-merge';body={Expect-Rejection {Resolve-Fixture @{Enabled=$true;EventName='pull_request';TargetHead=$prBase;PrBaseSha=$ancestor;PrHeadSha=$prHead}}}},
+    @{name='baseline-push-multiple-commits';body={$b=Resolve-Fixture @{Enabled=$true;EventName='push';PushBeforeSha=$ancestor};Assert-Condition ($b.sha -ceq $ancestor -and $b.source -ceq 'push-before') 'Push range reduced to last commit.'}},
+    @{name='baseline-push-missing';body={Expect-Rejection {Resolve-Fixture @{Enabled=$true;EventName='push'}}}},
+    @{name='baseline-push-new-branch';body={Expect-Rejection {Resolve-Fixture @{Enabled=$true;EventName='push';PushBeforeSha=('0'*40)}}}},
+    @{name='baseline-self';body={Expect-Rejection {Resolve-Fixture @{LocalDiffBase=$mergeHead}}}},
+    @{name='baseline-object-missing';body={Expect-Rejection {Resolve-Fixture @{LocalDiffBase=('f'*40)}}}},
+    @{name='baseline-invalid-sha';body={Expect-Rejection {Resolve-Fixture @{LocalDiffBase='main'}}}},
+    @{name='baseline-ci-override';body={Expect-Rejection {Resolve-Fixture @{Enabled=$true;EventName='push';PushBeforeSha=$ancestor;LocalDiffBase=$prBase}}}},
+    @{name='baseline-root-without-base';body={Expect-Rejection {Resolve-Fixture @{TargetHead=$ancestor}}}},
+    @{name='baseline-not-ancestor';body={Expect-Rejection {Resolve-Fixture @{LocalDiffBase=$future}}}}
+)
+foreach($case in $baselineCases){Record-Test $case.name $case.body}
 $failed=@($results|Where-Object {-not $_.passed}).Count
 $report=[pscustomobject]@{schemaVersion=1;scope='workflow-profile-local';workflowSha256=(Get-FileHash $path).Hash
     resultPolicySha256=(Get-FileHash (Join-Path $PSScriptRoot 'CIResultValidation.psm1')).Hash
-    testScriptSha256=(Get-FileHash $PSCommandPath).Hash;planned=(3+$mutations.Count+8+2+$contracts.Count);executed=$results.Count;failed=$failed
+    testScriptSha256=(Get-FileHash $PSCommandPath).Hash;planned=(3+$mutations.Count+8+2+$contracts.Count+$baselineCases.Count);executed=$results.Count;failed=$failed
     status=$(if($failed){'failed'}else{'passed'});cases=$results.ToArray()}
 $result=Join-Path $output 'result.json'
 [IO.File]::WriteAllText($result,($report|ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))

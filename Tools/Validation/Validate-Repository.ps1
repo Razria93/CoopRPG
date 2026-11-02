@@ -2,13 +2,14 @@
 [CmdletBinding()]
 param(
     [string]$RepositoryRoot = (Join-Path $PSScriptRoot '../..'),
-    [string]$OutputDirectory
+    [string]$OutputDirectory,
+    [string]$DiffBase = ''
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 try {
     Import-Module (Join-Path $PSScriptRoot 'RepositoryValidation.psm1') -Force
-    $report = Invoke-RepositoryValidation -RepositoryRoot $RepositoryRoot
+    $report = Invoke-RepositoryValidation -RepositoryRoot $RepositoryRoot -DiffBase $DiffBase
     $allowed = [IO.Path]::GetFullPath((Join-Path $report.repositoryRoot 'Artifacts/Validation'))
     if (-not $OutputDirectory) { $OutputDirectory = Join-Path $allowed $report.runId }
     $output = [IO.Path]::GetFullPath($OutputDirectory)

@@ -15,7 +15,8 @@
     "CI_EVENT_NAME": "${{ github.event_name }}",
     "CI_EVENT_SHA": "${{ github.sha }}",
     "CI_PR_HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
-    "CI_PR_BASE_SHA": "${{ github.event.pull_request.base.sha }}"
+    "CI_PR_BASE_SHA": "${{ github.event.pull_request.base.sha }}",
+    "CI_PUSH_BEFORE_SHA": "${{ github.event.before }}"
   },
   "jobs": {
     "validate": {
@@ -28,7 +29,7 @@
           "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
           "with": {
             "persist-credentials": false,
-            "fetch-depth": 1,
+            "fetch-depth": 0,
             "lfs": false,
             "submodules": false
           }

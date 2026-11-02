@@ -51,12 +51,13 @@ function New-Fixture([string]$Name) {
         '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'fixture baseline'))
     return $dir
 }
-function Run-Validator([string]$Dir, [string]$Output = '') {
+function Run-Validator([string]$Dir, [string]$Output = '', [string]$DiffBase = '') {
     $start = [Diagnostics.ProcessStartInfo]::new($pwsh)
     $start.UseShellExecute = $false; $start.CreateNoWindow = $true
     $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
     foreach ($arg in @('-NoProfile', '-File', $entry, '-RepositoryRoot', $Dir)) { $start.ArgumentList.Add($arg) }
     if ($Output) { $start.ArgumentList.Add('-OutputDirectory'); $start.ArgumentList.Add($Output) }
+    if ($DiffBase) { $start.ArgumentList.Add('-DiffBase'); $start.ArgumentList.Add($DiffBase) }
     $process = [Diagnostics.Process]::Start($start)
     $stdout = $process.StandardOutput.ReadToEndAsync(); $stderr = $process.StandardError.ReadToEndAsync()
     if (-not $process.WaitForExit(30000)) { $process.Kill($true); $process.WaitForExit(); throw 'Fixture validator timed out (30 seconds).' }
@@ -180,6 +181,23 @@ $cases = @(
         param($d); Write-FixtureFile $d 'Docs/Guide.md' '<a title='' id="fake"''></a>'
         Write-FixtureFile $d 'README.md' "# Fixture`n[bad](Docs/Guide.md#fake)`n"
     }},
+    @{ Name='committed-clean'; Exit=0; Check=''; UseDiffBase=$true; Commit=$true; Mutate={
+        param($d); Write-FixtureFile $d 'README.md' "# Clean committed fixture`n"
+    }},
+    @{ Name='committed-whitespace'; Exit=1; Check='git.diff'; UseDiffBase=$true; Commit=$true; Mutate={
+        param($d); Write-FixtureFile $d 'README.md' "# Fixture`ntrailing   `n"
+    }},
+    @{ Name='committed-conflict'; Exit=1; Check='git.diff'; UseDiffBase=$true; Commit=$true; Mutate={
+        param($d); Write-FixtureFile $d 'README.md' "# Fixture`n<<<<<<< ours`nleft`n=======`nright`n>>>>>>> theirs`n"
+    }},
+    @{ Name='missing-diff-base'; Exit=2; Check=''; DiffBase=('f'*40); Mutate={} },
+    @{ Name='invalid-diff-base'; Exit=2; Check=''; DiffBase='main'; Mutate={} },
+    @{ Name='shallow-base-present'; Exit=0; Check=''; UseDiffBase=$true; Commit=$true; ShallowDepth=2; Mutate={
+        param($d); Write-FixtureFile $d 'README.md' "# Shallow fixture`n"
+    }},
+    @{ Name='shallow-base-missing'; Exit=2; Check=''; UseDiffBase=$true; Commit=$true; ShallowDepth=1; Mutate={
+        param($d); Write-FixtureFile $d 'README.md' "# Shallow fixture`n"
+    }},
     @{ Name='outside-output'; Exit=2; Check=''; Mutate={
         param($d)
     }}
@@ -188,11 +206,31 @@ foreach ($case in $cases) {
     $started = [DateTimeOffset]::UtcNow; $ok = $false; $message = ''; $reportPath = ''
     try {
         $dir = New-Fixture $case.Name
+        $base = Fixture-Git $dir @('rev-parse','HEAD')
         & $case.Mutate $dir
+        if ($case.ContainsKey('Commit')) {
+            [void](Fixture-Git $dir @('add','--','.'))
+            [void](Fixture-Git $dir @('-c','user.name=ValidationFixture','-c','user.email=fixture@example.invalid',
+                '-c','commit.gpgsign=false','commit','-q','-m','committed validation probe'))
+        }
+        if ($case.ContainsKey('ShallowDepth')) {
+            $clone = Join-Path $work ('clone-'+$case.Name)
+            $uri = [uri]::new($dir + [IO.Path]::DirectorySeparatorChar).AbsoluteUri
+            [void](Fixture-Git $work @('-c','protocol.file.allow=always','-c','core.hooksPath=.git/no-fixture-hooks',
+                '-c','core.autocrlf=false','clone','-q','--no-local','--depth',[string]$case.ShallowDepth,'--',$uri,$clone))
+            $dir = $clone
+        }
         $output = if ($case.Name -eq 'existing-output') { Join-Path $dir 'Artifacts/Validation/occupied' }
             elseif ($case.Name -eq 'outside-output') { Join-Path $dir 'not-allowed-output' } else { '' }
-        $run = Run-Validator $dir $output
+        $diffBase = if ($case.ContainsKey('DiffBase')) { $case.DiffBase }
+            elseif ($case.ContainsKey('UseDiffBase')) { $base } else { '' }
+        $run = Run-Validator $dir $output $diffBase
         Assert-Run $run $case.Exit $case.Check
+        if ($diffBase -and $case.Exit -lt 2) {
+            if ($run.Report.diffBaseSha -cne $base -or $run.Report.diffMode -cne 'committed-and-working-tree' -or $run.Report.workingTreeDirty) {
+                throw 'Committed comparison identity/clean state mismatch.'
+            }
+        }
         $reportPath = $run.ReportPath
         if ($case.Name -eq 'existing-output' -and [IO.File]::ReadAllText((Join-Path $output 'sentinel.txt')) -ne 'preserve') { throw 'Prior evidence modified.' }
         if ($case.Name -eq 'outside-output' -and (Test-Path -LiteralPath $output)) { throw 'Unsafe output was created.' }

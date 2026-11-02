@@ -56,4 +56,39 @@ function Assert-CIPhaseResult {
     }
     return $Report.executed
 }
-Export-ModuleMember -Function Assert-CIPhaseResult,Assert-CIContext
+function Resolve-CIDiffBaseline {
+    param([string]$RepositoryRoot,[string]$TargetHead,[bool]$Enabled,[string]$EventName,
+        [string]$PrHeadSha,[string]$PrBaseSha,[string]$PushBeforeSha,[string]$LocalDiffBase)
+    if ($TargetHead -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid target commit.' }
+    $raw = @(& git --no-optional-locks -C $RepositoryRoot cat-file -p $TargetHead 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'Target commit unavailable.' }
+    $headerEnd = [Array]::IndexOf($raw, '')
+    if ($headerEnd -lt 1) { throw 'Malformed commit headers.' }
+    $parents = @($raw | Select-Object -First $headerEnd | Where-Object { $_ -cmatch '^parent [0-9a-f]{40}$' } | ForEach-Object { $_.Substring(7) })
+    if ($Enabled) {
+        if ($LocalDiffBase) { throw 'A local baseline cannot override GitHub context.' }
+        switch -CaseSensitive ($EventName) {
+            'pull_request' {
+                if ($parents.Count -ne 2 -or $parents[0] -cne $PrBaseSha -or $parents[1] -cne $PrHeadSha) {
+                    throw 'Test merge parents do not match PR base/head.'
+                }
+                $base = $PrBaseSha; $source = 'pull-request-base'
+            }
+            'push' { $base = $PushBeforeSha; $source = 'push-before' }
+            default { throw 'Unsupported comparison event.' }
+        }
+    } elseif ($LocalDiffBase) {
+        $base = $LocalDiffBase; $source = 'local-explicit'
+    } elseif ($parents.Count -gt 0) {
+        $base = $parents[0]; $source = 'local-first-parent'
+    } else { throw 'Root commits have no supported comparison baseline; initial adoption requires separate review.' }
+    if ($base -cnotmatch '^[0-9a-f]{40}$' -or $base -ceq ('0'*40) -or $base -ceq $TargetHead) {
+        throw 'Missing, zero, or self comparison baseline; new-branch push is unsupported.'
+    }
+    $resolved = @(& git --no-optional-locks -C $RepositoryRoot rev-parse --verify ($base + '^{commit}') 2>$null)
+    if ($LASTEXITCODE -ne 0 -or ($resolved -join '') -cne $base) { throw 'Comparison commit unavailable; fetch required history.' }
+    & git --no-optional-locks -C $RepositoryRoot merge-base --is-ancestor $base $TargetHead 2>$null
+    if ($LASTEXITCODE -ne 0) { throw 'Comparison commit must be a known ancestor of tested HEAD.' }
+    [pscustomobject]@{sha=$base;source=$source}
+}
+Export-ModuleMember -Function Assert-CIPhaseResult,Assert-CIContext,Resolve-CIDiffBaseline

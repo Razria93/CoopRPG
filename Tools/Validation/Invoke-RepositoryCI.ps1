@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 # Same local validators as CI; no GitHub API or upload calls.
 [CmdletBinding()]
-param([string]$RepositoryRoot = (Join-Path $PSScriptRoot '../..'), [string]$OutputDirectory)
+param([string]$RepositoryRoot = (Join-Path $PSScriptRoot '../..'), [string]$OutputDirectory, [string]$DiffBase = '')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'CIResultValidation.psm1') -Force
@@ -11,6 +11,7 @@ if ($LASTEXITCODE -ne 0 -or [IO.Path]::GetFullPath($top).TrimEnd('\','/') -ne $r
 $targetHead=(& git --no-optional-locks -C $root rev-parse HEAD)
 if($LASTEXITCODE -ne 0){throw 'Git HEAD unavailable.'}
 Assert-CIContext -Enabled ($env:GITHUB_ACTIONS -ceq 'true') -EventName $env:CI_EVENT_NAME -EventSha $env:CI_EVENT_SHA -TargetHead $targetHead -PrHeadSha $env:CI_PR_HEAD_SHA -PrBaseSha $env:CI_PR_BASE_SHA
+$baseline = Resolve-CIDiffBaseline -RepositoryRoot $root -TargetHead $targetHead -Enabled ($env:GITHUB_ACTIONS -ceq 'true') -EventName $env:CI_EVENT_NAME -PrHeadSha $env:CI_PR_HEAD_SHA -PrBaseSha $env:CI_PR_BASE_SHA -PushBeforeSha $env:CI_PUSH_BEFORE_SHA -LocalDiffBase $DiffBase
 $allowed = [IO.Path]::GetFullPath((Join-Path $root 'Artifacts/Validation'))
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $allowed ('ci-' + [guid]::NewGuid().ToString('N')) }
 $output = [IO.Path]::GetFullPath($OutputDirectory)
@@ -37,6 +38,7 @@ function Invoke-Phase([string]$Name, [string]$Script, [string]$Pattern) {
             }
             'repository'{
                 $identity.head=$targetHead;$identity.repositoryRoot=$root
+                $identity.diffBaseSha=$baseline.sha;$identity.diffMode='committed-and-working-tree'
                 $identity.validatorSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'RepositoryValidation.psm1')).Hash
                 $identity.entryPointSha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $Script)).Hash
             }
@@ -51,6 +53,7 @@ function Invoke-Phase([string]$Name, [string]$Script, [string]$Pattern) {
         $start.UseShellExecute=$false; $start.CreateNoWindow=$true
         $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
         foreach($arg in @('-NoProfile','-File',(Join-Path $PSScriptRoot $Script),'-RepositoryRoot',$root)) { $start.ArgumentList.Add($arg) }
+        if ($Name -eq 'repository') { $start.ArgumentList.Add('-DiffBase'); $start.ArgumentList.Add($baseline.sha) }
         $process=[Diagnostics.Process]::Start($start)
         try {
             $stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync()
@@ -85,6 +88,7 @@ $dirty=[bool](& git --no-optional-locks -C $root status --porcelain=v1)
 $summary=[pscustomobject]@{
     schemaVersion=1;scope='repository-only';head=$head;workingTreeDirty=$dirty
     event=$env:CI_EVENT_NAME;eventSha=$env:CI_EVENT_SHA;prHeadSha=$env:CI_PR_HEAD_SHA;prBaseSha=$env:CI_PR_BASE_SHA
+    diffBaseSha=$baseline.sha;diffBaseSource=$baseline.source
     powerShellVersion=$PSVersionTable.PSVersion.ToString()
     entryPointSha256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
     resultPolicySha256=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'CIResultValidation.psm1') -Algorithm SHA256).Hash
@@ -93,7 +97,7 @@ $summary=[pscustomobject]@{
     planned=3;executed=$phases.Count;failed=$failed;phases=$phases.ToArray()
 }
 [IO.File]::WriteAllText((Join-Path $output 'summary.json'),($summary|ConvertTo-Json -Depth 8),$utf8)
-$lines=@('# Repository validation','Scope: repository-only; no UE build or game tests.',"Status: $($summary.status)","Tested commit: $head","Working tree dirty: $dirty",'','| Phase | Status | Executed |','|---|---|---|')
+$lines=@('# Repository validation','Scope: repository-only; no UE build or game tests.',"Status: $($summary.status)","Tested commit: $head","Diff base: $($baseline.sha) ($($baseline.source))","Working tree dirty: $dirty",'','| Phase | Status | Executed |','|---|---|---|')
 foreach($phase in $phases){$lines+="| $($phase.name) | $($phase.status) | $($phase.executed) |"}
 [IO.File]::WriteAllText((Join-Path $output 'summary.md'),($lines -join "`n"),$utf8)
 Write-Host "CI summary: $(Join-Path $output 'summary.json')"
