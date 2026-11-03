@@ -62,6 +62,51 @@ pwsh -NoProfile -File .\Tools\Validation\Test-RepositoryValidation.ps1
 - 결과에는 dirty 여부를 남긴다. 미커밋 개발 실행을 clean 커밋의 검증으로 주장하지 않는다. 저장소 체크 통과를 게임 검증·원격 필수 체크 통과로 표현하지 않는다.
 - 파일 목록은 Git 기준으로 제한하며 무시된 파일을 전수 탐색하지 않는다. reparse 입력 경로는 실패 처리한다. 향후 검사 정책을 바꾸면 관련 실패 표본과 실제 저장소 검사로 다시 확인한다.
 
+## UnrealEditor 빌드 재개 결과 — 2026-11-03
+
+**결과:** 페이지 파일 설정·사용자 재부팅 후 기존 산출물을 재사용해 UnrealEditor Win64 Development를 빌드했다. 공식 배치 종료 코드 0, UnrealEditor.exe·target receipt·핵심 DLL 존재와 receipt의 대상/플랫폼/구성을 확인해 **기반 준비 3단계인 엔진 빌드를 완료했다.** 에디터 기동 확인은 다음 단계이며 게임 프로젝트·게임 빌드·게임 시험·업로드·머지는 미실행이다. 영상에는 접근하지 않았다.
+
+### 실행과 실제 도구
+
+| 항목 | 실행 근거 |
+|---|---|
+| 대상 | DSYEOM, C:\UE\5.8.4, 공식 5.8.4-release / f45729c0b6f097038e72b52d366a62baeca3275b. 종료 후 추적 소스 변경 없음 |
+| 프로젝트 기준 | chore/engine-first-build, HEAD 3c5dd43a02da34342db7395a491b763578620f6b. 실행 시작 때 AGENTS·Roadmap에 이번 허용 범위/현재 작업의 미커밋 변경 2개가 있었음. 게임 코드 변경 아님 |
+| 실제 명령 | 엔진 루트에서 `cmd /d /c Engine\Build\BatchFiles\Build.bat UnrealEditor Win64 Development -WaitMutex -WindowsSDKVersion=10.0.26100.0 -MaxParallelActions=4 -NoUBA` |
+| 실제 선택 | 로그의 MSVC 14.44.35216·Windows SDK 10.0.26100.0, 동봉 DotNet 10.0 win-x64. VS 2022 Community의 기존 도구 경로 유지 |
+| 실행기·작업 | UBA local executor·개별 [NoUba], 재개 계획 5787 action. NoUBA가 별도 실행기로의 전환을 뜻하지 않는 고정 소스 구현과 일치 |
+| 결과·시간 | 종료 0, 3341.968초(약 55분 42초). 2026-11-03 11:31:48 → 2026-11-03 12:27:30 KST. 이번 증분 재개 시간이며 11월 2일 시도 시간이나 콜드 빌드 전체 소요가 아님 |
+
+Setup·프로젝트 파일 생성·전체 Clean·새 도구 설치·OS 설정 변경·재부팅·다른 앱 종료를 반복하지 않았다. 이번 명령을 실행한 것이며 이전 후보·중단 명령을 성공 근거로 재사용하지 않는다. 실제 동시성은 최대 4작업 상한과 다를 수 있고 최적 병렬도를 증명한 시험은 아니다.
+
+### 산출물과 완료 판정
+
+| 확인 파일 | 상태 |
+|---|---|
+| `Engine/Binaries/Win64/UnrealEditor.exe` | 존재, 502272 bytes |
+| `Engine/Binaries/Win64/UnrealEditor.target` | 존재, 1720122 bytes |
+| `Engine/Binaries/Win64/UnrealEditor-Core.dll` | 존재, 22328320 bytes |
+| `Engine/Binaries/Win64/UnrealEditor-Engine.dll` | 존재, 77166080 bytes |
+| `Engine/Binaries/Win64/UnrealEditor-UnrealEd.dll` | 존재, 35477504 bytes |
+
+receipt의 TargetName=UnrealEditor·Platform=Win64·Configuration=Development와 실행 파일/receipt 해시를 새 실행 로그·종료 코드에 연결했다. UnrealEditor.exe의 파일 ProductVersion은 5.8.4로 확인했다. UnrealEditor.exe 링크는 전체 작업 종료보다 먼저 나타났으므로 파일 생성만으로 조기 완료 처리하지 않았다. 전체 배치 종료와 산출물 확인 뒤 완료로 올렸다. DLL 존재는 에디터 기동 성공의 대체 근거가 아니며 이번에 실행하지 않았다.
+
+### 메모리·공간과 실패/회복 관측
+
+| 항목 | 관측 |
+|---|---|
+| 시작 메모리 | 가용 43.463GiB, 커밋 22.677/95.139GiB |
+| 표본 최대 커밋 | 40.355GiB. 표본 최대 사용률 42.42%; 약 3초 간격 표본 1012개이며 모든 순간 피크를 포착한 값은 아님 |
+| 표본 최소 가용 RAM | 34.157GiB |
+| C: 공간 | 시작 181.393GiB → 종료 59.54GiB, 볼륨 여유 감소 121.853GiB. 표본 최소 여유 59.54GiB |
+| 전체 로그 패턴 | 메모리 부족 작업 종료 0건, fatal/compiler/linker 오류 패턴 0건. 경고 전체 0개나 무결함 증명이 아님 |
+
+자원 표본·전체 오류 로그를 확인하며 빌드를 유지했다. 커밋 비율 순간 초과·낮은 CPU·로그 출력 공백·턴 경계만으로 중단하지 않았다. 수동 중단·옵션 변경·전체 재시작 없이 이번 배치가 종료됐다. C: 공간 변화는 OS·다른 작업도 포함하므로 순수 엔진 산출물 크기나 최대 점유량으로 해석하지 않는다. 페이지 파일·재부팅·다른 앱·기존 산출물 조건이 11월 2일과 달라 메모리 설정 하나의 효과나 속도 향상을 인과적으로 주장하지 않는다.
+
+원본은 Git 제외 `Artifacts/Validation/engine-resume-20261103-113138754/`의 `repository-before.json`, `started.json`, `stdout.log`, `stderr.log`, `resources.jsonl`, `result.json`, `assessment.json`이다. 엔진의 이번 UBT 상세 로그·trace도 `ubt-log.txt`·`ubt-trace.uba`로 보존했다. 일부 MSVC 라이브러리 생성 안내의 한글은 깨져 표시돼 해당 문구의 정확한 해석은 제한되며 도구·영문 종료 결과와 receipt를 별도로 확인했다. 문서 검증 결과는 같은 경로의 `documents/result.json`에서 확인한다. 과거 11월 2일 중단·11월 3일 설정/재부팅 근거는 덮어쓰지 않았다. 엔진 생성물·원시 로그는 Git에 추가하지 않는다.
+
+**다음 작업:** 별도 허용 후 게임 프로젝트 생성 없이 에디터 시작·종료를 확인하고 필요한 로컬 근거를 남긴다. C: 여유 59.54GiB를 기준으로 게임/서버 빌드 전 공간 배정도 재검토한다. 이후 환경 작업 리뷰·허용된 PR/머지 절차로 마감한다. 독립 서버·Game/Client 빌드·쿠킹·접속(V01)은 게임 프로젝트를 만든 뒤의 후속 범위다. [마감 순서](../Roadmap.md#기반-준비-마감과-게임-착수-순서--2026-11-03)를 따르며 아래 날짜별 미완료·재부팅 대기 기록은 당시 사실로 보존한다.
+
 ## 페이지 파일 재부팅 후 확인 — 2026-11-03
 
 **결과:** 사용자가 PC를 재부팅했다고 알린 뒤 DSYEOM에서 부팅 시각 변경과 저장 설정·실제 페이지 파일 할당·커밋 한도·C: 여유를 읽기 전용으로 확인했다. **초기 32GiB·최대 64GiB 설정 유지와 실제 32GiB 할당을 확인해 기반 준비 2단계를 완료했다.** 이번에 설정을 변경하거나 재부팅·앱 종료·엔진/게임 빌드·에디터 실행·프로젝트 생성·커밋·업로드·머지·영상 접근을 하지 않았다.
