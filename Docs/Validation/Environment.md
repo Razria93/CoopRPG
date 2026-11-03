@@ -9,6 +9,51 @@
 - **최소 양식:** 조사·검토의 기본 순서는 AGENTS를 따르며 관측 날짜·대상·방법·결과·판정 한계를 기존 표나 짧은 기록으로 남긴다. 후속 선택·작업은 Roadmap의 해당 항목을 참조한다. 공통 명령을 추가할 때는 작업 경로·도구/구성·사전 조건·명령·실행 결과를 함께 남기고 후보와 검증된 명령을 구분한다.
 - **검증:** 이관 기록과 이번 관측, 파일 존재와 실행 성공, 조사한 범위와 미확인 범위를 구분한다. 변동 가능한 정보는 사용 전에 필요한 항목만 재확인하며 문서 편집일을 재측정일로 쓰지 않는다. 읽기 조사 결과 확인을 이유로 설치·빌드를 실행하지 않는다.
 
+## 최소 C++ 프로젝트와 Editor 첫 빌드 — 2026-11-03
+
+**결론:** DSYEOM의 chore/game-bootstrap에서 Git LFS 3.8.1 준비와 `Game/CoopRPG.uproject` 최소 C++ 프로젝트 생성·IDE 파일 생성·`CoopRPGEditor Win64 Development` 첫 프로젝트 빌드를 완료했다. **프로젝트 기동·게임 기능·Server/Game 빌드·V01은 미실행**이다. 사용자 허용에 따라 진행했으며 업로드·PR·머지·영상 작업은 하지 않았다.
+
+대상은 저장소 HEAD `a9789be6b09f55ff63b6173acb31251ce3fffd89` 위의 미커밋 구현·문서 변경이다. 고정 엔진은 `5.8.4-release` / `f45729c0b6f097038e72b52d366a62baeca3275b`이고 추적 엔진 소스는 실행 전후 clean이다. 원시 근거는 Git 제외 `Artifacts/Validation/game-bootstrap-20261103/`의 before.json, installer-verification.json, lfs-install.log, lfs-bundled-update.json, lfs-roundtrip.json, project-inputs.json, project-files/, editor-build/, verification.json과 repository/다. 이 경로의 실행 파일·대형 로그·바이너리를 공개 저장소에 추가하지 않는다.
+
+### LFS 준비와 호출 버전 복구
+
+- [공식 v3.8.1 릴리스](https://github.com/git-lfs/git-lfs/releases/tag/v3.8.1)의 Windows 설치 파일을 다운로드하고 공개 SHA-256 `7ac0422468f9cce06a7916156ed284f223527ed40e6d9ccf5fc0e89ad05b389c`와 대조한 뒤 실행했다. Authenticode 서명도 GitHub, Inc. / Valid를 확인했다. 설치 종료 코드 0이며 재부팅은 요구되지 않았다. 설치는 관리자 모드로 `C:\Program Files\Git LFS`에 배치됐고 설치기가 시스템 PATH 끝에 경로·GIT_LFS_PATH를 추가했다. 사용자 스킬·VS·SDK 구성은 변경하지 않았다.
+- 설치 뒤에도 `git lfs`와 Git Bash가 기존 Git 동봉 3.7.1을 호출했다. 현재 프로세스의 PATH/GIT_LFS_PATH 갱신만으로도 바뀌지 않는 것을 실제 확인했다. 원인은 Git의 동봉 실행 파일 선택이며 3.8.1 단독 실행 성공을 준비 완료로 계산하지 않았다.
+- `C:\Program Files\Git\mingw64\bin\git-lfs.exe` 원본을 `git-lfs-3.7.1.before.exe`로 보존했다. 일반 복사는 Windows 접근 권한 때문에 거절됐고 대상은 변경되지 않았다. 별도 관리자 helper로 공식 설치본과 같은 실행 파일을 동봉 경로에 복사한 뒤 양쪽 SHA-256 `7B38B496056A452EF1CE7DF3E3B5F18EF5E252C943F754CF22BFDDB59CA4DB1C` 일치를 확인했다. Git 본체·실행 래퍼는 교체하지 않았다. 향후 Git 재설치/업데이트가 동봉 LFS를 바꿀 수 있으므로 그때 호출 버전을 재확인한다.
+- 최종 기본 Git·Git Bash 모두 `git-lfs/3.8.1 … git a662a6db`를 확인했다. `git lfs install --local`로 filter 설정 4개를 추가했고 기존 pre-push hook은 SHA-256까지 동일하다. 설치기가 실행한 전역 LFS 초기화의 filter 값은 기존 값과 같다. 로컬 설정·hook은 다른 PC에 자동 전달되는 파일이 아니므로 그 장비에서 다시 준비한다.
+- 실제 clean→LFS 포인터→smudge로 65,536바이트 바이너리를 왕복해 길이·포인터 oid·복원 SHA-256 `7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2`가 일치했다. .uasset/.umap 속성도 lfs/-text다. 시험 객체는 로컬 LFS 저장소에만 만들었고 Game에 가짜 자산을 만들거나 index·원격을 사용하지 않았다. 최초 시험 helper의 비동기 반환값이 출력에 섞인 형 변환 오류는 helper 출력 억제로 수정·재실행했다. LFS 자체 실패나 실제 자산 검증으로 표현하지 않는다.
+
+### 프로젝트 구조와 도구 선택
+
+고정 소스 `Templates/TP_Blank`의 타깃/모듈 구조를 참고해 위저드 대신 최소 소스 5개와 descriptor 1개를 작성했다. Runtime 모듈 CoopRPG는 Core/CoreUObject/Engine에만 의존하고 기본 게임 모듈 등록만 한다. 타깃은 V7·Unreal5_8 include order로 맞췄다. 표준 CoopRPG Game 타깃 정의는 존재하지만 이번에 빌드하지 않았다. Server 타깃·GAS·입력·캐릭터·맵·자산·게임 규칙은 추가하지 않았다. 게임 구조 설계 문서를 별도로 만들 단계도 아니다.
+
+`.uproject`의 EngineAssociation `{3061ACC8-48F3-2013-39A6-6ABE89B36283}`는 이 장비의 기존 HKCU 등록 `C:/UE/5.8.4`와 일치한다. Launcher 동명 엔진을 선택하지 않았다. 이 GUID는 다른 장비의 엔진 경로를 보장하지 않으므로 다른 PC에서는 해당 소스 엔진으로 연결해야 한다. 이번 CLI 명령은 엔진·프로젝트 경로를 명시했다.
+
+```powershell
+# 실제 성공 명령. 첫 명령은 C:\UE\5.8.4의 소스를 사용한다.
+& C:\UE\5.8.4\GenerateProjectFiles.bat -project=C:\CoopRPG\Game\CoopRPG.uproject -game -2022 -CurrentPlatform
+# 작업 경로 C:\UE\5.8.4. Editor 타깃만 실행한다.
+& .\Engine\Build\BatchFiles\Build.bat CoopRPGEditor Win64 Development -Project=C:\CoopRPG\Game\CoopRPG.uproject -WaitMutex -WindowsSDKVersion=10.0.26100.0 -MaxParallelActions=4 -NoUBA
+```
+
+생성된 CoopRPG.sln은 Visual Studio 17 형식이다. GPF는 VS 2022의 .NET 10 C# IDE 프로젝트 제한과 Mac/iOS/Android/Linux 계열 SDK 미준비를 안내했다. 별도 Automation_CoopRPG 솔루션은 VS 2026 형식으로 생성됐지만 VS 2026을 설치하거나 그 IDE로 빌드한 것이 아니다. 실제 빌드는 기존 VS 2022 C++ 도구와 UE 동봉 .NET을 사용했다. 자동 생성 .vsconfig의 SDK 22621 권고는 채택 구성과 다르므로 설치 지침으로 사용하지 않고 `/Game/.vsconfig`만 생성물 제외에 추가했다. 나머지 솔루션·Binaries/Intermediate/Saved/.vs 제외와 소스 6개 보존을 실제 확인했다.
+
+### 실제 측정과 산출물 검증
+
+| 항목 | 결과·근거 |
+|---|---|
+| 프로젝트 파일 생성 | 15:08:54 시작, 외부 측정 10.452초·UBT 자체 7.74초, 종료 0. C: 209.131→209.080GiB |
+| Editor 프로젝트 빌드 | 15:09:24~15:10:11, 외부 측정 46.733초·UBT 자체 45.45초, 종료 0·Succeeded·10개 작업. 기존 엔진 산출물을 재사용했고 공유 NetCore 재컴파일/링크도 포함 |
+| 실제 도구 | MSVC 14.44.35216, 폴더 14.44.35207, SDK 10.0.26100.0. UE 동봉 .NET 10.0.203/런타임 10.0.7. 최대 4작업, UBA local executor의 `[NoUba]` 실행 |
+| 공간·자원 | 빌드 전후 C: 209.080→206.534GiB, 볼륨 순감소 2.546GiB. 3초 주기 16표본에서 최대 커밋 42.077/95.139GiB·최소 가용 RAM 25.903GiB. 디스크 중단 없음. 별도 결과 검토 시 C: 206.315GiB |
+| 프로젝트 산출물 | UnrealEditor-CoopRPG.dll 50,176바이트·PDB·CoopRPGEditor.target·UnrealEditor.modules 존재. receipt는 Editor/Win64/Development/V7/5.8.4, 모듈/엔진/receipt BuildId `d1236464-93c4-4e7d-aabc-b4843c1e6ac0` 일치 |
+| 이미지 형식·로그 | 새 CoopRPG DLL과 재링크 NetCore DLL의 Windows SEC_IMAGE 매핑 성공. DLL 코드를 실행한 검증은 아님. 빌드 stdout의 compiler/linker/fatal/Failed 오류 표식·warning 행 0개, stderr 비어 있음 |
+| 크기의 해석 | Game/Binaries 논리 크기 0.058041GiB, Game/Intermediate 0.074480GiB. C: 순감소에는 엔진 공유 PCH·로그·동시 OS/앱 변경 등이 포함될 수 있어 프로젝트만의 크기나 이후 전체 필요량으로 해석하지 않음 |
+
+원본 stdout/stderr·UBT 로그·trace·receipt·샘플·해시는 보존했다. 한글 링커 진행 문장의 일부가 리다이렉트 출력에서 깨져 보이나 ASCII 결과·오류 코드·산출물 검증은 대조 가능하다. 실패가 없었던 빌드를 실패 복구 시험으로 꾸미거나 전체 소스 엔진을 다시 빌드하지 않았다.
+
+**검토 판정:** 모듈/타깃 이름·의존성·5.8 타깃 설정·source association·실행 범위·생성물 혼입·receipt/BuildId·자원 측정과 문서의 완료 주장을 대조했다. 자동 생성 .vsconfig 혼입 후보를 제외 규칙으로 수정했으며 이번 부트스트랩 범위에서 남은 필수 수정은 없다. 로컬 저장소 검사 6개가 통과했으며 repository/에 보관하고 게임 검증과 구분한다. 프로젝트 기동·기본 맵/설정·직접 조작·GAS·독립 서버/클라이언트·자산 LFS 원격 전송·다른 PC 재현은 미검증이다. 이전 프로젝트 없는 에디터 기동의 비치명 진단은 이번 빌드만으로 해결 처리하지 않는다. 다음은 실제 CoopRPG 프로젝트의 Editor 기동·모듈 로드·로그·정상 종료를 확인하고, 별도 단위에서 V01용 최소 맵/입력·Server/Game 준비로 진행하는 것이다.
+
 ## R01 커밋 변경 검사 — 2026-11-02
 
 P1 직접 실행의 기본값은 기존 작업 트리 검사다. 커밋된 변경까지 검사하려면 `-DiffBase <전체 40자리 SHA>`를 지정한다. 통합 CI 진입점은 비교 기준을 반드시 정하고 P1에 전달하며, 결과의 diffBaseSha·diffMode를 실행 전 기대값과 대조한다.

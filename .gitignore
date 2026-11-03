@@ -6,6 +6,8 @@
 *.vcxproj.user
 
 # Generated UE project files; keep tool and vendor source projects elsewhere.
+# UBT writes .vsconfig from engine defaults; the adopted toolchain is documented separately.
+/Game/.vsconfig
 /Game/*.sln
 /Game/*.slnx
 /Game/*.vcxproj
