@@ -8,7 +8,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 2026-11-02 엔진 빌드 후속: 엔진용 프로젝트 파일 생성은 성공했으며 UnrealEditor Win64 Development 재시도는 커밋 압박으로 중단해 미완료다. [실행 결과·한계](Docs/Validation/Environment.md#첫-unrealeditor-엔진-빌드--2026-11-02)를 확인하며 에디터 실행·게임 빌드·독립 접속 성공과 구분한다.
 
-2026-11-03 엔진 재개 결과: UnrealEditor Win64 Development 빌드가 종료 코드 0으로 끝났고 실행 파일·receipt를 확인했다. [실제 결과·한계](Docs/Validation/Environment.md#unrealeditor-빌드-재개-결과--2026-11-03)를 따른다. 에디터 기동 후속에서 초기 DLL 2개 복구·ShaderCompileWorker 준비를 마쳤으며 [프로젝트 선택 화면·정상 종료는 재검증 대기](Docs/Validation/Environment.md#에디터-기동-확인과-복구--2026-11-03)다. 게임 프로젝트·게임/서버 빌드·게임 시험은 미착수다.
+2026-11-03 엔진 재개 결과: UnrealEditor Win64 Development 빌드가 종료 코드 0으로 끝났고 실행 파일·receipt를 확인했다. [실제 결과·한계](Docs/Validation/Environment.md#unrealeditor-빌드-재개-결과--2026-11-03)를 따른다. 에디터 기동 후속에서 초기 DLL 2개 복구·ShaderCompileWorker 준비를 거쳐 [로컬 프로젝트 선택 화면·정상 종료를 확인](Docs/Validation/Environment.md#에디터-기동-재검증-완료--2026-11-03)했다. 비치명 오류·경고와 미검증 범위는 해당 기록에 남겼다. 게임 프로젝트·게임/서버 빌드·게임 시험은 미착수다.
 
 **엔진 준비 경로:** 공식 GitHub 소스를 확보하고 Setup으로 의존성을 준비한 뒤, 엔진용 IDE 파일 생성과 C++ 컴파일로 UnrealEditor 실행 파일을 만든다. 여기서 엔진 빌드는 에디터를 실행하거나 게임 프로젝트를 빌드하는 작업과 구분한다. 독립 Server 타깃을 사용할 소스 엔진을 준비하는 단계다.
 
