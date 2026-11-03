@@ -321,6 +321,22 @@ PR #1은 정리 전 본문의 전체 SHA 14개·Actions URL 7개·기존 artifac
 
 **허용 후 원격 순서:** 브랜치 업로드 → main 대상 초안 PR을 채택 템플릿으로 작성(자동 삽입 여부도 확인) → 최신 head/test merge/base의 실제 Actions·누적 diff 확인 → 필수 지적 수정/재검증 → 별도 머지 허용 후 merge commit → main Actions·원격 자동 삭제·로컬 동기화 확인. 이번에는 어느 원격 변경도 실행하지 않았다. 이번 PR의 변경은 문서뿐이며 저장소 CI는 기존 검증기를 실행한다. 로컬 UE 빌드/기동을 원격 재실행하는 구성은 아니다.
 
+## 환경 브랜치 PR 게시·Actions 확인 — 2026-11-03
+
+[초안 PR #3](https://github.com/Razria93/CoopRPG/pull/3)에 최초 head f6fe85b의 기존 6커밋·문서 5개를 게시했다. main 기준 b274006과 누적 파일 목록을 대조했으며 엔진/게임 코드·바이너리·원시 로그·영상은 업로드하지 않았다. 새 PR 작성 화면에서 기본 템플릿 네 항목이 자동 삽입된 것을 확인한 뒤 GitHub 연결 도구로 요약·검증 표·상세 접기를 적용했다. 데스크톱 화면에서 요약·표·펼친 근거를 확인했으며 좁은 화면은 새로 검증하지 않았다.
+
+**최초 실제 Actions:** [run 41578215242](https://github.com/Razria93/CoopRPG/actions/runs/41578215242)의 워크플로 시험 76개·저장소 검사 6개·회귀 36개와 최종 repository-validation 게이트가 통과했다. GitHub-hosted Windows 실행이며 로컬 결과나 과거 PR 성공을 옮겨 쓴 것이 아니다. 워크플로 코드를 바꾸지 않아 이번 PR에 의도적인 실패 커밋을 추가하지 않았으며 기존 회귀 표본의 정상·실패 기대값 시험과 구분한다.
+
+- 최초 PR head: `f6fe85bb104a3d77b467556518cdd9a93124d213`
+- 실제 검사/test merge: `c6fbda7f4f91e30a8eaeef6c8168e10e1349cd95`
+- PR base·비교 기준: `b274006115ce052d79ea7bacf38ffbda614b1ecd`
+
+이후 실제 게시 결과를 AGENTS·Roadmap·이 색인에 갱신한다. 추가 문서 diff의 로컬 검사·리뷰 뒤 커밋/게시하며, head가 바뀌므로 새 head의 실제 Actions를 다시 확인한다. 최신 head·실제 검사 SHA·run 판정은 PR 본문/Checks와 Git 제외 `Artifacts/Validation/engine-pr-20261103/`의 실행별 JSON을 원본으로 확인한다. 이전 성공을 새 head의 결과로 계산하지 않으며 SHA 기록만을 위한 후속 커밋은 반복하지 않는다.
+
+로컬 origin의 fetch refspec은 main 한정이라 업로드 직후 작업 브랜치 추적 ref가 없었다. 실제 push와 GitHub head 일치는 확인됐으며 설정을 바꾸지 않고 이 브랜치만 명시적으로 fetch해 로컬 추적 ref를 확보했다. 업로드 실패나 main 변경으로 해석하지 않는다.
+
+**상태·한계:** PR은 초안·미병합이다. 본문은 기존 빌드/기동 실패·복구·비치명 진단·남은 공간과 게임 미착수를 보존한다. 이번 Actions는 저장소 검사이며 UE/게임 빌드·기동을 원격 재실행한 것이 아니다. 초안 해제·머지·원격 정책·삭제/이동·새 빌드/프로젝트 생성·영상 작업은 하지 않는다. 다음은 최신 PR 누적 변경과 실제 검사 근거의 최종 리뷰다.
+
 ## 현재 기록
 
 | 기록 | 종류·상태 | 한계 |
