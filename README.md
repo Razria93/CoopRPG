@@ -4,11 +4,15 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 ## 현재 상태
 
-2026-10-30: 문서 6개·Git 관리 파일 2개·모델 추천 스킬 사본 1개와 커밋 3개를 [공개 저장소](https://github.com/Razria93/CoopRPG)의 `main`에 처음 공유했다. 이후 데스크탑 저장소 이관·기준 커밋 검증과 UE 5.8.4·기존 VS 2022 도구 조합 채택에 이어 공식 소스·Setup 의존성 준비와 기존 사전 구성 확인을 마쳤으며 **게임 프로젝트·게임 구현·게임 빌드·게임 시험은 모두 미착수**다. 게임 실행물과 검증된 게임 빌드·실행 절차는 아직 없다. 4주는 검증 전 목표이며 최신 작업 상태는 [Roadmap](Docs/Roadmap.md)을 따른다.
+2026-10-30: 문서 6개·Git 관리 파일 2개·모델 추천 스킬 사본 1개와 커밋 3개를 [공개 저장소](https://github.com/Razria93/CoopRPG)의 `main`에 처음 공유했다. 이후 데스크탑 저장소 이관·기준 커밋 검증과 UE 5.8.4·기존 VS 2022 도구 조합 채택에 이어 공식 소스·Setup 의존성 준비와 기존 사전 구성 확인을 마쳤으며 당시 게임 프로젝트·게임 구현·게임 빌드·게임 시험은 모두 미착수였다. 4주는 검증 전 목표이며 최신 작업 상태는 [Roadmap](Docs/Roadmap.md)을 따른다.
 
 2026-11-02 엔진 빌드 후속: 엔진용 프로젝트 파일 생성은 성공했으며 UnrealEditor Win64 Development 재시도는 커밋 압박으로 중단해 미완료다. [실행 결과·한계](Docs/Validation/Environment.md#첫-unrealeditor-엔진-빌드--2026-11-02)를 확인하며 에디터 실행·게임 빌드·독립 접속 성공과 구분한다.
 
-2026-11-03 엔진 재개 결과: UnrealEditor Win64 Development 빌드가 종료 코드 0으로 끝났고 실행 파일·receipt를 확인했다. [실제 결과·한계](Docs/Validation/Environment.md#unrealeditor-빌드-재개-결과--2026-11-03)를 따른다. 에디터 기동 후속에서 초기 DLL 2개 복구·ShaderCompileWorker 준비를 거쳐 [로컬 프로젝트 선택 화면·정상 종료를 확인](Docs/Validation/Environment.md#에디터-기동-재검증-완료--2026-11-03)했다. 비치명 오류·경고와 미검증 범위는 해당 기록에 남겼다. 게임 프로젝트·게임/서버 빌드·게임 시험은 미착수다.
+2026-11-03 엔진 재개 결과: UnrealEditor Win64 Development 빌드가 종료 코드 0으로 끝났고 실행 파일·receipt를 확인했다. [실제 결과·한계](Docs/Validation/Environment.md#unrealeditor-빌드-재개-결과--2026-11-03)를 따른다. 에디터 기동 후속에서 초기 DLL 2개 복구·ShaderCompileWorker 준비를 거쳐 [로컬 프로젝트 선택 화면·정상 종료를 확인](Docs/Validation/Environment.md#에디터-기동-재검증-완료--2026-11-03)했다. 비치명 오류·경고와 미검증 범위는 해당 기록에 남겼다. 그 기동 확인 당시 게임 프로젝트·게임/서버 빌드·게임 시험은 미착수였다.
+
+2026-11-03 프로젝트 착수 결과: Git LFS 3.8.1과 [최소 C++ 프로젝트](Game/CoopRPG.uproject)를 준비했고 **CoopRPGEditor Win64 Development 첫 프로젝트 빌드가 성공**했다. IDE 파일 생성 10.452초·Editor 빌드 46.733초이며 [실제 도구·공간·검증 근거](Docs/Validation/Environment.md#최소-c-프로젝트와-editor-첫-빌드--2026-11-03)를 기록했다. 그 빌드 시점에 게임 기능·프로젝트 기동·Server/Game 빌드·게임 시험은 하지 않았다.
+
+2026-11-03 프로젝트 기동 결과: 소스 Editor에서 **CoopRPG 모듈 로드·실제 작업 화면·정상 종료를 확인**했다. [실제 기동 결과·잔여 엔진 진단·이전 해석 정정](Docs/Validation/Environment.md#cooprpg-프로젝트-editor-기동-확인--2026-11-03)을 기록했다. 엔진 자동 시험 3개·StylusInput 진단은 미해결이며 게임 기능·Server/Game 빌드·게임 시험은 미실행이다.
 
 **엔진 준비 경로:** 공식 GitHub 소스를 확보하고 Setup으로 의존성을 준비한 뒤, 엔진용 IDE 파일 생성과 C++ 컴파일로 UnrealEditor 실행 파일을 만든다. 여기서 엔진 빌드는 에디터를 실행하거나 게임 프로젝트를 빌드하는 작업과 구분한다. 독립 Server 타깃을 사용할 소스 엔진을 준비하는 단계다.
 
@@ -26,7 +30,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 ## 실행 안내
 
-현재 실행 절차 없음. 엔진·소스·도구·저장 공간을 확정하고 실제 빌드·접속을 검증한 뒤 실행·종료·오류 대응 방법을 추가한다.
+Editor 프로젝트 빌드 명령과 도구 조건은 [환경 기록](Docs/Validation/Environment.md#최소-c-프로젝트와-editor-첫-빌드--2026-11-03)에 있다. 게임 실행·접속 안내는 아직 제공하지 않는다. 프로젝트 열기·정상 종료의 실제 명령과 조건은 [기동 기록](Docs/Validation/Environment.md#cooprpg-프로젝트-editor-기동-확인--2026-11-03)을 따른다. 독립 서버/클라이언트 접속 안내는 실제 검증 뒤 추가한다.
 
 ## 문서 사용 기준
 

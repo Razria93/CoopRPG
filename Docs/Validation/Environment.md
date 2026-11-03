@@ -9,6 +9,104 @@
 - **최소 양식:** 조사·검토의 기본 순서는 AGENTS를 따르며 관측 날짜·대상·방법·결과·판정 한계를 기존 표나 짧은 기록으로 남긴다. 후속 선택·작업은 Roadmap의 해당 항목을 참조한다. 공통 명령을 추가할 때는 작업 경로·도구/구성·사전 조건·명령·실행 결과를 함께 남기고 후보와 검증된 명령을 구분한다.
 - **검증:** 이관 기록과 이번 관측, 파일 존재와 실행 성공, 조사한 범위와 미확인 범위를 구분한다. 변동 가능한 정보는 사용 전에 필요한 항목만 재확인하며 문서 편집일을 재측정일로 쓰지 않는다. 읽기 조사 결과 확인을 이유로 설치·빌드를 실행하지 않는다.
 
+## CoopRPG 프로젝트 Editor 기동 확인 — 2026-11-03
+
+**결론:** 기존 소스 엔진에서 CoopRPG 프로젝트를 열어 **프로젝트 모듈 로드·실제 Editor 작업 화면·정상 종료를 확인**했다. 첫 실행과 진단 재실행 모두 종료 코드 0이다. 엔진 자동 시험 3개·StylusInput 진단은 미해결로 남기며 **오류 없는 엔진·게임 기능·Server/Game·V01 통과를 뜻하지 않는다.**
+
+대상은 DSYEOM / C:\CoopRPG / chore/game-bootstrap / HEAD `94c7ece9b392c44bf13c1eedb73453765483fe14`다. 게임 모듈·엔진 실행물·receipt·descriptor 해시와 엔진 고정 SHA `f45729c0b6f097038e72b52d366a62baeca3275b`·추적 소스 clean을 실행 전후 확인했다. 실행 시 미커밋 변경은 이번 허용 범위·작업 카드 문서였고 코드/기존 산출물을 재사용했다. 엔진·프로젝트 재빌드·PIE·새 맵/자산 저장·Server/Game 빌드·업로드·머지·영상 접근은 하지 않았다.
+
+원시 근거는 Git 제외 `Artifacts/Validation/game-editor-startup-20261103/`의 before.json, started.json/result.json, editor.log, loaded-module.json, ui-before-exit.json, resources.jsonl, diagnostic-recheck/, assessment.json, generated-config/, repository/다. 로그에는 자동 네트워크 요청 식별자가, 자동 생성 설정에는 토큰이 있어 원문을 저장소·PR에 추가하지 않는다. 이번 기록은 요약·분류와 비식별 근거 위치만 제공한다.
+
+### 실행과 교차 확인
+
+```powershell
+# 기존 소스 엔진 실행 파일과 프로젝트를 직접 지정. 첫 실행의 별도 ABSLOG 사용.
+Start-Process -FilePath C:\UE\5.8.4\Engine\Binaries\Win64\UnrealEditor.exe -WorkingDirectory C:\UE\5.8.4 -WindowStyle Normal -ArgumentList @('C:\CoopRPG\Game\CoopRPG.uproject', '-LogCmds="LogModuleManager Verbose"', '-ABSLOG="C:\CoopRPG\Artifacts\Validation\game-editor-startup-20261103\editor.log"') -PassThru
+# 진단 재실행은 LogCmds에 LogAutomationTest Log를 추가하고 diagnostic-recheck/editor.log에 기록.
+```
+
+- ModuleManager의 CoopRPG 로드 로그와 OS의 해당 Editor PID 모듈 목록이 모두 `C:\CoopRPG\Game\Binaries\Win64\UnrealEditor-CoopRPG.dll`을 가리켰다. DLL·receipt 존재만으로 런타임 성공을 대신하지 않았다.
+- computer-use로 정확한 소스 Editor 창을 선택·활성화하고 `CoopRPG - 언리얼 에디터` 작업 화면을 확인했다. 기본 엔진 Untitled 지형 뷰포트·빈 프로젝트 콘텐츠 브라우저·저장 완료 상태를 관측했다. 자체 게임 맵·게임플레이 구현이나 수동 플레이 시험이 아니다. 가려진 첫 캡처는 작업 화면 근거로 쓰지 않았다.
+- UI의 Alt+F4로 정상 종료했다. 두 실행 모두 `UUnrealEdEngine::CloseEditor()` 종료 요청·`UnloadModule CoopRPG 1`·`LogExit: Exiting`·로그 닫힘·종료 코드 0·소유 PID 소멸을 대조했다. 강제 종료하지 않았고 종료 후 Editor/ShaderCompileWorker/LiveCodingConsole 잔존 프로세스는 없었다.
+
+| 측정 | 첫 프로젝트 기동 | 시험 이름 로그를 켠 재기동 |
+|---|---|---|
+| 시각·PID | 15:15:45~15:17:42 / 52836 | 15:18:53~15:19:53 / 43796 |
+| 초기화 로그 / UI 확인·종료 포함 전체 | 39.88초 / 117.418초 | 11.21초 / 59.772초 |
+| C: 전후 여유 | 206.239→206.002GiB | 206.023→206.025GiB |
+| 자원 표본 | 5초 주기 24개, 최대 커밋 43.875/95.139GiB, 최소 가용 RAM 24.065GiB | 5초 주기 13개, 최대 커밋 40.928/95.139GiB, 최소 가용 RAM 31.893GiB |
+| 로그 심각도 행 | Error 17·Warning 3·fatal/crash 표식 0 | Error 17·Warning 2·fatal/crash 표식 0 |
+| 판정 | 프로젝트 열기·모듈·화면·정상 종료 확인 | 같은 결과 재확인, 엔진 자동 시험 실패 주체 식별 |
+
+두 실행 사이 캐시·초기화·계측 조건이 달라 속도 개선·콜드/웜 빌드 성능 비교로 쓰지 않는다. C:는 볼륨 전체 순변화이며 프로젝트만의 크기나 이후 빌드 필요량이 아니다. 셰이더는 Editor가 자동 선택한 로컬 worker 16개 구성을 로그에 남겼으며 이전 C++ 빌드 최대 4작업 설정과 구분한다. Turnkey의 자동 SDK 조회는 Win64 유효·Current_Sdk 22621을 보고했지만 이번에는 C++ 컴파일을 하지 않았다. 이후 채택 빌드 명령의 명시적 SDK 26100 조건은 유지한다. 기본 Editor의 EOS/분석 HTTP 요청은 관측했으나 별도 계정 연결·Git 업로드·원격 설정을 실행하지 않았다.
+
+### 남은 진단과 이전 해석 정정
+
+각 실행의 Error 17줄은 StylusInput 2줄과 엔진 자동 시험의 `Condition failed` 15줄이다. 초기화 중에 발생했고 게임 모듈 로드·UI·정상 종료는 계속 진행했다. 기동 성공과 이 시험들의 실패를 별도로 기록한다.
+
+| 진단 | 확인한 근거·판단 | 남은 사항 |
+|---|---|---|
+| StylusInput 2오류 | 이전과 같은 Wintab 버전 조회 반환값 4. 기존 SuperDisplay/Wintab 경로 진단과 일치 | 펜 입력·드라이버 호환성 미검증. 드라이버·플러그인을 바꾸거나 로그를 억제하지 않음 |
+| UnifiedError 시험 2개, 총 11 assertion | 진단 로그에서 FUnifiedErrorTest_CreateErrorMessage 7건, CreateErrorMessageWithContext 4건. 고정 소스 UnifiedErrorTests.cpp는 지역화된 FText 결과를 영어 상수와 비교하고 실행 로그에는 한국어 번역이 보임 | 지역화 불일치의 강한 근거가 있으나 영어 culture 대조 시험·엔진 수정은 미실행. 실패를 통과로 바꾸지 않음 |
+| StructuredLog 시험 1개, 4 assertion | 진단 로그에서 FStructuredLogFormatTest 실패 확인. 고정 StructuredLogFormatTest.cpp에 LOCTEXT 기반 포맷과 고정 문자열 비교가 있음 | 실패한 CHECK의 개별 기대/실제 값은 어댑터 로그에 없어 네 표현식의 원인 확정은 미완료. 이후 로깅/지역화 기능을 사용할 때 별도 좁은 조사 가능 |
+| Content 감시 경고 1줄 | 최소 소스 입력에는 Content 폴더가 없어 첫 감시 시 경고. Editor가 폴더를 만든 뒤 두 번째 실행에서는 재발하지 않음 | 새 복제의 첫 기동에서는 다시 생길 수 있음. 자산 로드·변경 감시 검증을 대신하지 않음 |
+| 종료 HTTP 경고 2줄 | 각 종료에서 진행 중 요청 1개의 delegate 정리 안내. 정상 종료 코드·모듈 해제와 대조 | 해당 원격 요청 완료는 보장하지 않음. 개인정보/분석 설정을 바꾸지 않음 |
+
+**정정(2026-11-03 후속):** 아래 과거 프로젝트 없는 기동 기록은 `Condition failed` 15줄까지 PackageName 시험으로 묶어 해석했다. 일반 오류 문구만으로 전체를 그 시험에 귀속한 판단은 근거가 부족해 철회한다. 당시 명시적 PackageName 경로 불일치 1건과 원시 로그는 그대로 보존한다. 이번 프로젝트 기동에서는 `FPackageNameTests` 성공과 위 3개 시험의 실패가 이름 로그로 확인됐다. 이번 결과만으로 과거 일반 assertion 15줄의 소속까지 확정하지 않는다. 이 정정은 이전 실패 18줄을 삭제하거나 모두 해결됐다고 바꾸는 것이 아니다.
+
+### 자동 생성 파일과 최종 검토
+
+Editor가 이번에 새로 만든 Config/DefaultEngine.ini·DefaultInput.ini는 AndroidFileServer 토큰/기본 플랫폼 설정과 입력 기본값이었다. AndroidFileServerRuntimeSettings.cpp의 PostInitProperties는 기본 토큰을 생성해 기본 ini에 기록하는 것을 확인했다. 최초 설정 열람에서 토큰 원문이 도구 출력에 포함된 실수가 있었으며 이후에는 값을 출력하지 않고 존재 여부만 확인했다.
+
+이 두 설정을 이번 게임 규칙·배포 설정으로 채택하지 않았다. **이번 시작에 없던 파일만** 소유 Editor 종료 후 Git 제외 generated-config/로 옮겨 원본 바이트·해시를 보존했고 프로젝트의 기존 입력·빌드 산출물은 유지했다. 다음 기동에서 다시 자동 생성될 수 있으므로 추적 전에 내용을 검토한다. Config 전체를 무시하는 규칙이나 기능/개인정보 설정 변경을 추가하지 않았다. Saved/Intermediate/DDC 등 생성물은 기존 제외 정책을 따르고 프로젝트 Content에 .uasset/.umap은 없다.
+
+**검토 판정:** 프로젝트 기동·CoopRPG 모듈 로드·로그/실제 화면·정상 종료의 근거가 서로 일치한다. 남은 비치명 엔진 진단을 숨기거나 게임 성공으로 확대하지 않았다. raw 로그·자동 생성 토큰/입력 설정의 커밋 혼입을 제외하고, 과거 귀속 해석 정정을 연결한 상태에서 이번 기동 확인 범위의 필수 기록 수정은 마쳤다. 로컬 저장소 검사 6개 통과 결과는 repository/에 보관한다. 다음은 부트스트랩 누적 변경의 통합 리뷰·허용된 PR 마감과, 별도 V01용 최소 맵/이동/입력·서버/접속 준비다. 자동 시험 3개를 전부 고치거나 개인 스킬/전체 자동화를 갖추는 것을 다음 단계의 일괄 선행 조건으로 두지 않되 관련 로깅/지역화/자산 기능을 시험할 때 재검토한다.
+
+## 최소 C++ 프로젝트와 Editor 첫 빌드 — 2026-11-03
+
+**결론:** DSYEOM의 chore/game-bootstrap에서 Git LFS 3.8.1 준비와 `Game/CoopRPG.uproject` 최소 C++ 프로젝트 생성·IDE 파일 생성·`CoopRPGEditor Win64 Development` 첫 프로젝트 빌드를 완료했다. **프로젝트 기동·게임 기능·Server/Game 빌드·V01은 미실행**이다. 사용자 허용에 따라 진행했으며 업로드·PR·머지·영상 작업은 하지 않았다.
+
+대상은 저장소 HEAD `a9789be6b09f55ff63b6173acb31251ce3fffd89` 위의 미커밋 구현·문서 변경이다. 고정 엔진은 `5.8.4-release` / `f45729c0b6f097038e72b52d366a62baeca3275b`이고 추적 엔진 소스는 실행 전후 clean이다. 원시 근거는 Git 제외 `Artifacts/Validation/game-bootstrap-20261103/`의 before.json, installer-verification.json, lfs-install.log, lfs-bundled-update.json, lfs-roundtrip.json, project-inputs.json, project-files/, editor-build/, verification.json과 repository/다. 이 경로의 실행 파일·대형 로그·바이너리를 공개 저장소에 추가하지 않는다.
+
+### LFS 준비와 호출 버전 복구
+
+- [공식 v3.8.1 릴리스](https://github.com/git-lfs/git-lfs/releases/tag/v3.8.1)의 Windows 설치 파일을 다운로드하고 공개 SHA-256 `7ac0422468f9cce06a7916156ed284f223527ed40e6d9ccf5fc0e89ad05b389c`와 대조한 뒤 실행했다. Authenticode 서명도 GitHub, Inc. / Valid를 확인했다. 설치 종료 코드 0이며 재부팅은 요구되지 않았다. 설치는 관리자 모드로 `C:\Program Files\Git LFS`에 배치됐고 설치기가 시스템 PATH 끝에 경로·GIT_LFS_PATH를 추가했다. 사용자 스킬·VS·SDK 구성은 변경하지 않았다.
+- 설치 뒤에도 `git lfs`와 Git Bash가 기존 Git 동봉 3.7.1을 호출했다. 현재 프로세스의 PATH/GIT_LFS_PATH 갱신만으로도 바뀌지 않는 것을 실제 확인했다. 원인은 Git의 동봉 실행 파일 선택이며 3.8.1 단독 실행 성공을 준비 완료로 계산하지 않았다.
+- `C:\Program Files\Git\mingw64\bin\git-lfs.exe` 원본을 `git-lfs-3.7.1.before.exe`로 보존했다. 일반 복사는 Windows 접근 권한 때문에 거절됐고 대상은 변경되지 않았다. 별도 관리자 helper로 공식 설치본과 같은 실행 파일을 동봉 경로에 복사한 뒤 양쪽 SHA-256 `7B38B496056A452EF1CE7DF3E3B5F18EF5E252C943F754CF22BFDDB59CA4DB1C` 일치를 확인했다. Git 본체·실행 래퍼는 교체하지 않았다. 향후 Git 재설치/업데이트가 동봉 LFS를 바꿀 수 있으므로 그때 호출 버전을 재확인한다.
+- 최종 기본 Git·Git Bash 모두 `git-lfs/3.8.1 … git a662a6db`를 확인했다. `git lfs install --local`로 filter 설정 4개를 추가했고 기존 pre-push hook은 SHA-256까지 동일하다. 설치기가 실행한 전역 LFS 초기화의 filter 값은 기존 값과 같다. 로컬 설정·hook은 다른 PC에 자동 전달되는 파일이 아니므로 그 장비에서 다시 준비한다.
+- 실제 clean→LFS 포인터→smudge로 65,536바이트 바이너리를 왕복해 길이·포인터 oid·복원 SHA-256 `7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2`가 일치했다. .uasset/.umap 속성도 lfs/-text다. 시험 객체는 로컬 LFS 저장소에만 만들었고 Game에 가짜 자산을 만들거나 index·원격을 사용하지 않았다. 최초 시험 helper의 비동기 반환값이 출력에 섞인 형 변환 오류는 helper 출력 억제로 수정·재실행했다. LFS 자체 실패나 실제 자산 검증으로 표현하지 않는다.
+
+### 프로젝트 구조와 도구 선택
+
+고정 소스 `Templates/TP_Blank`의 타깃/모듈 구조를 참고해 위저드 대신 최소 소스 5개와 descriptor 1개를 작성했다. Runtime 모듈 CoopRPG는 Core/CoreUObject/Engine에만 의존하고 기본 게임 모듈 등록만 한다. 타깃은 V7·Unreal5_8 include order로 맞췄다. 표준 CoopRPG Game 타깃 정의는 존재하지만 이번에 빌드하지 않았다. Server 타깃·GAS·입력·캐릭터·맵·자산·게임 규칙은 추가하지 않았다. 게임 구조 설계 문서를 별도로 만들 단계도 아니다.
+
+`.uproject`의 EngineAssociation `{3061ACC8-48F3-2013-39A6-6ABE89B36283}`는 이 장비의 기존 HKCU 등록 `C:/UE/5.8.4`와 일치한다. Launcher 동명 엔진을 선택하지 않았다. 이 GUID는 다른 장비의 엔진 경로를 보장하지 않으므로 다른 PC에서는 해당 소스 엔진으로 연결해야 한다. 이번 CLI 명령은 엔진·프로젝트 경로를 명시했다.
+
+```powershell
+# 실제 성공 명령. 첫 명령은 C:\UE\5.8.4의 소스를 사용한다.
+& C:\UE\5.8.4\GenerateProjectFiles.bat -project=C:\CoopRPG\Game\CoopRPG.uproject -game -2022 -CurrentPlatform
+# 작업 경로 C:\UE\5.8.4. Editor 타깃만 실행한다.
+& .\Engine\Build\BatchFiles\Build.bat CoopRPGEditor Win64 Development -Project=C:\CoopRPG\Game\CoopRPG.uproject -WaitMutex -WindowsSDKVersion=10.0.26100.0 -MaxParallelActions=4 -NoUBA
+```
+
+생성된 CoopRPG.sln은 Visual Studio 17 형식이다. GPF는 VS 2022의 .NET 10 C# IDE 프로젝트 제한과 Mac/iOS/Android/Linux 계열 SDK 미준비를 안내했다. 별도 Automation_CoopRPG 솔루션은 VS 2026 형식으로 생성됐지만 VS 2026을 설치하거나 그 IDE로 빌드한 것이 아니다. 실제 빌드는 기존 VS 2022 C++ 도구와 UE 동봉 .NET을 사용했다. 자동 생성 .vsconfig의 SDK 22621 권고는 채택 구성과 다르므로 설치 지침으로 사용하지 않고 `/Game/.vsconfig`만 생성물 제외에 추가했다. 나머지 솔루션·Binaries/Intermediate/Saved/.vs 제외와 소스 6개 보존을 실제 확인했다.
+
+### 실제 측정과 산출물 검증
+
+| 항목 | 결과·근거 |
+|---|---|
+| 프로젝트 파일 생성 | 15:08:54 시작, 외부 측정 10.452초·UBT 자체 7.74초, 종료 0. C: 209.131→209.080GiB |
+| Editor 프로젝트 빌드 | 15:09:24~15:10:11, 외부 측정 46.733초·UBT 자체 45.45초, 종료 0·Succeeded·10개 작업. 기존 엔진 산출물을 재사용했고 공유 NetCore 재컴파일/링크도 포함 |
+| 실제 도구 | MSVC 14.44.35216, 폴더 14.44.35207, SDK 10.0.26100.0. UE 동봉 .NET 10.0.203/런타임 10.0.7. 최대 4작업, UBA local executor의 `[NoUba]` 실행 |
+| 공간·자원 | 빌드 전후 C: 209.080→206.534GiB, 볼륨 순감소 2.546GiB. 3초 주기 16표본에서 최대 커밋 42.077/95.139GiB·최소 가용 RAM 25.903GiB. 디스크 중단 없음. 별도 결과 검토 시 C: 206.315GiB |
+| 프로젝트 산출물 | UnrealEditor-CoopRPG.dll 50,176바이트·PDB·CoopRPGEditor.target·UnrealEditor.modules 존재. receipt는 Editor/Win64/Development/V7/5.8.4, 모듈/엔진/receipt BuildId `d1236464-93c4-4e7d-aabc-b4843c1e6ac0` 일치 |
+| 이미지 형식·로그 | 새 CoopRPG DLL과 재링크 NetCore DLL의 Windows SEC_IMAGE 매핑 성공. DLL 코드를 실행한 검증은 아님. 빌드 stdout의 compiler/linker/fatal/Failed 오류 표식·warning 행 0개, stderr 비어 있음 |
+| 크기의 해석 | Game/Binaries 논리 크기 0.058041GiB, Game/Intermediate 0.074480GiB. C: 순감소에는 엔진 공유 PCH·로그·동시 OS/앱 변경 등이 포함될 수 있어 프로젝트만의 크기나 이후 전체 필요량으로 해석하지 않음 |
+
+원본 stdout/stderr·UBT 로그·trace·receipt·샘플·해시는 보존했다. 한글 링커 진행 문장의 일부가 리다이렉트 출력에서 깨져 보이나 ASCII 결과·오류 코드·산출물 검증은 대조 가능하다. 실패가 없었던 빌드를 실패 복구 시험으로 꾸미거나 전체 소스 엔진을 다시 빌드하지 않았다.
+
+**검토 판정:** 모듈/타깃 이름·의존성·5.8 타깃 설정·source association·실행 범위·생성물 혼입·receipt/BuildId·자원 측정과 문서의 완료 주장을 대조했다. 자동 생성 .vsconfig 혼입 후보를 제외 규칙으로 수정했으며 이번 부트스트랩 범위에서 남은 필수 수정은 없다. 로컬 저장소 검사 6개가 통과했으며 repository/에 보관하고 게임 검증과 구분한다. 프로젝트 기동·기본 맵/설정·직접 조작·GAS·독립 서버/클라이언트·자산 LFS 원격 전송·다른 PC 재현은 미검증이다. 이전 프로젝트 없는 에디터 기동의 비치명 진단은 이번 빌드만으로 해결 처리하지 않는다. 다음은 실제 CoopRPG 프로젝트의 Editor 기동·모듈 로드·로그·정상 종료를 확인하고, 별도 단위에서 V01용 최소 맵/입력·Server/Game 준비로 진행하는 것이다.
+
 ## R01 커밋 변경 검사 — 2026-11-02
 
 P1 직접 실행의 기본값은 기존 작업 트리 검사다. 커밋된 변경까지 검사하려면 `-DiffBase <전체 40자리 SHA>`를 지정한다. 통합 CI 진입점은 비교 기준을 반드시 정하고 P1에 전달하며, 결과의 diffBaseSha·diffMode를 실행 전 기대값과 대조한다.
@@ -62,6 +160,37 @@ pwsh -NoProfile -File .\Tools\Validation\Test-RepositoryValidation.ps1
 - 결과에는 dirty 여부를 남긴다. 미커밋 개발 실행을 clean 커밋의 검증으로 주장하지 않는다. 저장소 체크 통과를 게임 검증·원격 필수 체크 통과로 표현하지 않는다.
 - 파일 목록은 Git 기준으로 제한하며 무시된 파일을 전수 탐색하지 않는다. reparse 입력 경로는 실패 처리한다. 향후 검사 정책을 바꾸면 관련 실패 표본과 실제 저장소 검사로 다시 확인한다.
 
+## 게임 착수 전 공간 재조사 — 2026-11-03
+
+**판정:** C: 여유가 이전 13:20 관측 50.638GiB에서 이번 14:45~14:46 조사 전후 209.536GiB로 늘었다. 현재는 **기존 엔진 설치본을 유지하고 최소 프로젝트부터 단계별로 실측하는 안을 권장한다.** 추가 삭제·이동이나 400GiB 확보를 착수의 일괄 조건으로 두지 않는다. 이는 전체 Server/Game 빌드·쿠킹 성공이나 최종 필요 공간의 보장이 아니다.
+
+### 확인 사실과 보존 상태
+
+- C:는 내부 NVMe SHPP41-2000GM의 약 1862.05GiB 볼륨이며 여유 209.536GiB다. D:는 USB Seagate One Touch의 약 4657.24GiB 볼륨이며 여유 약 4022.08GiB다. D: 디렉터리와 영상 경로는 탐색하지 않았다.
+- 페이지 파일은 실제 32768MiB 할당, 저장 초기 32768MB·최대 65536MB가 유지됐다. TEMP/TMP와 프로세스 임시 경로는 C:\Users\starb\AppData\Local\Temp다. 내용을 전수 탐색하거나 비우지 않았다.
+- 공식 소스 HEAD f45729c의 추적 소스는 clean이다. 기존 UnrealEditor·ShaderCompileWorker 실행 파일과 각각의 receipt 4개 SHA-256이 앞선 빌드/기동 근거와 일치했다. 엔진 전체 산출물의 전수 해시·새 기동·새 빌드는 수행하지 않았다.
+- Launcher의 UE 5.3.2·5.4.4·5.5.4·5.6.1·5.8.4 등록과 실제 폴더는 모두 남아 있다. 여유 증가 약 158.90GiB의 원인·수행 주체는 이번 조사로 특정하지 않았다. 파일 이동·삭제를 추정하거나 원인 확인을 위해 사용자 자료를 탐색하지 않는다.
+
+| 제한한 조사 경로 | 논리 크기·해석 |
+|---|---|
+| Launcher UE 5.3 / 5.4 / 5.5 / 5.6 / 5.8 | 각각 39.828 / 36.761 / 37.007 / 25.755 / 29.881GiB. 사용 필요 여부는 미확인. 현재 제거 대상 지정 불필요 |
+| 소스 엔진 C:\UE\5.8.4 전체 | 312.733GiB. 그 안의 PDB 합계 133.129GiB이며 중복 합산하지 않음. 엔진 루트 Engine/Binaries 47.277GiB·Engine/Intermediate 30.055GiB는 이 전체의 부분 집합 |
+| 공용 DDC / Zen / ProgramData UBA | 약 0.001 / 1.266 / 0.000GiB. 대규모 공간 확보 수단으로 계산하지 않음 |
+
+알려진 엔진·캐시 경로만 크기 메타데이터를 조사했고 재분석 지점은 제외했다. 9개 경로의 열거 오류는 없었지만 논리 크기는 압축·공유·희소 파일 등을 반영한 실제 할당량/제거 회수량과 다르다. PDB를 제거하면 디버깅·재생성 비용에 영향을 주므로 현재 우선 정리 대상으로 삼지 않는다. 기존 자료·검증 근거를 보존했다.
+
+### 배정과 다음 실행 순서
+
+기존 50GiB 운영 보호선을 유지하고 페이지 파일의 가능한 추가 증가 32GiB까지 따로 감안하면, 현재 여유에서 약 **127.54GiB**가 남는 단순 계획 계산이다. 실제 예약·파티션 변경·게임 전용 용량 보장이나 공식 최소 요구가 아니다. 실제 페이지 파일 증가가 반드시 필요하다는 뜻도 아니다. 현재 수치만으로 전체 Server/Game의 최대 증가량을 확정할 근거는 없다.
+
+기술 판단은 추가 정리를 먼저 강제하지 않고 기존 C: 경로에서 최소 프로젝트 생성·Editor 빌드 → Server/Game 빌드·쿠킹을 작은 단위로 진행하며 전후 여유·실제 도구·실패와 캐시 증가량을 확인하는 것이다. 50GiB 보호선 근접이나 큰 증가가 관측되면 다음 큰 타깃 착수 전에 재배정한다. 엔진 전체 Clean·심볼 제거·페이지 파일 축소를 선행 조치로 추가하지 않는다. 이 계획은 현재의 생성·빌드 실행 허용이 아니다.
+
+추가 저장장치 구매나 기존 엔진 제거의 사용자 선택은 **지금 필요하지 않다.** 추후 실제 압박이 생기면 유지 필요·제거 대상/비용을 사용자에게 확인하고, AI는 허용된 조치 뒤 회수량과 타깃별 필요량을 실측한다. 공간 증가의 원인을 아는 것은 이번 최소 착수 판단의 필수 조건이 아니다.
+
+다음 기술 준비는 Git LFS다. 현재 3.7.1 실행을 확인했고 저장소 local filter.lfs 키 조회에는 항목이 없었다. 이것만으로 전역/시스템 필터나 LFS 전체가 미구성이라고 단정하지 않는다. 공식 [최신 릴리스 3.8.1](https://github.com/git-lfs/git-lfs/releases/tag/v3.8.1)의 보안 수정과 기존 저장소 정책을 대조했으며, 자산 추적 전 수정판·저장소별 준비는 별도 허용 후 수행한다. 이번에는 다운로드·설치·설정·객체 전송을 하지 않았다.
+
+근거는 Git 제외 `Artifacts/Validation/game-storage-plan-20261103/`의 `inventory.json`(조사 전후 볼륨·경로별 크기/범위), `facts.json`(드라이브·페이지 파일·LFS·실행물 해시), `before.json`(이전 문서), `documents/result.json`(저장소 검사), `review.json`이다. 아래 50.638GiB를 기준으로 한 과거 판단은 당시 기록으로 보존하며 현재 착수 판단은 이 절을 따른다.
+
 ## 공간 재확인과 착수 전 배정 — 2026-11-03
 
 통합 리뷰 때 13:20 KST 읽기 재조회에서 C: 50.638GiB, 가용 RAM 36.411GiB·커밋 31.266/95.139GiB를 확인했다. 페이지 파일은 실제 32GiB 할당, 저장 초기 32GiB·최대 64GiB가 유지됐다. 이번 설정 변경·빌드/기동 재실행은 없다. 당시 앱 상태의 단일 표본이며 유휴 기준이나 다음 빌드 피크 예측값이 아니다.
@@ -99,6 +228,7 @@ chore/engine-first-build의 clean 커밋 b0e9b32와 고정 엔진 소스 f45729c
 
 - StylusInput 2오류: SuperDisplay Wintab 인터페이스의 버전 조회 반환 크기가 4였다. 고정 소스 WintabAPI.cpp는 WORD 크기와 다를 때 오류를 기록한다. 초기화·기본 UI는 진행했지만 펜 입력·드라이버 호환성은 미검증이며 드라이버·플러그인을 바꾸지 않았다.
 - AutomationTest 16오류: Condition failed 15줄과 PackageName 경로 불일치 상세 1줄. LaunchEngineLoop의 자동 RunSmokeTests와 PackageName.cpp의 SmokeFilter 시험을 대조했다. 프로젝트 없는 실행의 Content 경로가 Engine/Content로 해석됐고 /Game 기대값과 /Engine 실제값이 달랐다. 프로젝트 없는 조건의 영향으로 판단하되 해당 자기검사는 실패로 보존한다. 이후 실제 프로젝트에서 경로·에셋 로딩을 재확인해야 하며 이를 게임 시험 통과로 취급하지 않는다.
+- **정정(2026-11-03 후속):** 위 일반 assertion 15줄을 PackageName으로 귀속한 해석은 철회한다. 명시적 경로 오류 1건은 유지하며 [실제 프로젝트 기동의 이름별 진단과 정정](#cooprpg-프로젝트-editor-기동-확인--2026-11-03)을 참조한다. 과거 원시 로그·실패 수는 보존한다.
 - 기본 이름 경고 1줄: SProjectDialog::SetDefaultProjectLocation의 기본 이름/숫자 접미사 후보 검증에서 발생했다. 실패 이유 자체는 로그에 없어 파일 중복·권한·경로 중 하나로 단정하지 않는다. 프로젝트 생성 전 명시적 CoopRPG 이름·모듈·경로를 확인한다.
 - 종료 HTTP 경고 2줄: Epic datarouter 요청 1개가 진행 중인 상태에서 델리게이트를 해제했다. 정상 종료 코드와 구분해 보존한다. 앱 자동 네트워크 동작이 있었으며 원문 URL의 사용자·세션 식별자는 문서에 복사하지 않는다. Git 업로드·PR 생성은 하지 않았다.
 
