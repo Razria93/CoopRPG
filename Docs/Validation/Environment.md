@@ -9,6 +9,59 @@
 - **최소 양식:** 조사·검토의 기본 순서는 AGENTS를 따르며 관측 날짜·대상·방법·결과·판정 한계를 기존 표나 짧은 기록으로 남긴다. 후속 선택·작업은 Roadmap의 해당 항목을 참조한다. 공통 명령을 추가할 때는 작업 경로·도구/구성·사전 조건·명령·실행 결과를 함께 남기고 후보와 검증된 명령을 구분한다.
 - **검증:** 이관 기록과 이번 관측, 파일 존재와 실행 성공, 조사한 범위와 미확인 범위를 구분한다. 변동 가능한 정보는 사용 전에 필요한 항목만 재확인하며 문서 편집일을 재측정일로 쓰지 않는다. 읽기 조사 결과 확인을 이유로 설치·빌드를 실행하지 않는다.
 
+## CoopRPG 프로젝트 Editor 기동 확인 — 2026-11-03
+
+**결론:** 기존 소스 엔진에서 CoopRPG 프로젝트를 열어 **프로젝트 모듈 로드·실제 Editor 작업 화면·정상 종료를 확인**했다. 첫 실행과 진단 재실행 모두 종료 코드 0이다. 엔진 자동 시험 3개·StylusInput 진단은 미해결로 남기며 **오류 없는 엔진·게임 기능·Server/Game·V01 통과를 뜻하지 않는다.**
+
+대상은 DSYEOM / C:\CoopRPG / chore/game-bootstrap / HEAD `94c7ece9b392c44bf13c1eedb73453765483fe14`다. 게임 모듈·엔진 실행물·receipt·descriptor 해시와 엔진 고정 SHA `f45729c0b6f097038e72b52d366a62baeca3275b`·추적 소스 clean을 실행 전후 확인했다. 실행 시 미커밋 변경은 이번 허용 범위·작업 카드 문서였고 코드/기존 산출물을 재사용했다. 엔진·프로젝트 재빌드·PIE·새 맵/자산 저장·Server/Game 빌드·업로드·머지·영상 접근은 하지 않았다.
+
+원시 근거는 Git 제외 `Artifacts/Validation/game-editor-startup-20261103/`의 before.json, started.json/result.json, editor.log, loaded-module.json, ui-before-exit.json, resources.jsonl, diagnostic-recheck/, assessment.json, generated-config/, repository/다. 로그에는 자동 네트워크 요청 식별자가, 자동 생성 설정에는 토큰이 있어 원문을 저장소·PR에 추가하지 않는다. 이번 기록은 요약·분류와 비식별 근거 위치만 제공한다.
+
+### 실행과 교차 확인
+
+```powershell
+# 기존 소스 엔진 실행 파일과 프로젝트를 직접 지정. 첫 실행의 별도 ABSLOG 사용.
+Start-Process -FilePath C:\UE\5.8.4\Engine\Binaries\Win64\UnrealEditor.exe -WorkingDirectory C:\UE\5.8.4 -WindowStyle Normal -ArgumentList @('C:\CoopRPG\Game\CoopRPG.uproject', '-LogCmds="LogModuleManager Verbose"', '-ABSLOG="C:\CoopRPG\Artifacts\Validation\game-editor-startup-20261103\editor.log"') -PassThru
+# 진단 재실행은 LogCmds에 LogAutomationTest Log를 추가하고 diagnostic-recheck/editor.log에 기록.
+```
+
+- ModuleManager의 CoopRPG 로드 로그와 OS의 해당 Editor PID 모듈 목록이 모두 `C:\CoopRPG\Game\Binaries\Win64\UnrealEditor-CoopRPG.dll`을 가리켰다. DLL·receipt 존재만으로 런타임 성공을 대신하지 않았다.
+- computer-use로 정확한 소스 Editor 창을 선택·활성화하고 `CoopRPG - 언리얼 에디터` 작업 화면을 확인했다. 기본 엔진 Untitled 지형 뷰포트·빈 프로젝트 콘텐츠 브라우저·저장 완료 상태를 관측했다. 자체 게임 맵·게임플레이 구현이나 수동 플레이 시험이 아니다. 가려진 첫 캡처는 작업 화면 근거로 쓰지 않았다.
+- UI의 Alt+F4로 정상 종료했다. 두 실행 모두 `UUnrealEdEngine::CloseEditor()` 종료 요청·`UnloadModule CoopRPG 1`·`LogExit: Exiting`·로그 닫힘·종료 코드 0·소유 PID 소멸을 대조했다. 강제 종료하지 않았고 종료 후 Editor/ShaderCompileWorker/LiveCodingConsole 잔존 프로세스는 없었다.
+
+| 측정 | 첫 프로젝트 기동 | 시험 이름 로그를 켠 재기동 |
+|---|---|---|
+| 시각·PID | 15:15:45~15:17:42 / 52836 | 15:18:53~15:19:53 / 43796 |
+| 초기화 로그 / UI 확인·종료 포함 전체 | 39.88초 / 117.418초 | 11.21초 / 59.772초 |
+| C: 전후 여유 | 206.239→206.002GiB | 206.023→206.025GiB |
+| 자원 표본 | 5초 주기 24개, 최대 커밋 43.875/95.139GiB, 최소 가용 RAM 24.065GiB | 5초 주기 13개, 최대 커밋 40.928/95.139GiB, 최소 가용 RAM 31.893GiB |
+| 로그 심각도 행 | Error 17·Warning 3·fatal/crash 표식 0 | Error 17·Warning 2·fatal/crash 표식 0 |
+| 판정 | 프로젝트 열기·모듈·화면·정상 종료 확인 | 같은 결과 재확인, 엔진 자동 시험 실패 주체 식별 |
+
+두 실행 사이 캐시·초기화·계측 조건이 달라 속도 개선·콜드/웜 빌드 성능 비교로 쓰지 않는다. C:는 볼륨 전체 순변화이며 프로젝트만의 크기나 이후 빌드 필요량이 아니다. 셰이더는 Editor가 자동 선택한 로컬 worker 16개 구성을 로그에 남겼으며 이전 C++ 빌드 최대 4작업 설정과 구분한다. Turnkey의 자동 SDK 조회는 Win64 유효·Current_Sdk 22621을 보고했지만 이번에는 C++ 컴파일을 하지 않았다. 이후 채택 빌드 명령의 명시적 SDK 26100 조건은 유지한다. 기본 Editor의 EOS/분석 HTTP 요청은 관측했으나 별도 계정 연결·Git 업로드·원격 설정을 실행하지 않았다.
+
+### 남은 진단과 이전 해석 정정
+
+각 실행의 Error 17줄은 StylusInput 2줄과 엔진 자동 시험의 `Condition failed` 15줄이다. 초기화 중에 발생했고 게임 모듈 로드·UI·정상 종료는 계속 진행했다. 기동 성공과 이 시험들의 실패를 별도로 기록한다.
+
+| 진단 | 확인한 근거·판단 | 남은 사항 |
+|---|---|---|
+| StylusInput 2오류 | 이전과 같은 Wintab 버전 조회 반환값 4. 기존 SuperDisplay/Wintab 경로 진단과 일치 | 펜 입력·드라이버 호환성 미검증. 드라이버·플러그인을 바꾸거나 로그를 억제하지 않음 |
+| UnifiedError 시험 2개, 총 11 assertion | 진단 로그에서 FUnifiedErrorTest_CreateErrorMessage 7건, CreateErrorMessageWithContext 4건. 고정 소스 UnifiedErrorTests.cpp는 지역화된 FText 결과를 영어 상수와 비교하고 실행 로그에는 한국어 번역이 보임 | 지역화 불일치의 강한 근거가 있으나 영어 culture 대조 시험·엔진 수정은 미실행. 실패를 통과로 바꾸지 않음 |
+| StructuredLog 시험 1개, 4 assertion | 진단 로그에서 FStructuredLogFormatTest 실패 확인. 고정 StructuredLogFormatTest.cpp에 LOCTEXT 기반 포맷과 고정 문자열 비교가 있음 | 실패한 CHECK의 개별 기대/실제 값은 어댑터 로그에 없어 네 표현식의 원인 확정은 미완료. 이후 로깅/지역화 기능을 사용할 때 별도 좁은 조사 가능 |
+| Content 감시 경고 1줄 | 최소 소스 입력에는 Content 폴더가 없어 첫 감시 시 경고. Editor가 폴더를 만든 뒤 두 번째 실행에서는 재발하지 않음 | 새 복제의 첫 기동에서는 다시 생길 수 있음. 자산 로드·변경 감시 검증을 대신하지 않음 |
+| 종료 HTTP 경고 2줄 | 각 종료에서 진행 중 요청 1개의 delegate 정리 안내. 정상 종료 코드·모듈 해제와 대조 | 해당 원격 요청 완료는 보장하지 않음. 개인정보/분석 설정을 바꾸지 않음 |
+
+**정정(2026-11-03 후속):** 아래 과거 프로젝트 없는 기동 기록은 `Condition failed` 15줄까지 PackageName 시험으로 묶어 해석했다. 일반 오류 문구만으로 전체를 그 시험에 귀속한 판단은 근거가 부족해 철회한다. 당시 명시적 PackageName 경로 불일치 1건과 원시 로그는 그대로 보존한다. 이번 프로젝트 기동에서는 `FPackageNameTests` 성공과 위 3개 시험의 실패가 이름 로그로 확인됐다. 이번 결과만으로 과거 일반 assertion 15줄의 소속까지 확정하지 않는다. 이 정정은 이전 실패 18줄을 삭제하거나 모두 해결됐다고 바꾸는 것이 아니다.
+
+### 자동 생성 파일과 최종 검토
+
+Editor가 이번에 새로 만든 Config/DefaultEngine.ini·DefaultInput.ini는 AndroidFileServer 토큰/기본 플랫폼 설정과 입력 기본값이었다. AndroidFileServerRuntimeSettings.cpp의 PostInitProperties는 기본 토큰을 생성해 기본 ini에 기록하는 것을 확인했다. 최초 설정 열람에서 토큰 원문이 도구 출력에 포함된 실수가 있었으며 이후에는 값을 출력하지 않고 존재 여부만 확인했다.
+
+이 두 설정을 이번 게임 규칙·배포 설정으로 채택하지 않았다. **이번 시작에 없던 파일만** 소유 Editor 종료 후 Git 제외 generated-config/로 옮겨 원본 바이트·해시를 보존했고 프로젝트의 기존 입력·빌드 산출물은 유지했다. 다음 기동에서 다시 자동 생성될 수 있으므로 추적 전에 내용을 검토한다. Config 전체를 무시하는 규칙이나 기능/개인정보 설정 변경을 추가하지 않았다. Saved/Intermediate/DDC 등 생성물은 기존 제외 정책을 따르고 프로젝트 Content에 .uasset/.umap은 없다.
+
+**검토 판정:** 프로젝트 기동·CoopRPG 모듈 로드·로그/실제 화면·정상 종료의 근거가 서로 일치한다. 남은 비치명 엔진 진단을 숨기거나 게임 성공으로 확대하지 않았다. raw 로그·자동 생성 토큰/입력 설정의 커밋 혼입을 제외하고, 과거 귀속 해석 정정을 연결한 상태에서 이번 기동 확인 범위의 필수 기록 수정은 마쳤다. 로컬 저장소 검사 6개 통과 결과는 repository/에 보관한다. 다음은 부트스트랩 누적 변경의 통합 리뷰·허용된 PR 마감과, 별도 V01용 최소 맵/이동/입력·서버/접속 준비다. 자동 시험 3개를 전부 고치거나 개인 스킬/전체 자동화를 갖추는 것을 다음 단계의 일괄 선행 조건으로 두지 않되 관련 로깅/지역화/자산 기능을 시험할 때 재검토한다.
+
 ## 최소 C++ 프로젝트와 Editor 첫 빌드 — 2026-11-03
 
 **결론:** DSYEOM의 chore/game-bootstrap에서 Git LFS 3.8.1 준비와 `Game/CoopRPG.uproject` 최소 C++ 프로젝트 생성·IDE 파일 생성·`CoopRPGEditor Win64 Development` 첫 프로젝트 빌드를 완료했다. **프로젝트 기동·게임 기능·Server/Game 빌드·V01은 미실행**이다. 사용자 허용에 따라 진행했으며 업로드·PR·머지·영상 작업은 하지 않았다.
@@ -175,6 +228,7 @@ chore/engine-first-build의 clean 커밋 b0e9b32와 고정 엔진 소스 f45729c
 
 - StylusInput 2오류: SuperDisplay Wintab 인터페이스의 버전 조회 반환 크기가 4였다. 고정 소스 WintabAPI.cpp는 WORD 크기와 다를 때 오류를 기록한다. 초기화·기본 UI는 진행했지만 펜 입력·드라이버 호환성은 미검증이며 드라이버·플러그인을 바꾸지 않았다.
 - AutomationTest 16오류: Condition failed 15줄과 PackageName 경로 불일치 상세 1줄. LaunchEngineLoop의 자동 RunSmokeTests와 PackageName.cpp의 SmokeFilter 시험을 대조했다. 프로젝트 없는 실행의 Content 경로가 Engine/Content로 해석됐고 /Game 기대값과 /Engine 실제값이 달랐다. 프로젝트 없는 조건의 영향으로 판단하되 해당 자기검사는 실패로 보존한다. 이후 실제 프로젝트에서 경로·에셋 로딩을 재확인해야 하며 이를 게임 시험 통과로 취급하지 않는다.
+- **정정(2026-11-03 후속):** 위 일반 assertion 15줄을 PackageName으로 귀속한 해석은 철회한다. 명시적 경로 오류 1건은 유지하며 [실제 프로젝트 기동의 이름별 진단과 정정](#cooprpg-프로젝트-editor-기동-확인--2026-11-03)을 참조한다. 과거 원시 로그·실패 수는 보존한다.
 - 기본 이름 경고 1줄: SProjectDialog::SetDefaultProjectLocation의 기본 이름/숫자 접미사 후보 검증에서 발생했다. 실패 이유 자체는 로그에 없어 파일 중복·권한·경로 중 하나로 단정하지 않는다. 프로젝트 생성 전 명시적 CoopRPG 이름·모듈·경로를 확인한다.
 - 종료 HTTP 경고 2줄: Epic datarouter 요청 1개가 진행 중인 상태에서 델리게이트를 해제했다. 정상 종료 코드와 구분해 보존한다. 앱 자동 네트워크 동작이 있었으며 원문 URL의 사용자·세션 식별자는 문서에 복사하지 않는다. Git 업로드·PR 생성은 하지 않았다.
 
