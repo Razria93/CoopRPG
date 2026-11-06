@@ -39,7 +39,7 @@ CoopRPG · 기록 시작 2026-11-05 · 현행 학습·개발 진도의 운영 �
 | 날짜 | 최초 예정 결과 | 실제 결과·근거 | 판정·다음 행동 |
 |---|---|---|---|
 | 11/06 | 기초 진단·직접 C++ 변경 | 미기록 | 미기록 |
-| 11/07 | 입력·이동·캐릭터 역할 | 사용자 요청에 따라 [작업 선택·턴 종료 기록](../AGENTS.md#작업-단위와-범위-통제)과 [커밋 제안 기준](../AGENTS.md#커밋-작성)을 갱신했다. | 운영 규칙 반영. [L00](Roadmap.md#next-work) 첫 과제는 사용자 직접 수행 대기. 설명·변경·실행 결과를 받은 뒤 최소 맵·입력 착수 여부를 판단한다. |
+| 11/07 | 입력·이동·캐릭터 역할 | 사용자 요청에 따라 [작업 선택·턴 종료 기록](../AGENTS.md#작업-단위와-범위-통제)과 [커밋 제안 기준](../AGENTS.md#커밋-작성)을 갱신했다. 이후 L00을 첫 이동에 합쳐 맵과 캐릭터를 구현하고 [기본 속도 PIE 시험](Validation/Index.md#l00-movement)을 통과했다. | AI 구현·기본 이동 확인 완료. 사용자 코드 읽기와 속도 변경 전후 비교는 대기. 다음은 [L00 잔여 작업](Roadmap.md#next-work)이다. |
 | 11/08 | 서버 프로세스·1클라이언트 | 미기록 | 미기록 |
 | 11/09 | 2클라이언트·소유권·복제 | 미기록 | 미기록 |
 | 11/10 | G1: 패키지 서버·2클라이언트 | 미기록 | 미기록 |
@@ -140,6 +140,32 @@ CoopRPG · 기록 시작 2026-11-05 · 현행 학습·개발 진도의 운영 �
 - [ ] 후속: 직접 기초 진단·서버/GAS 학습과 실제 실행을 진행합니다.
 
 추가 완료: R003 전수 조사 후 R004 운영 원본 통합. 미완료: 실제 진단/학습·게임 구현/검증·자동화·최종 제출 매체. 다음 작업의 계획 배분에 이번 보완 비용도 포함합니다.
+
+<a id="l00-first-movement"></a>
+### 2026-11-07 · L00을 첫 캐릭터 이동에 통합
+
+- 사용자는 기존 구현 경험을 바탕으로 독립적인 기초 시험을 생략하고 멀티플레이 책임 경계에 집중하기로 했다. 스텔라의 `CPlayer::SetupPlayerInputComponent`와 `CMovementComponent`의 `AddMovementInput` 호출을 비교하고 CoopRPG에는 최소 이동 경로를 구현했다. [설계와 코드](Architecture.md)
+- AI는 기본 맵·입력·캐릭터를 작성하고 초기값 500 cm/s에서 검증했다. 사용자는 같은 맵에서 기본 상태를 먼저 조작하고 속도 한 줄을 바꾼 뒤 결과를 남긴다. 이 작업과 V01을 각각 따로 판정한다. [검증 기록](Validation/Index.md#l00-movement)
+- 커밋 후보는 사용자 변경 전 기준점이다. 메시지는 `feat: 최소 맵에 기본 캐릭터 이동 추가`를 제안한다. 대상은 아래와 같다.
+
+```text
+Game/CoopRPG.uproject
+Game/Config/DefaultEngine.ini
+Game/Config/DefaultInput.ini
+Game/Source/CoopRPG/CoopRPG.Build.cs
+Game/Source/CoopRPG/CoopRPGCharacter.h
+Game/Source/CoopRPG/CoopRPGCharacter.cpp
+Game/Source/CoopRPG/CoopRPGGameMode.h
+Game/Source/CoopRPG/CoopRPGGameMode.cpp
+Game/Content/Input/IA_Move.uasset
+Game/Content/Input/IMC_Player.uasset
+Game/Content/Maps/L_Movement.umap
+Docs/Architecture.md
+Docs/Development.md
+Docs/Roadmap.md
+Docs/Validation/Index.md
+README.md
+```
 
 <a id="daily-template"></a>
 ## 일일 차이와 팀 공유 양식
@@ -246,7 +272,7 @@ T1~T9는 2026-11-05 최초 요청부터 전수 조사 요청까지의9개 메인
 
 현재 수강 배정은 [Part별37강](Planning/Baseline-20261105.md#learning)과 [6~10일](Planning/Baseline-20261105.md#schedule-foundation)·[11~16일](Planning/Baseline-20261105.md#schedule-game)·[17~24일](Planning/Baseline-20261105.md#schedule-delivery)을 따른다. 최초 계획에는 실제로 적용하지 않은 표현/목표도 남아 있으므로 게임 규칙·시험은 M1/T1을 우선한다. 적 드롭/보상은 제외이며 11/14의 사망 후 보상 표현은 적 사망 상태1회 확정만 구현한다. 필수 사례2건·첫 스크립트 같은 배정도 증거/수동 성공이 없으면 억지로 만들지 않는다.
 
-1. L00에서 C++/UE 기초와 현재 이해를60분 진단한다. 설명하지 못한 개념을 학습 대상으로 적고 AI가 대신 답한 것을 본인 통과로 세지 않는다.
+1. 2026-11-07 사용자 요청으로 L00을 CoopRPG 첫 입력·이동에 합쳤다. 별도 점프나 일반 구현 역량 시험은 생략한다. 사용자는 실제 코드에서 로컬 입력과 이동 상태의 경계를 읽고 속도를 직접 바꿔 확인한다. AI의 기본 속도 시험과 본인의 확인을 구분한다.
 2. 필요한 강의를 수강하고 작은 변형을 직접 수행한다. 강의 실험은 UE5_Practice에 둘 수 있으며 전체 예제 프레임워크를 본 프로젝트로 자동 이식하지 않는다.
 3. Part/차시·핵심 질문·수강·본인 설명·직접 수정·실행 확인을 분리한다. 모르는 것은 미확인으로 유지하며 학습 시간을 근거 없이 채우지 않는다.
 4. 실제 MVP에 적용한 코드/규칙·시험을 연결한다. UE5.8.4와 강의 환경 차이는 해당 작업에서 확인하고 무계획한 엔진 교체를 하지 않는다.
@@ -283,7 +309,7 @@ T1~T9는 2026-11-05 최초 요청부터 전수 조사 요청까지의9개 메인
 | RQ01 · T1,T6 | GAS와 데디케이트 서버 포트폴리오 / 채택 | [Project M1·V01~V03](Project.md#mvp-scope) | 기능 미실행 / 제출 근거 미확보 |
 | RQ02 · T1 | 낙원에서 모티브를 얻은 게임 / 범위 조정 | [회수·탈출 모티브와 제외 범위](Project.md#mvp-scope) | 플레이 미검증 |
 | RQ03 · T1 | 이득우 Part1·2·3·4를 기반으로 학습 / 채택 | [Part1~4·37강과 일별 배정](Planning/Baseline-20261105.md#learning) | 수강/이해 미기록 |
-| RQ04 · T1,T6 | 개념을 모른 채 AI에 구현을 맡기지 않기 / 채택·강화 | [기초 진단·직접 설명/변형/확인](#learning-operation) | L00 미실행 |
+| RQ04 · T1,T6 | 개념을 모른 채 AI에 구현을 맡기지 않기 / 채택·강화 | [기초 진단·직접 설명/변형/확인](#learning-operation) | 첫 이동 코드·기본 속도 시험 완료 / 본인 변경 대기 |
 | RQ05 · T1,T6 | 넷마블네오 지원 자격·요구사항 반영 / 조건부 채택 | [공고 연결·개인 자격 분리](Project.md#learning-purpose) | 개인 자격/제출 형식 미확인 |
 | RQ06 · T1,T4,T6 | 채용 방향성과 마감으로 일정 설정 / 채택 | [18일+예비일·G1~G4](Roadmap.md#delivery-calendar) | 일정 달성 미검증 |
 | RQ07 · T1,T6 | AI 활용 능력을 어필 / 채택·구체화 | [AI 위임/판단/기여·검증 기록](#daily-operation) | 게임 사례 미확보 |
@@ -293,22 +319,22 @@ T1~T9는 2026-11-05 최초 요청부터 전수 조사 요청까지의9개 메인
 | RQ11 · T3 | 학습·구현·문서화 종합 계획 / 채택 | [학습·개발·검증·기록의 같은 달력](Roadmap.md#delivery-calendar) | 실제 수행 미기록 |
 | RQ12 · T4 | 최종 제작 목표를 먼저 정하기 / 채택 | [제출용 필수/제외·한 판 기준](Project.md#mvp-scope) | 게임 미구현 |
 | RQ13 · T4 | 남은 일자를 날짜별로 분리 / 채택·유연화 | [원기한/현재예상/실제 통과 분리](#gates) | 기한 성과 미기록 |
-| RQ14 · T4 | 각 날짜에 필요한 강의와 작업 목표 / 채택 | [19일·37강·작업·완료 기준 전체 보존](Planning/Baseline-20261105.md#schedule-foundation) | 수강/적용 미실행 |
+| RQ14 · T4 | 각 날짜에 필요한 강의와 작업 목표 / 채택 | [19일·37강·작업·완료 기준 전체 보존](Planning/Baseline-20261105.md#schedule-foundation) | 11/7 입력·이동 구현 / 수강 실적 별도 |
 | RQ15 · T5 | MVP 운영 자체도 포트폴리오에 표현 / 채택·비중 제한 | [결과와 운영 판단 사례1~2건](#portfolio-output) | 완성·대응 효과 미확보 |
 | RQ16 · T5 | 일정을 지키고 소화한 정도 기록 / 채택 | [예정/실제·학습·판정 표](#daily) | 미래 실적 미기록 |
 | RQ17 · T5 | 축소·지연 대응을 기록 / 채택·증거 조건 | [원목표·대안·손실·변경 후 결과](#changes) | 실행 중 축소 사례 없음 |
 | RQ18 · T6 | 앞으로 학습·작업과 기록을 함께 갱신 / 채택 | [의미 있는 작업과 기록 동시 갱신](../AGENTS.md#작업-단위와-범위-통제) | 실제 운영은 이후 계속 |
-| RQ19 · T6,T9 | CoopRPG 기초 상태를 실제로 파악 / 채택·이번 조사 | [23파일·PR·Editor 기반과 기능 구분](#integration-result) | 조사 확인 / 게임 미검증 |
+| RQ19 · T6,T9 | CoopRPG 기초 상태를 실제로 파악 / 채택·이번 조사 | [23파일·PR·Editor 기반과 기능 구분](#integration-result) | 11/5 조사 보존 / 11/7 로컬 이동 PIE 확인 |
 | RQ20 · T6 | 필요할 수 있는 자동화 조사 / 조건부 채택 | [실행/로그 자동화의 조건·보류 이유](#automation) | 게임 자동화 미제작 |
 | RQ21 · T6 | 강의 채택 이유·제작 목적·MVP 결정 과정 보존 / 채택 | [강의 선택·목표·제안 변화 이력](#discussion-history) | 준비 판단 보존 |
-| RQ22 · T6 | 데일리 체크리스트로 지속 확인 / 채택·내용 보강 | [일일 결과·근거·차이 체크](#daily-operation) | 새 개발일 운영 미실행 |
+| RQ22 · T6 | 데일리 체크리스트로 지속 확인 / 채택·내용 보강 | [일일 결과·근거·차이 체크](#daily-operation) | 11/7 실제·사용자 잔여 작업 기록 |
 | RQ23 · T6 | 하루에 더 된 것은 무엇인지 / 채택 | [추가 완료·원목표 영향](#daily-template) | 실제 추가 결과 발생 시 |
 | RQ24 · T6 | 덜 된 것과 미달 이유를 확인 / 채택 | [미달·원인/추정·이월·예상일](#daily-template) | 실제 차이 발생 시 |
 | RQ25 · T6 | 나중에 팀원과 소통할 수 있는 기록 / 채택·현재 범위 제한 | [담당·막힘·다음 행동과 재현 근거](Roadmap.md#next-work) | 다인 협업 검증 아님 |
 | RQ26 · T6,T9 | 각 턴에서 유의미한 논의를 정리 / 채택·이번 조사 | [T1~T9·12메시지 의미 요약](#discussion-history) | 당시 전수 조사 완료 |
 | RQ27 · T6,T9 | 분석 결과문서 작성 / 채택·이번 수행 | [35개 요구·조사 식별 근거 보존](Planning/Requirements-20261105.json) | 분석 완료 / 실행 별도 |
 | RQ28 · T6,T9 | 현재 구조를 어떻게 보완할지 계획 / 채택 | [파일별 통합·U4 검증·남은 일](#integration-result) | 운영 보완 완료 / 게임 미실행 |
-| RQ29 · T7 | 다음 작업을 구체적으로 제안 / 채택 | [L00→V01 구체 카드·조건](Roadmap.md#next-work) | 다음 작업 미실행 |
+| RQ29 · T7 | 다음 작업을 구체적으로 제안 / 채택 | [L00→V01 구체 카드·조건](Roadmap.md#next-work) | L00을 이동과 통합 / 직접 변경·V01 대기 |
 | RQ30 · T8 | 논의한 내용이 모두 반영되는지 확인 / 채택·완료 의미 분리 | [35개 항목 반영/실행/표현 구분](#requirement-coverage) | 문서 대응 확인 / 미래 성과 별도 |
 | RQ31 · T2,T5,T6,T8 | 무엇을 기록하고 무엇을 보여 줄지 연결 / 채택 | [매체 역할·원자료·최종 확인](#portfolio-output) | 최종 편집 미실행 |
 | RQ32 · T8,T9 | 사용자 요구와 AI 세부 제안을 구분 / 채택·강화 | [사용자 요청·AI M1/T1 채택 근거](Roadmap.md#integration-decision) | 세부 수치 사용자 발언으로 전환 금지 |

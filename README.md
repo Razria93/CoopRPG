@@ -4,7 +4,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 ## 현재 상태
 
-2026-11-05: **최소 C++ Editor 빌드·기동 기반 위에 제출용 목적·MVP·학습/일정·일일 기록·시험 기준을 통합했다.** 게임플레이·GAS·Server/Game·V01~V09는 미실행이다. 현행 범위는 2인 협동 공동 회수·탈출이며 [현재 작업/다음 L00](Docs/Roadmap.md#next-work), [35개 요구의 적용 상태](Docs/Development.md#requirement-coverage), [이번 검증 결과](Docs/Validation/Index.md#operating-integration)를 확인한다. 일별 실제 진도의 원본은 CoopRPG의 Development다. 문서 준비·관련 정적 검사를 완료했으며 L00 학습 진단과 V01 구현에 착수할 수 있다. 서버 접속이나 게임 완성을 확인한 상태는 아니다.
+2026-11-07 · **최소 맵 `L_Movement`에서 기본 캐릭터의 WASD 이동과 정지를 로컬 PIE로 확인했다.** 현재 L00은 첫 이동 작업에 통합했고, 사용자가 직접 코드를 읽고 속도를 바꾸는 확인이 남아 있다. 다음 네트워크 목표는 V01의 독립 서버 접속이다. [현재 카드](Docs/Roadmap.md#next-work) · [이동 구조](Docs/Architecture.md) · [검증 결과](Docs/Validation/Index.md#l00-movement) · [35개 요구](Docs/Development.md#requirement-coverage)
 
 아래 날짜별 내용은 이전 실행 이력이다. 과거4주 목표·미실행 표시는 당시 시점으로 읽고 현재 납기는 Roadmap을 따른다.
 
@@ -32,11 +32,13 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 | [검증 색인](Docs/Validation/Index.md) | 시험 기준안·결과와 증거 기록 방식 |
 | [환경 조사](Docs/Validation/Environment.md) | 확인된 도구·환경과 미검증 항목 |
 
-`Docs/Architecture.md`, `Docs/Cases/`, `Docs/Evidence/`는 실제 구조·사례·증거가 생길 때 추가한다. 빈 자료나 완료 증거를 미리 만들지 않는다. `Docs/X`는 기존 임시 자료의 보관 경로였으며 현재 기준 문서가 아니다. 이번 문서 정비 시 해당 경로는 존재하지 않았고, 이동·삭제 경위는 확인하지 않았다.
+`Docs/Cases/`, `Docs/Evidence/`는 실제 구조·사례·증거가 생길 때 추가한다. 빈 자료나 완료 증거를 미리 만들지 않는다. `Docs/X`는 기존 임시 자료의 보관 경로였으며 현재 기준 문서가 아니다. 이번 문서 정비 시 해당 경로는 존재하지 않았고, 이동·삭제 경위는 확인하지 않았다.
 
 ## 실행 안내
 
-Editor 프로젝트 빌드 명령과 도구 조건은 [환경 기록](Docs/Validation/Environment.md#최소-c-프로젝트와-editor-첫-빌드--2026-11-03)에 있다. 게임 실행·접속 안내는 아직 제공하지 않는다. 프로젝트 열기·정상 종료의 실제 명령과 조건은 [기동 기록](Docs/Validation/Environment.md#cooprpg-프로젝트-editor-기동-확인--2026-11-03)을 따른다. 독립 서버/클라이언트 접속 안내는 실제 검증 뒤 추가한다.
+1. UE 5.8.4 소스 엔진으로 `CoopRPGEditor Win64 Development`를 빌드하고 [CoopRPG.uproject](Game/CoopRPG.uproject)를 연다. [엔진과 빌드 환경](Docs/Validation/Environment.md#최소-c-프로젝트와-editor-첫-빌드--2026-11-03)
+2. 기본 맵 `L_Movement`에서 플레이어 1명으로 Play를 누르고 뷰포트를 클릭한다. W/S는 앞뒤, A/D는 좌우 이동이다. Esc로 종료한다.
+3. 속도 비교는 [캐릭터 생성자](Game/Source/CoopRPG/CoopRPGCharacter.cpp)의 `MaxWalkSpeed` 한 줄을 변경하고 에디터를 닫아 같은 타깃을 다시 빌드한 뒤 진행한다. 시작 지점 옆과 500 cm 전방에 있는 두 기둥을 같은 기준으로 사용한다.
 
 ## 문서 사용 기준
 
