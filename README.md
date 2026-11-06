@@ -28,6 +28,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 | [프로젝트 기준](Docs/Project.md) | 확정 목적·제안 범위·게임 규칙·포트폴리오 방향 |
 | [진행 계획](Docs/Roadmap.md) | MVP 단계·현재 작업·남은 확인/선택/검증 사항·결정 기록 |
 | [개발·학습 기록](Docs/Development.md) | 일별 예정/실제·추가/미달·학습·변경·게이트·요구 대응·포트폴리오 연결 |
+| [강의 학습 노트](Docs/Learning/README.md) | 강의별 원리·코드·적용 조건과 잠정 작성 양식 |
 | [최초 계획 보존본](Docs/Planning/Baseline-20261105.md) | 최초 범위·19일 일정·37강 매핑·완료 기준. 현행 변경과 비교하는 기준 |
 | [검증 색인](Docs/Validation/Index.md) | 시험 기준안·결과와 증거 기록 방식 |
 | [환경 조사](Docs/Validation/Environment.md) | 확인된 도구·환경과 미검증 항목 |
