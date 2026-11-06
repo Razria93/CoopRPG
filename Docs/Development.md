@@ -4,7 +4,7 @@ CoopRPG · 기록 시작 2026-11-05 · 현행 학습·개발 진도의 운영 �
 
 [사용 방법](../README.md) · [최초 계획](Planning/Baseline-20261105.md) · [포트폴리오 사례 초안](#portfolio-output)
 
-이전 시 문서 링크를 저장소 내부의 보존본·이력 요약으로 바꾸었습니다. 원 HTML 보고서·JSON·이전 Markdown은 당시 C:/UE5_Practice와 이 작업의 records-before에 보존했고, 현재 외부 산출물은 C:/UE5_Practice/Output에 있으며, 링크 전환을 당시 실험/판정 변경으로 해석하지 않습니다.
+이전 시 문서 링크를 저장소 내부의 보존본·이력 요약으로 바꾸었습니다. 원 HTML 보고서·JSON·이전 Markdown은 당시 C:/UE5_Practice와 이 작업의 records-before에 보존했고, 현재 외부 산출물은 C:/UE5_Practice/Output/CoopRPG/2026-11-05에 있으며, 링크 전환을 당시 실험/판정 변경으로 해석하지 않습니다.
 
 [현재 작업](Roadmap.md#next-work) · [학습](#learning-operation) · [일일 운영](#daily-operation) · [35개 요구](#requirement-coverage) · [최종 표현](#portfolio-output)
 
@@ -239,7 +239,7 @@ T1~T9는 2026-11-05 최초 요청부터 전수 조사 요청까지의9개 메인
 | T8 | 모든 논의 반영 확인 | 요구별 문서/실행/표현 상태 분리 |
 | T9 | 전수 조사·현 기반 대조·객관적 검토·후속 보완 | RQ01~35와 기존 D21항목 대조 |
 
-초기 답변의 날짜 정밀화·부활 제외는 준비 단계 선택이다. 실제 개발 지연을 해결하거나 AI 덕분에 시간을 절약한 사례로 소급하지 않는다. 원보고서는 로컬 C:/UE5_Practice/Output/cooprpg-structure-review-20261105 및 C:/UE5_Practice/Output/cooprpg-full-audit-20261105에 보존되어 있으며 이 저장소에는 핵심 이력과 요구 근거를 연결했다.
+초기 답변의 날짜 정밀화·부활 제외는 준비 단계 선택이다. 실제 개발 지연을 해결하거나 AI 덕분에 시간을 절약한 사례로 소급하지 않는다. 원보고서는 로컬 C:/UE5_Practice/Output/CoopRPG/2026-11-05/structure-review 및 C:/UE5_Practice/Output/CoopRPG/2026-11-05/full-audit에 보존되어 있으며 이 저장소에는 핵심 이력과 요구 근거를 연결했다.
 
 <a id="learning-operation"></a>
 ## 학습 운영과 완료 판단
