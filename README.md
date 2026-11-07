@@ -31,6 +31,9 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 | [최초 계획 보존본](Docs/Planning/Baseline-20261105.md) | 최초 범위·19일 일정·37강 매핑·완료 기준. 현행 변경과 비교하는 기준 |
 | [검증 색인](Docs/Validation/Index.md) | 시험 기준안·결과와 증거 기록 방식 |
 | [환경 조사](Docs/Validation/Environment.md) | 확인된 도구·환경과 미검증 항목 |
+| [빌드 원리](Docs/Learning/UnrealBuildPipeline.md) · [소스 엔진 선택](Docs/Learning/SourceEngineDecision.md) | CoopRPG의 타깃·모듈·의존성 및 전용 실행물 준비 경로 |
+| [서버 권한과 신뢰 경계](Docs/Architecture.md#server-authority) | 현재 이동 확인 범위와 상자·GAS 판정 설계 |
+| [Windows SDK 혼용 사례](Docs/Cases/V01-WindowsSdkSelection.md) | V01 빌드 로그와 프로젝트별 SDK 관리안 |
 
 `Docs/Cases/`, `Docs/Evidence/`는 실제 구조·사례·증거가 생길 때 추가한다. 빈 자료나 완료 증거를 미리 만들지 않는다. `Docs/X`는 기존 임시 자료의 보관 경로였으며 현재 기준 문서가 아니다. 이번 문서 정비 시 해당 경로는 존재하지 않았고, 이동·삭제 경위는 확인하지 않았다.
 
