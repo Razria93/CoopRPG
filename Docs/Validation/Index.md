@@ -527,7 +527,9 @@ PIE에서는 A 창에 W, B 창에 D를 차례로 입력해 각각 자기 Pawn만
 
 **근거** · [소스 엔진 채택 이유](../Learning/SourceEngineDecision.md) · [엔진 연결과 프로젝트 빌드 기록](Environment.md)
 
-일상 작업은 소스 엔진의 에디터 실행 파일에 프로젝트 경로를 직접 전달하는 방식을 권장한다. 이 명령을 바로가기로 등록해 두면 실행할 때마다 엔진 선택 창에서 버전을 고르는 과정이 줄어든다.
+이 장비에서는 탐색기에서 `CoopRPG.uproject`를 더블클릭해 연다. 버전 선택 창이 뜨면 이 장비의 Launcher 항목 `5.8` 대신 `…`에서 소스 엔진 루트 `C:/UE/5.8.4`를 지정한다. 이 재등록 뒤 탐색기에서 선택 창 없이 소스 Editor가 열린 것을 확인했다. 엔진 경로를 명시해 진단할 때는 아래 명령을 쓴다.
+
+**근거** · [탐색기 엔진 연결 복구](Environment.md#explorer-engine-association) · [소스 Editor 모듈 불일치 복구](Environment.md#source-editor-module-recovery)
 
 ```powershell
 & 'C:/UE/5.8.4/Engine/Binaries/Win64/UnrealEditor.exe' 'C:/CoopRPG/Game/CoopRPG.uproject'

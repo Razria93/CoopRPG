@@ -58,6 +58,32 @@ if ($LASTEXITCODE -ne 0) { throw 'Cook/Stage failed' }
 
 명령 전체와 원시 근거는 로컬 `Artifacts/Validation/v01-client-2p-20261107-190037/`의 `build-info.json`, `Client-build.log`, `cook-stage-args.json`, `cook-stage.log`, `test-inputs.json`에 있다. [2클라이언트 시험](Index.md#v01-two-clients)에서 동작을 확인했다.
 
+<a id="source-editor-module-recovery"></a>
+
+## 2026-11-07 · 소스 Editor 모듈 불일치 복구
+
+바로가기는 CoopRPG를 소스 Editor에 전달했다. 소스 Editor의 Build ID는 `2267c8f2-a3ab-43d2-b1c6-c35da9f66378`이고, 기존 프로젝트 Editor 모듈의 Build ID `55116800`은 Launcher 설치본과 일치했다. 로드가 거부되면서 **Missing Modules**가 표시됐다.
+
+`CoopRPGEditor Win64 Development`의 엔진 변경 제한 빌드는 SDK `10.0.26100.0`을 지정한 경우와 `-Module=CoopRPG`로 좁힌 경우 모두 `FailedDueToEngineChange`로 끝났다. 기존 V01 소스 Editor 산출물의 입력 파일 17개와 현재 입력을 SHA-256으로 비교했다. 모두 일치해 Launcher용 산출물 4개를 백업하고 해당 소스 Editor용 DLL·PDB·모듈 매니페스트·빌드 영수증을 복사했다. 새 컴파일은 완료되지 않았으며 C++ 변경 후 빌드는 별도 확인 대상이다.
+
+소스 Editor 직접 기동에서 `L_Movement` 로드와 초기화 19.36초를 확인했다. 자동 종료 명령으로 닫히지 않아 그 시험 프로세스만 제한 시간에 종료했다. 이후 Windows의 기본 `.uproject` 파일 연결로 열어 `C:/UE/5.8.4`의 Editor가 `L_Movement`를 로드하고 12.19초에 초기화를 마친 것을 확인했다. 이 기동에서 CoopRPG 모듈 불일치는 다시 발생하지 않았다.
+
+**근거** · 로컬 `Artifacts/Validation/editor-source-reconnect-20261107-224711/`의 `before-editor.log`, `build.log`, `module-build.log`, `module-reuse.json`, `source-editor-smoke.log`, `association-launch.json`, `association-editor.log`
+
+**관련 문서** · [V01 에디터 실행 안내](Index.md#pie-설정과-프로젝트-엔진-연결)
+
+<a id="explorer-engine-association"></a>
+
+## 2026-11-07 · 탐색기 더블클릭의 엔진 연결 복구
+
+기존 ID는 Windows 사용자 레지스트리에서 조회됐고 같은 Launcher 버전 선택기를 PowerShell에서 호출하면 소스 Editor가 열렸다. 실제 탐색기에서 더블클릭하면 Launcher 선택기가 `/editor`와 올바른 프로젝트 경로를 받아도 버전 선택 창을 띄웠다. 창에 Launcher 버전만 나왔고 기존 등록을 이 경로에서 해석하지 못한 세부 이유는 확인하지 못했다.
+
+그 창의 `…`에서 `C:/UE/5.8.4`를 지정하자 선택기가 새 사용자 등록 ID `{48AED0D4-4E85-6E47-D090-0DB56ECEC04A}`를 생성했다. 프로젝트에는 `EngineAssociation` 한 줄만 남겼다. 탐색기에서 다시 더블클릭해 선택 창 없이 소스 Editor가 `L_Movement`를 열고 초기화한 것을 확인했다. 시험한 사용자 파일 연결과 경로 표기 변경은 원복했다.
+
+**근거** · 로컬 `Artifacts/Validation/editor-explorer-20261107-231247/`의 `before.json`, `result.json`, `explorer-editor.log`
+
+**근거 및 더 읽기** · [V01 에디터 실행 안내](Index.md#pie-설정과-프로젝트-엔진-연결) · [Epic의 Windows 엔진 연결 설명](https://forums.unrealengine.com/t/engine-association-issue/2651662/2)
+
 ## CoopRPG 프로젝트 Editor 기동 확인 — 2026-11-03
 
 **결론:** 기존 소스 엔진에서 CoopRPG 프로젝트를 열어 **프로젝트 모듈 로드·실제 Editor 작업 화면·정상 종료를 확인**했다. 첫 실행과 진단 재실행 모두 종료 코드 0이다. 엔진 자동 시험 3개·StylusInput 진단은 미해결로 남기며 **오류 없는 엔진·게임 기능·Server/Game·V01 통과를 뜻하지 않는다.**
