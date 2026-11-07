@@ -55,8 +55,8 @@
 <a id="next-work"></a>
 ## L00 속도 비교 결과와 V01 준비
 
-- **L00 결과** · 기준 커밋 `5dd6669`에서 AI가 기본 이동을 확인했고 사용자가 [캐릭터 생성자](../Game/Source/CoopRPG/CoopRPGCharacter.cpp)의 속도를 500에서 300 cm/s로 바꿔 직접 빌드하고 플레이 차이를 확인했다. [시험 근거](Validation/Index.md#l00-movement)
-- **정리 제안** · 속도 변경과 확인 기록을 먼저 보존한다. V01에 앞서 `Character/`와 `GameFramework/`로 소스 배치를 나누는 안은 별도 검토 대상으로 둔다.
+- **L00 결과** · 기준 커밋 `5dd6669`에서 AI가 기본 이동을 확인했고 사용자가 [캐릭터 생성자](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)의 속도를 500에서 300 cm/s로 바꿔 직접 빌드하고 플레이 차이를 확인했다. [시험 근거](Validation/Index.md#l00-movement)
+- **소스 정리 완료** · 속도 비교는 `9bdd0a2`에 보존했다. 캐릭터는 `Character/`, 게임 모드는 `GameFramework/`로 옮겼고 현재 설치형 UE 5.8.4에서 Editor 빌드를 확인했다. [빌드 근거](Validation/Index.md#source-layout-build)
 - **V01 착수 조건** · 최근 로컬 PIE는 설치형 UE 5.8.4에서 실행됐다. 독립 서버 빌드 전에 `CoopRPG.uproject`의 엔진 연결과 빌드 명령이 채택한 소스 엔진 `C:/UE/5.8.4`를 사용하는지 확인한다. 첫 목표는 Server 타깃·최소 맵 Cook·클라이언트 한 대 접속이다.
 
 <details>

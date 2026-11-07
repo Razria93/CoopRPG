@@ -386,6 +386,15 @@ PR #1은 정리 전 본문의 전체 SHA 14개·Actions URL 7개·기존 artifac
 - **사용자 속도 비교 · 2026-11-07** · 기준 커밋 `5dd6669`와 작업 트리를 대조해 `MaxWalkSpeed`가 500.0f에서 300.0f로 바뀐 것을 확인했다. 사용자가 변경 후 빌드 성공과 플레이에서 속도 차이를 확인했다고 보고했다. 위 표의 시간·거리 수치는 500 cm/s 자동 시험에만 해당한다.
 - **실행 환경** · 최근 `Game/Saved/Logs/CoopRPG.log`에서 설치형 UE 5.8.4 (`C:/Program Files/Epic Games/UE_5.8`)의 `L_Movement` PIE 기동을 확인했다. 현재 `.uproject`의 `EngineAssociation`은 `5.8`이며 기준 커밋에서는 소스 엔진 등록 GUID였다. 별도 서버의 소유권·보정·상대 이동은 V01에서 확인한다.
 
+<a id="source-layout-build"></a>
+## 2026-11-07 · 캐릭터와 게임 모드 소스 이동 후 빌드
+
+`9bdd0a2`를 기준으로 [캐릭터](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)와 [게임 모드](../../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp)의 헤더·구현을 각각 옮겼다. 소스 수정은 게임 모드가 캐릭터 헤더를 참조하는 include 경로 한 줄이다.
+
+현재 `.uproject`에 연결된 설치형 UE 5.8.4에서 VS 2022 프로젝트 목록을 재생성해 네 파일의 새 경로를 확인했다. `CoopRPGEditor Win64 Development` 빌드는 SDK 10.0.26100.0에서 두 구현을 각각 컴파일하고 `UnrealEditor-CoopRPG.dll`을 링크했다. 총 10개 작업, 33.17초, 종료 코드 0. 이번 확인 범위는 Editor 빌드까지다. 로그는 로컬 `Artifacts/Validation/source-layout-20261107/project-files.log`와 `build.log`에 있다.
+
+저장소 검사 첫 실행은 실제 인덱스에 남은 이동 전 경로 네 개를 누락으로 보고했다(5/6). 네 이동만 표시한 임시 인덱스에서 재실행해 6/6을 확인했다. 두 결과는 같은 로컬 폴더의 `repository-final/result.json`과 `repository-relocated/result.json`에 보존했다. 실제 인덱스는 비어 있다.
+
 ## 현재 기록
 
 | 기록 | 종류·상태 | 한계 |

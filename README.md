@@ -38,7 +38,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 1. UE 5.8.4 소스 엔진으로 `CoopRPGEditor Win64 Development`를 빌드하고 [CoopRPG.uproject](Game/CoopRPG.uproject)를 연다. [엔진과 빌드 환경](Docs/Validation/Environment.md#최소-c-프로젝트와-editor-첫-빌드--2026-11-03)
 2. 기본 맵 `L_Movement`에서 플레이어 1명으로 Play를 누르고 뷰포트를 클릭한다. W/S는 앞뒤, A/D는 좌우 이동이다. Esc로 종료한다.
-3. 속도 비교는 [캐릭터 생성자](Game/Source/CoopRPG/CoopRPGCharacter.cpp)의 `MaxWalkSpeed` 한 줄을 변경하고 에디터를 닫아 같은 타깃을 다시 빌드한 뒤 진행한다. 시작 지점 옆과 500 cm 전방에 있는 두 기둥을 같은 기준으로 사용한다.
+3. 속도 비교는 [캐릭터 생성자](Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)의 `MaxWalkSpeed` 한 줄을 변경하고 에디터를 닫아 같은 타깃을 다시 빌드한 뒤 진행한다. 시작 지점 옆과 500 cm 전방에 있는 두 기둥을 같은 기준으로 사용한다.
 
 ## 문서 사용 기준
 

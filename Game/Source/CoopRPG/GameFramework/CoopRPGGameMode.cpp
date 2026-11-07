@@ -1,6 +1,6 @@
 #include "CoopRPGGameMode.h"
 
-#include "CoopRPGCharacter.h"
+#include "CoopRPG/Character/CoopRPGCharacter.h"
 
 ACoopRPGGameMode::ACoopRPGGameMode()
 {
