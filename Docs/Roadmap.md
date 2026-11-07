@@ -11,14 +11,14 @@
 
 ## 현재 상태
 
-**현재 단계** · 최소 맵에서 기본 캐릭터 이동을 구현하고 로컬 PIE로 검증했다. 사용자가 할 속도 변경·비교가 남았다. 패키지 Server/Game·GAS·V01~V09는 미실행이다. [이동 검증](Validation/Index.md#l00-movement)
+**현재 단계** · 최소 맵에서 기본 캐릭터 이동을 구현하고 로컬 PIE로 검증했다. 사용자가 500→300 cm/s 변경과 빌드·플레이 차이를 확인했다. 패키지 Server/Game·GAS·V01~V09는 미실행이다. [이동 검증](Validation/Index.md#l00-movement)
 
 - 기준: 로컬/PR #4 head 91683e7, main 492596f. 11월5일 재조회에서 PR #4는 draft/open·미병합이며 저장소 Actions 41591590970은 성공 상태였다. 과거 저장소 검사를 이번 문서 변경이나 게임 시험의 성공으로 승계하지 않는다.
 - 첫 이동 브랜치 `feat/minimal-character-movement`는 운영 기준과 부트스트랩을 포함하는 `docs/mvp-operating-baseline`의 `b3c33de`에서 분기했다. 후속 PR에서 이 기준 브랜치 의존성을 밝힌다.
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 현재 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 다음 작업은 아래 L00의 사용자 직접 조작·속도 변경이다. 이후 V01의 Server 타깃·Cook·클라이언트 첫 접속을 준비한다.
+- 다음 단계는 [현행 카드](#next-work)를 따른다. V01에 사용할 소스 엔진 연결을 확인하고 독립 서버 첫 접속을 준비한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -53,11 +53,11 @@
 | 11/24 23:59 | 공식 접수 마감·예비일 | 접수 오류 대응. 신규 기능 시간으로 선사용하지 않음 |
 
 <a id="next-work"></a>
-## L00 · 최소 맵에서 입력과 이동 확인
+## L00 속도 비교 결과와 V01 준비
 
-- **현재 결과** · AI가 최소 맵·입력과 캐릭터를 구현하고 기본 속도의 로컬 PIE 이동을 확인했다. 사용자 요청에 따라 종전 별도 기초 진단은 첫 프로젝트 작업과 통합했다. [구현 구조](Architecture.md) · [시험 근거](Validation/Index.md#l00-movement)
-- **다음 한 가지** · 사용자가 기본 속도로 먼저 조작하고 `SetupPlayerInputComponent → Move → AddMovementInput`을 읽는다. [생성자](../Game/Source/CoopRPG/CoopRPGCharacter.cpp)에서 `MaxWalkSpeed`를 직접 바꾸고 같은 두 표식 사이를 비교한다. 비교값·관찰·로컬 입력과 이동 컴포넌트의 역할 차이를 짧게 남긴다.
-- **완료와 이월** · 본인 변경과 전후 실행을 확인하면 Development를 갱신한다. 이후 독립 서버 1대와 클라이언트 1개 접속부터 V01을 시작한다. 두 클라이언트의 소유권·권한·이동 보정은 그 단계에서 시험한다.
+- **L00 결과** · 기준 커밋 `5dd6669`에서 AI가 기본 이동을 확인했고 사용자가 [캐릭터 생성자](../Game/Source/CoopRPG/CoopRPGCharacter.cpp)의 속도를 500에서 300 cm/s로 바꿔 직접 빌드하고 플레이 차이를 확인했다. [시험 근거](Validation/Index.md#l00-movement)
+- **정리 제안** · 속도 변경과 확인 기록을 먼저 보존한다. V01에 앞서 `Character/`와 `GameFramework/`로 소스 배치를 나누는 안은 별도 검토 대상으로 둔다.
+- **V01 착수 조건** · 최근 로컬 PIE는 설치형 UE 5.8.4에서 실행됐다. 독립 서버 빌드 전에 `CoopRPG.uproject`의 엔진 연결과 빌드 명령이 채택한 소스 엔진 `C:/UE/5.8.4`를 사용하는지 확인한다. 첫 목표는 Server 타깃·최소 맵 Cook·클라이언트 한 대 접속이다.
 
 <details>
 <summary>2026-11-05 최초 L00 계획 · 11월 7일 첫 이동 작업으로 통합</summary>
@@ -217,7 +217,7 @@
 
 ## 다음 작업 카드 — 제안
 
-> 아래는 당시 환경 준비 작업 카드의 보존 기록이다. 현행 다음 작업은 [L00](#next-work)이다.
+> 아래는 당시 환경 준비 작업 카드의 보존 기록이다. 현행 다음 작업은 [현재 카드](#next-work)이다.
 
 **이전 후보 보존:** 아래는 첫 엔진 빌드 허용 전의 후보·당시 범위다. 현재 실행·허용 범위와 결과는 위 첫 엔진 빌드 작업 카드 및 환경 기록을 따른다.
 

@@ -4,7 +4,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 ## 현재 상태
 
-2026-11-07 · **최소 맵 `L_Movement`에서 기본 캐릭터의 WASD 이동과 정지를 로컬 PIE로 확인했다.** 현재 L00은 첫 이동 작업에 통합했고, 사용자가 직접 코드를 읽고 속도를 바꾸는 확인이 남아 있다. 다음 네트워크 목표는 V01의 독립 서버 접속이다. [현재 카드](Docs/Roadmap.md#next-work) · [이동 구조](Docs/Architecture.md) · [검증 결과](Docs/Validation/Index.md#l00-movement) · [35개 요구](Docs/Development.md#requirement-coverage)
+2026-11-07 · **최소 맵 `L_Movement`에서 기본 캐릭터의 WASD 이동과 정지를 로컬 PIE로 확인했다.** 사용자가 `MaxWalkSpeed`를 500에서 300 cm/s로 바꿔 빌드하고 플레이에서 차이를 확인했다. 다음 네트워크 목표는 V01의 독립 서버 접속이다. [현재 카드](Docs/Roadmap.md#next-work) · [이동 구조](Docs/Architecture.md) · [검증 결과](Docs/Validation/Index.md#l00-movement) · [35개 요구](Docs/Development.md#requirement-coverage)
 
 아래 날짜별 내용은 이전 실행 이력이다. 과거4주 목표·미실행 표시는 당시 시점으로 읽고 현재 납기는 Roadmap을 따른다.
 

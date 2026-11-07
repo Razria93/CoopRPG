@@ -14,7 +14,7 @@ ACoopRPGCharacter::ACoopRPGCharacter()
 {
     bUseControllerRotationYaw = false;
     GetCharacterMovement()->bOrientRotationToMovement = true;
-    GetCharacterMovement()->MaxWalkSpeed = 500.0f;
+    GetCharacterMovement()->MaxWalkSpeed = 300.0f;
 
     auto* Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
     Body->SetupAttachment(GetRootComponent());
