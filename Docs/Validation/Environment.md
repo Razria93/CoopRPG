@@ -84,6 +84,30 @@ if ($LASTEXITCODE -ne 0) { throw 'Cook/Stage failed' }
 
 **근거 및 더 읽기** · [V01 에디터 실행 안내](Index.md#pie-설정과-프로젝트-엔진-연결) · [Epic의 Windows 엔진 연결 설명](https://forums.unrealengine.com/t/engine-association-issue/2651662/2)
 
+<a id="editor-incremental-preflight"></a>
+
+## 2026-11-07 · V02 착수 전 Editor 증분 빌드 확인
+
+`C:/UE/5.8.4`에서 `CoopRPGEditor Win64 Development`를 SDK 26100·최대 4작업·NoUBA로 요청했다. `-NoEngineChanges`에서 4.08초에 종료 코드 5(`FailedDueToEngineChange`)를 반환했다. 이후 UBT가 내보낸 계획에는 3,724개 작업이 있다. 엔진 3,716개(컴파일 1,792·링크 1,923·메타데이터 1)와 프로젝트 8개(컴파일 5·링크 2·메타데이터 1)다. 같은 설정과 작업 수의 V01 실측은 3,703.87초(약 62분)였다. 이번에는 **60~90분**을 작업 예산으로 추정하며 빌드 실측은 없다.
+
+`-WriteOutdatedActions`는 컴파일을 실행하지 않았지만, UBT가 계획을 내보내기 전에 기존 `.lib`·`.pdb`·`.tlh` 1,926개를 정리했다. 이 옵션은 기존 산출물 보존이 필요한 확인에 그대로 쓰면 안 된다. 기존 소스 Editor는 `-NullRHI` 시험에서 `L_Movement`를 로드하고 초기화 10.59초 뒤 정상 종료 코드 0을 반환했다. 다음 C++ 빌드에서 링크용 파일과 디버그 심볼을 재생성해야 한다.
+
+**근거** · 로컬 `Artifacts/Validation/editor-incremental-20261107-232852/`의 `guard.log`, `plan-ubt.log`, `outdated-actions.json`, `editor-smoke.log` · [V01 빌드 실측](#v01-source-build)
+
+<a id="editor-build-with-engine-dependencies"></a>
+
+## 2026-11-08 · 엔진 의존 작업 포함 Editor 빌드 완료
+
+`C:/UE/5.8.4`에서 `CoopRPGEditor Win64 Development`를 SDK 26100·최대 4작업·NoUBA로 실행했다. 11월 7일 23:45:28부터 11월 8일 00:45:18까지 3,590.25초(59분 50초)가 걸렸고, 3,724개 작업을 완료해 종료 코드 0을 반환했다. 새 프로젝트 DLL·PDB·빌드 영수증을 확인했고, 프로젝트 모듈과 엔진 매니페스트의 Build ID가 일치했다. 같은 조건에 `-NoEngineChanges`를 추가한 재실행은 4.88초에 추가 작업 0개로 종료 코드 0을 반환했다.
+
+착수 때 커밋된 엔진 ID가 Windows 등록에서 사라져 있었다. Unreal의 설치 목록 조회 코드가 같은 경로의 중복 등록을 정리하는 동작을 확인했다. 이전 등록을 백업한 뒤 소스 엔진 경로를 현재 프로젝트 ID에 한 번만 등록했다. 조사한 경로에서 이전 ID를 참조하는 파일은 보관된 통합 작업 스냅샷에서 확인됐다. 프로젝트 파일은 커밋된 ID를 사용했다.
+
+빌드 뒤 탐색기에서 `.uproject`를 더블클릭했다. 버전 선택 창 없이 소스 Editor가 열렸고, 새 `UnrealEditor-CoopRPG.dll`이 로드된 상태로 `L_Movement`를 열어 초기화 47.87초와 에디터 창 응답을 확인했다. PIE나 패키지 시험은 이 빌드의 판정 범위와 구분한다.
+
+**근거** · 로컬 `Artifacts/Validation/editor-build-20261107-234528/`의 `result.json`, `build.log`, `built-artifacts.json`, `incremental.log`, `explorer-result.json`, `explorer-editor.log`, `registration.json`
+
+**관련 문서** · [V02 착수 전 빌드 확인](#editor-incremental-preflight) · [탐색기 엔진 연결 복구](#explorer-engine-association)
+
 ## CoopRPG 프로젝트 Editor 기동 확인 — 2026-11-03
 
 **결론:** 기존 소스 엔진에서 CoopRPG 프로젝트를 열어 **프로젝트 모듈 로드·실제 Editor 작업 화면·정상 종료를 확인**했다. 첫 실행과 진단 재실행 모두 종료 코드 0이다. 엔진 자동 시험 3개·StylusInput 진단은 미해결로 남기며 **오류 없는 엔진·게임 기능·Server/Game·V01 통과를 뜻하지 않는다.**

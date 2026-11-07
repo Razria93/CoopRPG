@@ -61,6 +61,7 @@
 - **V01 2클라이언트 결과** · [Client 타깃](../Game/Source/CoopRPGClient.Target.cs)으로 만든 접속용 실행 파일 두 개가 기존 패키지 서버에 접속했다. 각자 자기 Pawn을 조작하고 상대 이동을 관찰했으며 세 프로세스가 정상 종료했다. [시험 결과](Validation/Index.md#v01-two-clients)
 - **G1/V01 자동 검증 통과** · 기존 패키지로 독립 접속·양방향 이동·서버 선종료를 새 프로세스로 3회 확인했다. 두 Client가 매회 서버 종료를 감지했고 세 프로세스 모두 종료 코드 0을 반환했다. [반복 시험 근거](Validation/Index.md#v01-server-shutdown)
 - **사용자 수동 재현** · 사용자 이동 복제 관찰과 Codex의 양쪽 연결 종료 로그 확인을 [수동 1회 결과](Validation/Index.md#v01-manual-result)에 기록했다.
+- **V02 착수 조건 충족** · 엔진 의존 작업을 포함한 `CoopRPGEditor` 빌드가 59분 50초에 완료됐다. 같은 조건의 재실행에서 추가 작업 0개를 확인했고, 탐색기 더블클릭으로 새 DLL이 로드된 Editor에서 `L_Movement`를 열었다. [빌드와 기동 검증](Validation/Environment.md#editor-build-with-engine-dependencies)
 - **다음 작업** · V02의 GAS 단타 하나에서 서버 승인과 실제 거절을 확인한다. 이후 V03에서 취소와 재실행을 검증한다.
 
 <details>
