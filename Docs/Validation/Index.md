@@ -499,11 +499,43 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File 'C:/CoopRPG/Artifa
 
 ### 에디터에서 먼저 확인하기
 
-`L_Movement`를 열고 Play 옵션에서 `New Editor Window (PIE)`, `Number of Players = 2`, `Net Mode = Play As Client`를 선택한다. 에디터가 전용 서버 역할을 준비하고 플레이 창 두 개를 띄운다. 한 창에서 W를 누르고 다른 창에서 D를 눌러, 각 입력이 자기 Pawn에 적용되고 상대 창에도 이동이 보이는지 확인한다. 빠른 조작 확인에는 한 프로세스에서 실행하는 기본 설정을 사용할 수 있다.
+`L_Movement`를 연 다음 Play 메뉴에서 `New Editor Window (PIE)`로 실행한다. 다음 설정은 이동·입력·복제를 빠르게 확인하는 CoopRPG의 권장 구성이다.
 
-PIE는 반복 개발과 조작 확인에 사용한다. 위 수동 재현은 이미 쿠킹한 Server·Client 실행 파일을 사용해 서버만 먼저 종료했을 때 양쪽에서 연결 종료를 감지하는지 확인하는 절차다. PIE의 전체 Stop은 모든 플레이 세션을 함께 끝낼 수 있으므로 서버 선종료 시험과 구분해 기록한다.
+| 옵션 | 권장값 | 역할 |
+|---|---|---|
+| 넷 모드 플레이 | `Play As Client` | 에디터가 로컬 플레이어 없는 전용 서버를 준비하고 플레이 창은 모두 클라이언트로 접속한다. `Play As Listen Server`는 한 플레이어가 서버와 클라이언트를 함께 맡는 호스트 시험에 사용한다. |
+| 플레이어 수 | 2 | 서버에 접속할 플레이어 창을 두 개 띄운다. 데디 서버는 이 수에 포함되지 않는다. |
+| 개별 서버 실행 | 끔 | `Play As Client`는 이미 서버를 시작한다. 이 옵션은 `Play Standalone`에서 서버를 별도로 준비한 뒤 접속하는 흐름처럼, 선택한 넷 모드가 서버를 요구하지 않는 시험에 사용한다. |
+| 단일 프로세스 하 실행 | 평소 켬 | 한 에디터 프로세스 안에서 서버·클라이언트 월드를 실행해 빠르게 반복한다. 프로세스 간 차이를 볼 때는 끈다. |
+| 늦은 조인 허용 | 중도 접속 시험 때 켬 | 실행 중인 PIE에 테스트 클라이언트를 추가할 수 있게 한다. 실제 게임에서 중도 참가를 허용하는 조건은 서버의 게임 규칙으로 확인한다. |
+| 항상 맨 위에 | 창 비교가 편할 때 켬 | PIE 창을 부모 창 위에 표시하는 개인 편의 설정이다. |
 
-**근거 및 더 읽기** · [V01 판정 기준](#active-tests) · [현재 작업 카드](../Roadmap.md#next-work) · [Microsoft 실행 정책](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-5.1) · [Epic 멀티플레이 PIE 시험](https://dev.epicgames.com/documentation/en-us/unreal-engine/testing-multiplayer-in-unreal-engine)
+**근거** · [Epic PIE 멀티플레이 옵션](https://dev.epicgames.com/documentation/en-us/unreal-engine/play-in-editor-multiplayer-options-in-unreal-engine) · [Epic PIE 설정](https://dev.epicgames.com/documentation/en-us/unreal-engine/play-in-editor-settings-in-unreal-engine)
+
+PIE에서는 A 창에 W, B 창에 D를 차례로 입력해 각각 자기 Pawn만 조작하고 상대 창에서 그 이동을 볼 수 있는지 확인한다. 위 패키지 절차에서는 쿠킹한 `CoopRPGServer.exe`와 `CoopRPGClient.exe`를 별도 프로세스로 실행해, 서버만 먼저 종료했을 때 양쪽 클라이언트가 연결 종료를 감지하는지 확인한다. PIE의 전체 Stop은 플레이 세션들을 함께 끝낼 수 있다. PIE에서 단일 프로세스를 꺼도 실행 환경은 에디터 시험이므로 배포 실행 파일을 사용한 검증은 별도로 기록한다.
+
+**근거** · [V01 패키지 반복 결과](#v01-server-shutdown) · [사용자 패키지 재현 결과](#v01-manual-result)
+
+### PIE 설정과 프로젝트 엔진 연결
+
+| 설정 | 저장 위치 | 관리 기준 |
+|---|---|---|
+| PIE 넷 모드, 단일 프로세스, 늦은 조인, 창 배치 | `Game/Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini` | 에디터 개인 설정이다. 필요한 옵션을 에디터에서 선택한다. |
+| 프로젝트에 연결한 엔진 | [Game/CoopRPG.uproject](../../Game/CoopRPG.uproject)의 `EngineAssociation` | Git으로 추적한다. 엔진 버전 선택 창에서 Launcher의 `5.8`을 선택하면 연결 값이 바뀐다. |
+
+이 장비에서 커밋된 `EngineAssociation` GUID는 `C:/UE/5.8.4`의 소스 엔진에 등록돼 있다. Launcher 항목 `5.8`은 이 장비의 설치형 UE 5.8.4를 선택한다. 버전 번호가 같아도 설치 경로와 빌드 방식이 다르다. 다른 장비에서는 해당 장비의 엔진 등록을 확인한다.
+
+**근거** · [소스 엔진 채택 이유](../Learning/SourceEngineDecision.md) · [엔진 연결과 프로젝트 빌드 기록](Environment.md)
+
+일상 작업은 소스 엔진의 에디터 실행 파일에 프로젝트 경로를 직접 전달하는 방식을 권장한다. 이 명령을 바로가기로 등록해 두면 실행할 때마다 엔진 선택 창에서 버전을 고르는 과정이 줄어든다.
+
+```powershell
+& 'C:/UE/5.8.4/Engine/Binaries/Win64/UnrealEditor.exe' 'C:/CoopRPG/Game/CoopRPG.uproject'
+```
+
+`.uproject`가 바뀌면 먼저 `git -C C:/CoopRPG diff -- Game/CoopRPG.uproject`로 확인한다. 엔진 선택과 서식만 바뀌었고 저장소의 소스 엔진 연결로 돌아가려는 경우에만 그 파일을 HEAD에서 복원한다. 플러그인이나 모듈 설정을 함께 수정했다면 필요한 변경을 보존하고 `EngineAssociation`만 따로 검토한다.
+
+**근거 및 더 읽기** · [V01 판정 기준](#active-tests) · [현재 작업 카드](../Roadmap.md#next-work) · [Microsoft 실행 정책](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-5.1) · [Epic 멀티플레이 PIE 시험](https://dev.epicgames.com/documentation/en-us/unreal-engine/play-in-editor-multiplayer-options-in-unreal-engine)
 
 ## 현재 기록
 
