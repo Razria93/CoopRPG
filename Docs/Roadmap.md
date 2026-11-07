@@ -11,7 +11,7 @@
 
 ## 현재 상태
 
-**현재 단계** · 최소 맵에서 기본 캐릭터 이동을 구현하고 로컬 PIE로 검증했다. 사용자가 500→300 cm/s 변경과 빌드·플레이 차이를 확인했다. 패키지 전용 서버와 Client 타깃으로 두 클라이언트의 접속·자기 Pawn 조작·상대 이동·정상 종료를 확인했다. V01은 부분 확인이며 다음은 서버 종료 감지와 전체 흐름 반복이다. GAS·V02~V09는 미실행이다. [이동 검증](Validation/Index.md#l00-movement)
+**현재 단계** · 최소 맵에서 기본 캐릭터 이동을 구현하고 로컬 PIE로 검증했다. 사용자가 500→300 cm/s 변경과 빌드·플레이 차이를 확인했다. 패키지 전용 서버와 Client 타깃으로 두 클라이언트의 접속·자기 Pawn 조작·상대 이동·정상 종료를 확인했다. V01은 자동 반복 3회를 통과했다. 수동 1회에서 사용자가 이동 복제를 관찰했고 양쪽 연결 종료 로그도 확인했다. GAS·V02~V09는 미실행이다. [이동 검증](Validation/Index.md#l00-movement)
 
 - 기준: 로컬/PR #4 head 91683e7, main 492596f. 11월5일 재조회에서 PR #4는 draft/open·미병합이며 저장소 Actions 41591590970은 성공 상태였다. 과거 저장소 검사를 이번 문서 변경이나 게임 시험의 성공으로 승계하지 않는다.
 - 첫 이동 브랜치 `feat/minimal-character-movement`는 운영 기준과 부트스트랩을 포함하는 `docs/mvp-operating-baseline`의 `b3c33de`에서 분기했다. 후속 PR에서 이 기준 브랜치 의존성을 밝힌다.
@@ -53,13 +53,15 @@
 | 11/24 23:59 | 공식 접수 마감·예비일 | 접수 오류 대응. 신규 기능 시간으로 선사용하지 않음 |
 
 <a id="next-work"></a>
-## V01 2클라이언트 이동 확인과 종료 검증
+## V01 재현 결과와 GAS 단타 착수
 
 - **L00 결과** · 기준 커밋 `5dd6669`에서 AI가 기본 이동을 확인했고 사용자가 [캐릭터 생성자](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)의 속도를 500에서 300 cm/s로 바꿔 직접 빌드하고 플레이 차이를 확인했다. [시험 근거](Validation/Index.md#l00-movement)
 - **소스 정리 완료** · 속도 비교는 `9bdd0a2`에 보존했다. 캐릭터는 `Character/`, 게임 모드는 `GameFramework/`로 옮겼고 현재 설치형 UE 5.8.4에서 Editor 빌드를 확인했다. [빌드 근거](Validation/Index.md#source-layout-build)
 - **V01 첫 결과** · `.uproject`를 HEAD로 복원하고 소스 엔진 `C:/UE/5.8.4` 연결을 확인했다. `80d9749`의 이동 기반에서 `feat/dedicated-server-first-client`로 분기했다. 독립 패키지 서버1/클라이언트1의 접속·이동·종료 코드 0을 확인했다. [실제 조건·실패와 재검증](Validation/Index.md#v01-first-client)
 - **V01 2클라이언트 결과** · [Client 타깃](../Game/Source/CoopRPGClient.Target.cs)으로 만든 접속용 실행 파일 두 개가 기존 패키지 서버에 접속했다. 각자 자기 Pawn을 조작하고 상대 이동을 관찰했으며 세 프로세스가 정상 종료했다. [시험 결과](Validation/Index.md#v01-two-clients)
-- **다음 작업 제안** · 같은 Server/Client 산출물로 서버 종료 감지를 확인한다. 새 프로세스로 전체 흐름을 3회 재실행하고 결과를 기록해 G1/V01을 판정한다. 1클라이언트·사전 Game 계측·정상 종료만 확인한 시험은 서버 종료 감지까지 수행한 반복으로 세지 않는다.
+- **G1/V01 자동 검증 통과** · 기존 패키지로 독립 접속·양방향 이동·서버 선종료를 새 프로세스로 3회 확인했다. 두 Client가 매회 서버 종료를 감지했고 세 프로세스 모두 종료 코드 0을 반환했다. [반복 시험 근거](Validation/Index.md#v01-server-shutdown)
+- **사용자 수동 재현** · 사용자 이동 복제 관찰과 Codex의 양쪽 연결 종료 로그 확인을 [수동 1회 결과](Validation/Index.md#v01-manual-result)에 기록했다.
+- **다음 작업** · V02의 GAS 단타 하나에서 서버 승인과 실제 거절을 확인한다. 이후 V03에서 취소와 재실행을 검증한다.
 
 <details>
 <summary>2026-11-05 최초 L00 계획 · 11월 7일 첫 이동 작업으로 통합</summary>

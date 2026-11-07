@@ -454,6 +454,57 @@ XY 최종값은 로그 정밀도에서 일치했고 Z 차이는 0.05cm였다. �
 
 최종 근거는 로컬 `Artifacts/Validation/v01-client-2p-20261107-190037/client-target-test/`의 `processes.json`, `two-client-result.json`, 서버·클라이언트 로그 및 각 시점의 PNG 6장이다. 같은 실행 폴더의 상위에 입력 예약과 판정 스크립트를 보존했다.
 
+<a id="v01-server-shutdown"></a>
+## 2026-11-07 · V01 서버 선종료와 2클라이언트 반복
+
+**자동 검증 3회 통과.** 기준 커밋 `2f0b274`에 연결된 기존 Server·Client 패키지의 실행 파일 SHA-256이 이전 기록과 일치했다. 같은 PC의 루프백에서 21:05:42~21:12:29 KST에 회차마다 새 서버 1개와 Client 2개를 띄웠다. 각 회차에 자동 W·D 입력을 번갈아 넣고 양쪽 Pawn 좌표를 대조하고 화면을 저장한 뒤, 두 Client가 실행 중일 때 서버의 예약 `quit`을 실행했다.
+
+**근거** · [빌드 기록](Environment.md#v01-client-build) · [선행 2클라이언트 검증](#v01-two-clients)
+
+| 회차 | UDP 포트 | A X 이동 cm · 자기 / 상대 관찰 | B Y 이동 cm · 자기 / 상대 관찰 | 서버 종료 요청에서 감지까지 초 · A / B | 판정 · 종료 코드 |
+|---|---:|---:|---:|---:|---|
+| 1 | 64297 | 236.159 / 236.160 | 236.159 / 236.160 | 0.124 / 0.160 | 13/13 · 모두 0 |
+| 2 | 61514 | 236.159 / 236.160 | 236.160 / 236.160 | 0.144 / 0.096 | 13/13 · 모두 0 |
+| 3 | 62453 | 236.178 / 236.180 | 236.160 / 236.160 | 0.139 / 0.101 | 13/13 · 모두 0 |
+
+서버의 첫 `Engine exit requested` 이후 두 Client가 각각 `HostClosedConnection`과 `FailureType = ConnectionLost`를 기록했다. 이후 Client의 예약 `quit`을 실행했다. 표의 감지 시간은 서버의 첫 종료 요청 로그에서 Client의 `HostClosedConnection` 로그까지의 차이다. 서버 프로세스의 완전 종료 시각과는 구분한다. 아홉 프로세스의 종료 코드가 모두 0이며 강제 중단과 잔류 프로세스는 없었다.
+
+**근거** · 로컬 실행 `v01-shutdown-20261107-210542`의 `suite-summary.json`, 회차별 `processes.json`, `two-client-result.json`, 서버·Client 로그와 PNG 6장
+
+G1/V01 자동 판정은 통과했다. 사용자 수동 실행 결과는 아래에 별도로 기록했다. 시험 범위는 같은 PC에서 서버의 정상 종료를 감지하는 경우다. 별도 PC, 네트워크 손실·지연, 강제 종료, 최종 UI는 후속 시험에서 확인한다.
+
+<a id="v01-manual-result"></a>
+### 사용자 수동 재현 결과
+
+사용자가 패키지를 실행해 액터 이동 복제를 화면에서 확인했다고 보고했다. 같은 실행의 서버 로그에는 두 접속과 21:25:22 KST의 서버 종료 요청이 남았다. Codex는 양쪽 클라이언트 파일에서 각각 `HostClosedConnection`과 `FailureType = ConnectionLost`를 확인했다. A는 21:25:22.702, B는 21:25:22.671에 `ConnectionLost`를 기록했다. 시험 프로세스는 모두 종료된 상태다. 수동 실행의 종료 코드는 계측하지 않았다.
+
+재현 스크립트가 반환된 뒤에는 PowerShell에 게임 로그가 실시간으로 출력되지 않는다. 종료 감지는 실행별 `a.log`와 `b.log`에서 확인한다. 사용자 화면 관찰과 Codex의 로그 확인은 같은 수동 실행 1회의 근거로 기록한다.
+
+**근거** · 로컬 실행 `v01-shutdown-20261107-210542/manual-20261107-212321`의 `server.log`, `a.log`, `b.log`, `processes.json`
+
+<a id="v01-manual-repro"></a>
+### 사용자 수동 1회 재현
+
+Windows PowerShell에서 아래 명령을 실행한다. 새 PowerShell 프로세스에만 `RemoteSigned`를 적용해 로컬에서 만든 재현 스크립트를 실행한다. 현재 사용자와 시스템의 실행 정책은 그대로 유지된다. 이전 Server·Client 실행 파일을 해시로 대조하고 같은 서버에 접속하는 게임 창 두 개를 띄운다. 서버는 틱 시작 후 약 110초에 예약된 `quit`으로 정상 종료한다. 입력과 관찰은 사용자 담당이다. 수동 실행 스크립트의 PowerShell 구문을 검사했으며 사용자 조작 결과는 별도 기록한다.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File 'C:/CoopRPG/Artifacts/Validation/v01-shutdown-20261107-210542/manual-repro.ps1'
+```
+
+1. 화면의 A·B 두 창에서 캐릭터 두 개가 보이는지 확인한다. 두 창이 겹치면 창을 나란히 놓는다. PowerShell에 표시한 A·B는 각각 왼쪽·오른쪽에 배치하도록 실행한다.
+2. A 창에 포커스를 주고 W를 잠깐 눌렀다 뗀다. A 캐릭터만 이동하며, B 화면에서도 A가 이동하는 것을 확인한다.
+3. B 창에 포커스를 주고 D를 잠깐 눌렀다 뗀다. 이번에는 B 캐릭터만 이동하고 A 화면에도 B 이동이 보여야 한다.
+4. 두 창을 열어 둔 상태에서 예약된 서버 종료를 기다린다. PowerShell이 출력한 `Select-String` 명령을 실행해 `a.log`와 `b.log` 양쪽에서 `HostClosedConnection`과 `FailureType = ConnectionLost`가 나오는지 확인한다. 확인 후 두 창을 닫는다.
+5. 양방향 이동과 종료 감지 여부를 메모한다. 문제가 있으면 PowerShell이 표시한 `manual-*` 로그 폴더와 어느 창에서 무엇이 보였는지 기록한다.
+
+### 에디터에서 먼저 확인하기
+
+`L_Movement`를 열고 Play 옵션에서 `New Editor Window (PIE)`, `Number of Players = 2`, `Net Mode = Play As Client`를 선택한다. 에디터가 전용 서버 역할을 준비하고 플레이 창 두 개를 띄운다. 한 창에서 W를 누르고 다른 창에서 D를 눌러, 각 입력이 자기 Pawn에 적용되고 상대 창에도 이동이 보이는지 확인한다. 빠른 조작 확인에는 한 프로세스에서 실행하는 기본 설정을 사용할 수 있다.
+
+PIE는 반복 개발과 조작 확인에 사용한다. 위 수동 재현은 이미 쿠킹한 Server·Client 실행 파일을 사용해 서버만 먼저 종료했을 때 양쪽에서 연결 종료를 감지하는지 확인하는 절차다. PIE의 전체 Stop은 모든 플레이 세션을 함께 끝낼 수 있으므로 서버 선종료 시험과 구분해 기록한다.
+
+**근거 및 더 읽기** · [V01 판정 기준](#active-tests) · [현재 작업 카드](../Roadmap.md#next-work) · [Microsoft 실행 정책](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-5.1) · [Epic 멀티플레이 PIE 시험](https://dev.epicgames.com/documentation/en-us/unreal-engine/testing-multiplayer-in-unreal-engine)
+
 ## 현재 기록
 
 | 기록 | 종류·상태 | 한계 |
@@ -491,7 +542,7 @@ XY 최종값은 로그 정밀도에서 일치했고 Z 차이는 0.05cm였다. �
 
 | ID | 대상 | 현행 확인 결과 | 현재 결과 |
 |---|---|---|---|
-| V01 | 독립 실행·소유권 | 에디터 없이 Server1/클라이언트2 접속/이동, 자기 Pawn 조작, 서버 종료 감지·전체 재실행 | [부분 확인](#v01-two-clients) · Server1/Client2 접속·자기 Pawn 이동·상대 이동 관찰·정상 종료 통과. 서버 종료 감지·전체 흐름 3회 반복 남음 |
+| V01 | 독립 실행·소유권 | 에디터 없이 Server1/클라이언트2 접속/이동, 자기 Pawn 조작, 서버 종료 감지·전체 재실행 | [자동 검증 통과](#v01-server-shutdown) · 새 프로세스 3회 접속·양방향 이동·서버 선종료 감지·정상 종료. [수동 1회](#v01-manual-result)에서 사용자가 이동 복제를 관찰했고 양쪽 연결 종료 로그를 확인함 |
 | V02 | GAS 단타·권한 | 정상/실제 서버 거절, 비용·쿨다운·대상·거리 검사, 공격당 중복 피해 없음, 양측 최종값 일치 | 미실행 |
 | V03 | 능력 수명 | 거절/명시 취소 후 재실행·자기 임시 상태 정리. 통합 후 사망/Result/재시작과 취소 경합 | 미실행 |
 | V04 | 적 AI·사망 | 서버의 탐지/추격/근접 공격·사망, 사망 뒤 공격 중지·상태1회 확정. 다운/부활은 제외 | 미실행 |

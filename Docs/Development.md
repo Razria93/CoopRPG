@@ -42,6 +42,7 @@ CoopRPG · 기록 시작 2026-11-05 · 현행 학습·개발 진도의 운영 �
 | 11/07 | 입력·이동·캐릭터 역할 | 사용자 요청에 따라 [작업 선택·턴 종료 기록](../AGENTS.md#작업-단위와-범위-통제)과 [커밋 제안 기준](../AGENTS.md#커밋-작성)을 갱신했다. 이후 L00을 첫 이동에 합쳐 맵과 캐릭터를 구현하고 [기본 속도 PIE 시험](Validation/Index.md#l00-movement)을 통과했다. | 사용자가 500→300 cm/s 변경 후 빌드 성공과 플레이 차이를 확인했다. 속도 비교를 `9bdd0a2`에 보존하고, [소스 폴더 정리와 Editor 빌드](Validation/Index.md#source-layout-build)를 마쳤다. [C++ 헤더 배치 기준](../AGENTS.md#cpp-style)을 정하고 함수와 필드를 처음부터 분리하도록 캐릭터 헤더에 적용했다. [선언 순서 대조와 Editor 빌드](Validation/Index.md#header-member-layout)를 통과했다. 이후의 V01 선행 실행은 아래 행에 기록했다. |
 | 11/07 · V01 선행 실행 | 11/08 예정이던 전용 서버·클라이언트 1개 | `.uproject` 복원·소스 엔진 연결 후 Server/Game 빌드·Cook·패키징을 완료했다. AI의 엔진 입력으로 양쪽 X 286.161cm 이동과 300cm/s, 종료 0을 확인했다. [빌드 조건](Validation/Environment.md#v01-source-build) · [실패·재검증·화면](Validation/Index.md#v01-first-client) | 첫 작업 통과. 열린 에디터의 DLL 잠금은 입력 16개 해시를 대조한 격리 빌드로 대응했고, CSV 사용 시험의 종료 오류는 보존했다. 정상 종료 1회 확보, 다음은 [2클라이언트](Roadmap.md#next-work). 사용자 직접 조작은 미실행. |
 | 11/07 · V01 2클라이언트 | Client 타깃 추가와 기존 서버에서 독립 클라이언트 2개의 소유권·이동 관찰 | Client만 빌드(1511.61초)하고 WindowsClient Cook·Stage(62.53초)를 실행했다. 기존 서버에 A·B가 접속해 각각 X 236.161cm, Y 236.161cm 이동했다. 상대도 같은 이동을 관찰했고 세 프로세스는 정상 종료했다. [빌드 근거](Validation/Environment.md#v01-client-build) · [시험 근거](Validation/Index.md#v01-two-clients) | 요청 범위 통과. 기존 Game 패키지 사전 계측은 별도 보존했다. 다음은 [서버 종료 감지와 3회 반복](Roadmap.md#next-work)이다. |
+| 11/07 · V01 종료 감지 | 패키지 전용 서버·두 Client 전체 흐름 3회 | 기존 Server·Client 실행 파일을 재사용해 매회 새 프로세스로 접속·양방향 이동·서버 선종료를 확인했다. 양쪽 Client가 연결 종료를 감지했고 세 프로세스 모두 종료 코드 0이었다. [회차별 실제 결과](Validation/Index.md#v01-server-shutdown) | G1/V01 자동 검증 통과. 사용자 첫 실행은 Windows PowerShell 정책에서 차단됐다. 프로세스 범위 실행 명령을 보완한 뒤 사용자가 이동 복제를 확인했다. 같은 실행에서 Codex가 양쪽 연결 종료 로그를 확인했다. [수동 1회 결과](Validation/Index.md#v01-manual-result) · 다음은 GAS 단타 검증이다. |
 | 11/08 | 서버 프로세스·1클라이언트 | 11/07에 선행 실행했다. [실제 결과](Validation/Index.md#v01-first-client) | 이후 작업은 현행 Roadmap을 따른다. |
 | 11/09 | 2클라이언트·소유권·복제 | 미기록 | 미기록 |
 | 11/10 | G1: 패키지 서버·2클라이언트 | 미기록 | 미기록 |
@@ -336,7 +337,7 @@ T1~T9는 2026-11-05 최초 요청부터 전수 조사 요청까지의9개 메인
 | RQ26 · T6,T9 | 각 턴에서 유의미한 논의를 정리 / 채택·이번 조사 | [T1~T9·12메시지 의미 요약](#discussion-history) | 당시 전수 조사 완료 |
 | RQ27 · T6,T9 | 분석 결과문서 작성 / 채택·이번 수행 | [35개 요구·조사 식별 근거 보존](Planning/Requirements-20261105.json) | 분석 완료 / 실행 별도 |
 | RQ28 · T6,T9 | 현재 구조를 어떻게 보완할지 계획 / 채택 | [파일별 통합·U4 검증·남은 일](#integration-result) | 운영 보완 완료 / 게임 미실행 |
-| RQ29 · T7 | 다음 작업을 구체적으로 제안 / 채택 | [L00→V01 구체 카드·조건](Roadmap.md#next-work) | L00·V01 2클라이언트 이동 확인 / 다음 서버 종료 감지·전체 흐름 반복 |
+| RQ29 · T7 | 다음 작업을 구체적으로 제안 / 채택 | [L00→V01 구체 카드·조건](Roadmap.md#next-work) | L00·V01 자동 반복 및 수동 재현 기록 / 다음 GAS 단타 승인·거절 |
 | RQ30 · T8 | 논의한 내용이 모두 반영되는지 확인 / 채택·완료 의미 분리 | [35개 항목 반영/실행/표현 구분](#requirement-coverage) | 문서 대응 확인 / 미래 성과 별도 |
 | RQ31 · T2,T5,T6,T8 | 무엇을 기록하고 무엇을 보여 줄지 연결 / 채택 | [매체 역할·원자료·최종 확인](#portfolio-output) | 최종 편집 미실행 |
 | RQ32 · T8,T9 | 사용자 요구와 AI 세부 제안을 구분 / 채택·강화 | [사용자 요청·AI M1/T1 채택 근거](Roadmap.md#integration-decision) | 세부 수치 사용자 발언으로 전환 금지 |
