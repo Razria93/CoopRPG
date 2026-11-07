@@ -19,8 +19,9 @@ protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 private:
+    void Move(const FInputActionValue& Value);
+
+private:
     UPROPERTY()
     TObjectPtr<UInputAction> MoveAction;
-
-    void Move(const FInputActionValue& Value);
 };

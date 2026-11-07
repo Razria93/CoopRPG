@@ -395,6 +395,13 @@ PR #1은 정리 전 본문의 전체 SHA 14개·Actions URL 7개·기존 artifac
 
 저장소 검사 첫 실행은 실제 인덱스에 남은 이동 전 경로 네 개를 누락으로 보고했다(5/6). 네 이동만 표시한 임시 인덱스에서 재실행해 6/6을 확인했다. 두 결과는 같은 로컬 폴더의 `repository-final/result.json`과 `repository-relocated/result.json`에 보존했다. 실제 인덱스는 비어 있다.
 
+<a id="header-member-layout"></a>
+### 2026-11-07 · 캐릭터 헤더의 함수·필드 구획
+
+[캐릭터 헤더](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.h)에서 `Move()`를 함수 구획 끝으로 옮기고 `MoveAction`을 별도 `private:` 필드 구획에 두었다. 두 멤버의 접근 수준과 필드의 `UPROPERTY()`를 보존했고, 생성자 → `SetupPlayerInputComponent()` → `Move()`가 [구현](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)과 같은 순서임을 대조했다.
+
+설치형 UE 5.8.4에서 `CoopRPGEditor Win64 Development` 빌드를 실행했다. 캐릭터 소스 컴파일과 Editor 모듈 DLL 링크를 포함한 10개 작업, 32.21초, 종료 코드 0. 확인 범위는 헤더 대조와 Editor 빌드까지다. 로컬 로그는 `Artifacts/Validation/header-blocks-20261107005551056/build.log`에 있다.
+
 ## 현재 기록
 
 | 기록 | 종류·상태 | 한계 |
