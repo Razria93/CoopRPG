@@ -1,6 +1,6 @@
 # 환경·기존 자료 조사
 
-갱신: 2026-11-03. **확인 사실과 미검증 범위**를 기록한다. UE 5.8.4의 구성안은 아래 D01-S 절, 노트북의 전체 환경 관측은 실행 환경 재확인 절을 따른다. 이전 시점의 기록은 보존하며 재확인하지 않은 항목을 현재 사실로 승계하지 않는다.
+갱신: 2026-11-07. **확인 사실과 미검증 범위**를 기록한다. UE 5.8.4의 구성안은 아래 D01-S 절, 노트북의 전체 환경 관측은 실행 환경 재확인 절을 따른다. 이전 시점의 기록은 보존하며 재확인하지 않은 항목을 현재 사실로 승계하지 않는다.
 
 ## 문서 사용 기준
 
@@ -8,6 +8,46 @@
 - **포함·경계:** 실제 관측한 도구·장비·경로·자료 검토 범위, 미검증 사항, 향후 검증된 공통 빌드/실행 명령을 관리한다. 환경 채택 결정은 Roadmap, 개별 게임 시험 결과는 해당 검증 기록에 둔다.
 - **최소 양식:** 조사·검토의 기본 순서는 AGENTS를 따르며 관측 날짜·대상·방법·결과·판정 한계를 기존 표나 짧은 기록으로 남긴다. 후속 선택·작업은 Roadmap의 해당 항목을 참조한다. 공통 명령을 추가할 때는 작업 경로·도구/구성·사전 조건·명령·실행 결과를 함께 남기고 후보와 검증된 명령을 구분한다.
 - **검증:** 이관 기록과 이번 관측, 파일 존재와 실행 성공, 조사한 범위와 미확인 범위를 구분한다. 변동 가능한 정보는 사용 전에 필요한 항목만 재확인하며 문서 편집일을 재측정일로 쓰지 않는다. 읽기 조사 결과 확인을 이유로 설치·빌드를 실행하지 않는다.
+
+<a id="v01-source-build"></a>
+## 2026-11-07 · V01용 소스 엔진 패키지 빌드
+
+소스 UE 5.8.4의 Editor·ShaderCompileWorker·UnrealPak·Server·Game 빌드와 Windows/WindowsServer 쿠킹·스테이징을 완료했다. 엔진 경로·입력 해시·실행 검증 및 실패 이력은 [첫 클라이언트 시험](Index.md#v01-first-client)을 따른다.
+
+| 타깃·단계 | 실제 결과 |
+|---|---|
+| CoopRPGEditor | 종료 0 · 3703.87초 |
+| ShaderCompileWorker | 종료 0 · 146.78초 |
+| UnrealPak | 종료 0 · 155.25초 |
+| CoopRPGServer | 종료 0 · 1369.85초 |
+| CoopRPG | 종료 0 · 1397.72초 |
+| Cook·Stage | 종료 0 · BuildCookRun 170.63초 |
+
+이번 빌드는 SDK 10.0.26100.0·최대 4작업·NoUBA를 각 타깃에 지정했다. 약 60분 점검에서 Editor 2711/3724작업, 디스크 여유 307.19GiB, 가용 가상 메모리 62.01GiB를 확인하고 계속했다. 시작/종료 볼륨 여유는 323.66/264.48GiB였으며 전체 볼륨 관측값이다.
+
+### 검증한 빌드 명령
+
+아래 `Input`은 실행 당일 프로젝트의 `.uproject`·Source·Config·Content를 복사하고 원본과 해시를 대조한 폴더다. 이 복사는 열린 설치형 에디터의 DLL 잠금을 피하기 위한 로컬 빌드 입력이다. 다른 실행에서는 새 근거 폴더와 그날의 입력을 사용한다.
+
+```powershell
+$Run = 'C:/CoopRPG/Artifacts/Validation/v01-20261107-100941'
+$Project = "$Run/Input/CoopRPG.uproject"
+$Build = 'C:/UE/5.8.4/Engine/Build/BatchFiles/Build.bat'
+foreach ($Target in @('CoopRPGEditor', 'ShaderCompileWorker', 'UnrealPak', 'CoopRPGServer', 'CoopRPG')) {
+    & $Build $Target Win64 Development "-Project=$Project" -WaitMutex "-WindowsSDKVersion=10.0.26100.0" -MaxParallelActions=4 -NoUBA "-Log=$Run/$Target-ubt.log"
+    if ($LASTEXITCODE -ne 0) { throw "$Target build failed" }
+}
+& 'C:/UE/5.8.4/Engine/Build/BatchFiles/RunUAT.bat' BuildCookRun "-project=$Project" -nop4 -unattended -utf8output -platform=Win64 -serverplatform=Win64 -clientconfig=Development -serverconfig=Development -server -cook -map=/Game/Maps/L_Movement -stage -pak "-stagingdirectory=$Run/Stage" -skipbuildeditor -nodebuginfo
+if ($LASTEXITCODE -ne 0) { throw 'Cook/Stage failed' }
+```
+
+타깃별 실제 인자·빌드 로그·종료 코드는 근거 폴더의 `*-args.json`, `*-build.log`, `*-exit.txt`에 있다. UAT 실제 인자는 `cook-stage-args.json`, 결과는 `cook-stage.log`에 있다. 소스 Editor 기동 중 발생한 로그는 패키지 Server/Game의 결과와 분리했다.
+
+### 검증한 독립 실행
+
+`Stage/WindowsServer/CoopRPG/Binaries/Win64/CoopRPGServer.exe`와 `Stage/Windows/CoopRPG/Binaries/Win64/CoopRPG.exe`를 별도 프로세스로 실행했다. 서버는 기본 서버 맵으로 기동하고 `-MULTIHOME=127.0.0.1 -port=61437`, 클라이언트는 `127.0.0.1:61437`을 사용했다. 각 로그는 `-ABSLOG`로 분리하고 `-LogCmds="LogNetPlayerMovement VeryVerbose"`로 이동 표본을 수집했다.
+
+이번 실행용 `test-deferred-client.ps1`은 프레임 150/180에 W 입력/해제, 130/220에 화면 저장, 270에 클라이언트 종료를 예약했다. 서버 종료는 프레임 1200이다. `measure-movement.ps1`은 접속·지도·서버/클라이언트 변위·최종 XY 차이 10cm 이내·종료 코드 0을 함께 검사한다. 스크립트는 로컬 근거 폴더에 보존했으며 최종 실행의 전체 인자는 `packaged-attempt-3/processes.json`이 원본이다.
 
 ## CoopRPG 프로젝트 Editor 기동 확인 — 2026-11-03
 

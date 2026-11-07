@@ -16,4 +16,6 @@ CoopRPG · 2026-11-07 · UE 5.8.4 · 첫 이동 구현
 | 캐릭터가 어디로 움직였는가 | 캐릭터와 이동 컴포넌트 | 멀티플레이 시 소유 클라이언트의 예측, 서버의 이동 처리·보정, 다른 클라이언트의 이동 표시는 엔진 경로에 맡긴다. 키·위치를 중복 전송하는 사용자 RPC는 두지 않았다. |
 | 얼마나 빠르게 걸을 수 있는가 | `ACoopRPGCharacter` 생성자가 이동 컴포넌트의 기본 `MaxWalkSpeed`를 설정 | 기준 커밋 `5dd6669`의 값은 **500 cm/s**, 사용자 비교 후 현재 코드 값은 **300 cm/s**다. 같은 빌드의 공통 초기값이다. 이후 달리기·GAS 효과처럼 플레이 중 속도가 달라진다면 서버가 변경 조건을 판정하고 소유 클라이언트 예측과 값을 어떻게 일치시킬지 별도로 설계한다. |
 
-PIE 단일 플레이에서 얻은 근거는 [이동 검증](Validation/Index.md#l00-movement)에 둔다. 독립 서버의 권한 처리와 다른 플레이어에게 보이는 이동은 [V01](Validation/Index.md#active-tests)에서 확인한다. [Epic의 캐릭터 이동 동기화 설명](https://dev.epicgames.com/documentation/en-us/unreal-engine/understanding-networked-movement-in-the-character-movement-component-for-unreal-engine)
+PIE 단일 플레이의 근거는 [이동 검증](Validation/Index.md#l00-movement)에 둔다. 11월 7일 패키지 서버와 첫 클라이언트에서 같은 입력의 이동을 관찰했고 두 프로세스의 XY 최종 좌표가 일치했다. [실행 근거](Validation/Index.md#v01-first-client)
+
+[Server 타깃](../Game/Source/CoopRPGServer.Target.cs)은 같은 게임 모듈을 전용 서버로 빌드하며 기본 서버 맵은 `L_Movement`다. 다음에는 2클라이언트의 자기 Pawn 입력과 상대 이동 관찰을 확인한다. 지연·손실 조건에서의 동작은 V08에서 확인한다. [Epic의 캐릭터 이동 동기화 설명](https://dev.epicgames.com/documentation/en-us/unreal-engine/understanding-networked-movement-in-the-character-movement-component-for-unreal-engine)
