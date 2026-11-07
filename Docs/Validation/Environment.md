@@ -49,6 +49,15 @@ if ($LASTEXITCODE -ne 0) { throw 'Cook/Stage failed' }
 
 이번 실행용 `test-deferred-client.ps1`은 프레임 150/180에 W 입력/해제, 130/220에 화면 저장, 270에 클라이언트 종료를 예약했다. 서버 종료는 프레임 1200이다. `measure-movement.ps1`은 접속·지도·서버/클라이언트 변위·최종 XY 차이 10cm 이내·종료 코드 0을 함께 검사한다. 스크립트는 로컬 근거 폴더에 보존했으며 최종 실행의 전체 인자는 `packaged-attempt-3/processes.json`이 원본이다.
 
+<a id="v01-client-build"></a>
+## 2026-11-07 · Client 전용 빌드와 쿠킹
+
+[Client 타깃](../../Game/Source/CoopRPGClient.Target.cs)은 기존 CoopRPG 모듈을 Win64 Development Client로 빌드한다. SDK 10.0.26100.0·최대 4작업·NoUBA로 Client 타깃만 컴파일했다. 1,016개 작업, 1511.61초, 종료 코드 0이며 빌드 receipt의 타깃은 `Client`다. 기존 격리 입력 `Artifacts/Validation/v01-20261107-100941/Input/`의 16개 파일을 저장소와 해시 대조하고 Client 타깃 한 파일을 추가했다.
+
+빌드 완료 후 `RunUAT.bat BuildCookRun`에 `-client -skipbuild -skipbuildeditor -cook -map=/Game/Maps/L_Movement -stage -pak`을 적용했다. WindowsClient Cook·Stage는 62.53초, 종료 코드 0이다. Editor·보조 도구·Game·Server 빌드와 전체 Clean/Rebuild를 실행하지 않았다. 새 `CoopRPGClient.exe`는 해시가 이전 기록과 같은 서버 실행 파일에 접속했다.
+
+명령 전체와 원시 근거는 로컬 `Artifacts/Validation/v01-client-2p-20261107-190037/`의 `build-info.json`, `Client-build.log`, `cook-stage-args.json`, `cook-stage.log`, `test-inputs.json`에 있다. [2클라이언트 시험](Index.md#v01-two-clients)에서 동작을 확인했다.
+
 ## CoopRPG 프로젝트 Editor 기동 확인 — 2026-11-03
 
 **결론:** 기존 소스 엔진에서 CoopRPG 프로젝트를 열어 **프로젝트 모듈 로드·실제 Editor 작업 화면·정상 종료를 확인**했다. 첫 실행과 진단 재실행 모두 종료 코드 0이다. 엔진 자동 시험 3개·StylusInput 진단은 미해결로 남기며 **오류 없는 엔진·게임 기능·Server/Game·V01 통과를 뜻하지 않는다.**

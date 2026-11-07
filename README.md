@@ -4,7 +4,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 ## 현재 상태
 
-2026-11-07 · **최소 맵 `L_Movement`에서 기본 캐릭터의 WASD 이동과 정지를 로컬 PIE로 확인했다.** 사용자가 `MaxWalkSpeed`를 500에서 300 cm/s로 바꿔 빌드하고 플레이에서 차이를 확인했다. 소스 UE 5.8.4의 패키지 전용 서버와 클라이언트 1개가 접속·이동·정상 종료를 통과했다. 다음은 V01의 2클라이언트 검증이다. [첫 독립 접속 근거](Docs/Validation/Index.md#v01-first-client) [현재 카드](Docs/Roadmap.md#next-work) · [이동 구조](Docs/Architecture.md) · [검증 결과](Docs/Validation/Index.md#l00-movement) · [35개 요구](Docs/Development.md#requirement-coverage)
+2026-11-07 · **최소 맵 `L_Movement`에서 기본 캐릭터의 WASD 이동과 정지를 로컬 PIE로 확인했다.** 사용자가 `MaxWalkSpeed`를 500에서 300 cm/s로 바꿔 빌드하고 플레이에서 차이를 확인했다. 소스 UE 5.8.4의 패키지 전용 서버와 전용 Client 2개로 접속·자기 캐릭터 조작·상대 이동·정상 종료를 확인했다. 다음은 V01의 서버 종료 감지와 전체 흐름 반복이다. [2클라이언트 근거](Docs/Validation/Index.md#v01-two-clients) [현재 카드](Docs/Roadmap.md#next-work) · [이동 구조](Docs/Architecture.md) · [검증 결과](Docs/Validation/Index.md#l00-movement) · [35개 요구](Docs/Development.md#requirement-coverage)
 
 아래 날짜별 내용은 이전 실행 이력이다. 과거4주 목표·미실행 표시는 당시 시점으로 읽고 현재 납기는 Roadmap을 따른다.
 

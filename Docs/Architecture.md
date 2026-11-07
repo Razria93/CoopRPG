@@ -18,4 +18,4 @@ CoopRPG · 2026-11-07 · UE 5.8.4 · 첫 이동 구현
 
 PIE 단일 플레이의 근거는 [이동 검증](Validation/Index.md#l00-movement)에 둔다. 11월 7일 패키지 서버와 첫 클라이언트에서 같은 입력의 이동을 관찰했고 두 프로세스의 XY 최종 좌표가 일치했다. [실행 근거](Validation/Index.md#v01-first-client)
 
-[Server 타깃](../Game/Source/CoopRPGServer.Target.cs)은 같은 게임 모듈을 전용 서버로 빌드하며 기본 서버 맵은 `L_Movement`다. 다음에는 2클라이언트의 자기 Pawn 입력과 상대 이동 관찰을 확인한다. 지연·손실 조건에서의 동작은 V08에서 확인한다. [Epic의 캐릭터 이동 동기화 설명](https://dev.epicgames.com/documentation/en-us/unreal-engine/understanding-networked-movement-in-the-character-movement-component-for-unreal-engine)
+[Server 타깃](../Game/Source/CoopRPGServer.Target.cs)은 같은 게임 모듈을 전용 서버로 빌드하며 기본 서버 맵은 `L_Movement`다. [Client 타깃](../Game/Source/CoopRPGClient.Target.cs)은 같은 모듈을 접속용 실행 파일로 빌드한다. 독립 클라이언트 2개의 자기 Pawn 입력과 상대 이동을 확인했다. [시험 근거](Validation/Index.md#v01-two-clients) 지연·손실 조건에서의 동작은 V08에서 확인한다. [Epic의 캐릭터 이동 동기화 설명](https://dev.epicgames.com/documentation/en-us/unreal-engine/understanding-networked-movement-in-the-character-movement-component-for-unreal-engine)
