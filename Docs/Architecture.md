@@ -39,18 +39,15 @@ PIE 단일 플레이의 근거는 [이동 검증](Validation/Index.md#l00-moveme
 
 **근거** · [Epic 네트워킹 개요](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-overview-for-unreal-engine) · [Epic RPC와 소유 연결](https://dev.epicgames.com/documentation/en-us/unreal-engine/remote-procedure-calls-in-unreal-engine)
 
-### 상자 상호작용 설계 예시
+<a id="상자-상호작용-설계-예시"></a>
 
-1. 클라이언트는 자기 소유의 네트워크 객체를 통해 상자 대상을 지정해 상호작용을 요청한다. 라운드 식별값을 받는다면 서버의 현재 라운드와 대조하는 용도로만 쓴다.
-2. 서버는 요청자가 현재 라운드에 참여 중인 생존 플레이어인지, 진행 상태가 `Playing`인지, 서버 기준 위치에서 유효한 대상과 거리인지, 상자가 이미 소진됐는지 확인한다.
-3. 서버가 상자 소비와 공동 수집량 1 증가를 확정한다. 같은 상자에 두 요청이 들어와도 첫 유효한 처리만 성공하도록 소비 여부와 지급을 한 처리 흐름으로 관리한다.
-4. 변경된 상자 상태와 공동 수집량을 필요한 클라이언트에 복제한다. 거절된 요청은 수집량과 소비 상태를 바꾸지 않는다.
+### 공용 상자와 적 전리품 처리 설계
 
-   **근거** · [상자와 라운드 규칙](Project.md#game-rules)
+두 클라이언트는 같은 상자의 내용물을 동시에 볼 수 있다. 각 클라이언트는 자기 소유의 네트워크 객체를 통해 대상 상자와 아이템을 지정해 요청한다. 서버는 현재 라운드, 요청자의 생존·거리, 대상과 남은 수량을 검사한 뒤, 처음 처리한 유효 요청에 대해 아이템 소비와 개인 지급을 한 처리 흐름으로 확정한다. 거절된 요청은 상자 잔량과 개인 소지량을 바꾸지 않는다. 상자에 남은 아이템은 양쪽에 반영하고, 지급 결과는 수령자의 소지품에 반영한다.
 
-구현 후에는 두 클라이언트로 정상 획득, 거리 밖·잘못된 대상 거절, 같은 상자의 동시·반복 요청, 이전 라운드 요청을 확인한다. 서버의 최종 수집량과 두 화면의 표시가 일치하는지 비교한다. 첫 GAS 공격에서도 입력·예측 표현과 서버의 피해·비용 확정을 구분하고, 승인·거절·취소·재실행을 별도로 확인한다.
+적의 생존→사망 전환은 서버에서 한 번 확정한다. 그 전환에서 생성한 전리품은 공용 상자와 같은 서버 검증·소진 처리 흐름을 사용한다. 획득을 확정하면 팀 전리품 수량을 올려 양쪽 클라이언트에 복제한다. 시험에서는 사망, 전리품 생성, 팀 지급이 각각 한 번인지 확인한다.
 
-**근거** · [V02~V03·V04 시험 기준](Validation/Index.md#active-tests)
+**근거** · [상자와 라운드 규칙](Project.md#game-rules) · [V04~V06 시험 기준](Validation/Index.md#active-tests)
 
 ### 빌드에서 제외하는 코드와 실행 중 권한
 
@@ -65,5 +62,5 @@ CoopRPG는 현재 하나의 게임 모듈을 공유한다. 필요할 때 빌드 
 ## 근거 및 더 읽기
 
 - **현재 구현 근거** — [이동 코드](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)와 [2클라이언트 시험](Validation/Index.md#v01-two-clients)은 입력·Pawn 이동과 상대 관찰의 확인 범위를 보여준다.
-- **설계 근거** — [CoopRPG 게임 규칙](Project.md#game-rules)은 상자당 1개, 공동 수집, 중복 지급 금지의 원본이다. [시험 기준](Validation/Index.md#active-tests)은 구현 후 판정에 사용한다.
+- **설계 근거** — [CoopRPG 게임 규칙](Project.md#game-rules)은 동시 열람, 개인 지급 경합, 적 전리품 팀 지급의 원본이다. [시험 기준](Validation/Index.md#active-tests)은 구현 후 판정에 사용한다.
 - **더 읽기** — [Epic RPC 문서](https://dev.epicgames.com/documentation/en-us/unreal-engine/remote-procedure-calls-in-unreal-engine)는 소유 연결에 따른 호출 경로, [네트워킹 개요](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-overview-for-unreal-engine)는 권한·복제·빌드 조건, [캐릭터 이동 동기화](https://dev.epicgames.com/documentation/en-us/unreal-engine/understanding-networked-movement-in-the-character-movement-component-for-unreal-engine)는 현재 사용 중인 엔진 이동 경로를 설명한다.
