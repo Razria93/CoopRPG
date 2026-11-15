@@ -6,6 +6,8 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 2026-11-07 · **최소 맵 `L_Movement`에서 기본 캐릭터의 WASD 이동과 정지를 로컬 PIE로 확인했다.** 사용자가 `MaxWalkSpeed`를 500에서 300 cm/s로 바꿔 빌드하고 플레이에서 차이를 확인했다. 소스 UE 5.8.4의 패키지 전용 서버와 전용 Client 2개로 접속·자기 캐릭터 조작·상대 이동·정상 종료를 확인했다. 서버 선종료 감지를 포함한 전체 흐름은 자동 검증 3회를 통과했다. 수동 1회에서도 사용자 이동 복제 관찰과 양쪽 종료 로그를 확인했다. [수동 결과](Docs/Validation/Index.md#v01-manual-result) [V01 반복 근거](Docs/Validation/Index.md#v01-server-shutdown) [현재 카드](Docs/Roadmap.md#next-work) · [이동 구조](Docs/Architecture.md) · [검증 결과](Docs/Validation/Index.md#l00-movement) · [35개 요구](Docs/Development.md#requirement-coverage)
 
+2026-11-14 · `L_Movement`에 **GAS 고정 표적 단타**를 추가했다. 마우스 왼쪽 버튼으로 요청하고 서버가 사거리·비용·피해를 판정한다. [구현 흐름](Docs/Architecture.md#gas-basic-attack) · [두 클라이언트 시험](Docs/Validation/Index.md#v02-basic-attack)
+
 아래 날짜별 내용은 이전 실행 이력이다. 과거4주 목표·미실행 표시는 당시 시점으로 읽고 현재 납기는 Roadmap을 따른다.
 
 2026-10-30: 문서 6개·Git 관리 파일 2개·모델 추천 스킬 사본 1개와 커밋 3개를 [공개 저장소](https://github.com/Razria93/CoopRPG)의 `main`에 처음 공유했다. 이후 데스크탑 저장소 이관·기준 커밋 검증과 UE 5.8.4·기존 VS 2022 도구 조합 채택에 이어 공식 소스·Setup 의존성 준비와 기존 사전 구성 확인을 마쳤으며 당시 게임 프로젝트·게임 구현·게임 빌드·게임 시험은 모두 미착수였다. 4주는 검증 전 목표이며 최신 작업 상태는 [Roadmap](Docs/Roadmap.md)을 따른다.

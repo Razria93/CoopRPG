@@ -539,6 +539,165 @@ PIE에서는 A 창에 W, B 창에 D를 차례로 입력해 각각 자기 Pawn만
 
 **근거 및 더 읽기** · [V01 판정 기준](#active-tests) · [현재 작업 카드](../Roadmap.md#next-work) · [Microsoft 실행 정책](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies?view=powershell-5.1) · [Epic 멀티플레이 PIE 시험](https://dev.epicgames.com/documentation/en-us/unreal-engine/play-in-editor-multiplayer-options-in-unreal-engine)
 
+<a id="v02-basic-attack"></a>
+
+## 2026-11-14 · V02 고정 표적 GAS 단타
+
+**첫 작업의 판정 기준** · `L_Movement`의 고정 표적 HP 100, 공격자별 스태미나 100, 수평 사거리 250 cm. A와 B가 시작 위치에서 왼쪽 마우스를 한 번씩 누른다. 서버가 각 요청을 `OutOfRange`로 기록하고 HP·스태미나가 100이어야 한다. 이후 A와 B가 차례로 전진해 한 번씩 입력하면 서버가 피해·비용 각 10을 적용하고 양쪽에 표적 HP 100→90→80이 복제돼야 한다. 소유 클라이언트에는 자기 스태미나 100→90만 관찰돼야 한다.
+
+**시험 방법** · 로컬 루프백 전용 서버에 별도 클라이언트 A·B를 접속시켰다. 각 클라이언트에서 Enhanced Input의 `Input.+key`와 `Input.-key`로 실제 왼쪽 마우스·W 입력 경로를 실행했다. 서버 로그에서 수평 거리·거절 이유·피해·비용을 읽고 각 클라이언트의 복제 로그를 대조했다. 실행마다 서로 다른 세 PID, 서버의 두 접속 수락, 세 실행의 정상 종료를 검사한다. 런타임 액터 이름은 프로세스마다 다를 수 있어, 서버 승인과 소유 클라이언트 스태미나 변경의 시각을 3초 범위에서 대응시켰다. 승인 시각을 기준으로 두 HP 복제 값도 각각 3초 안에 일치하는지 점검한다.
+
+### 빌드와 패키징
+
+`C:/UE/5.8.4`의 소스 엔진과 Windows SDK `10.0.26100.0`에서 `CoopRPGEditor`, `CoopRPGServer`, `CoopRPGClient`의 Win64 Development를 빌드했다. 기준 커밋은 `3b7d807`이며 시험에는 워크트리의 단타 구현을 사용했다. 실행 ID `v02-basic-attack-20261114-172032`의 `source-inputs.json`에 엔진 리비전과 변경된 게임 파일 14개의 해시를 남겼다.
+
+| 작업 | 명령 실행 경과 | 종료 코드 |
+|---|---:|---:|
+| Editor 최종 증분 빌드 | 12.49초 | 0 |
+| Server 빌드 · 1,005작업 | 1,493.35초 | 0 |
+| Client 빌드 · 1,025작업 | 1,476.96초 | 0 |
+| WindowsServer Cook·Stage·Pak | 64.31초 | 0 |
+| WindowsClient Cook·Stage·Pak | 29.62초 | 0 |
+
+Cook·Stage·Pak은 `BuildCookRun -skipbuild -skipbuildeditor -cook -map=/Game/Maps/L_Movement -stage -pak`으로 실행했다. Server에는 `-server -noclient -serverplatform=Win64`, Client에는 `-client`를 지정했다. 각 타깃 로그와 `Stage-Server.log`, `Stage-Client.log`를 실행 폴더에 보관했다. 두 패키징 로그에 호스트 이름 조회 경고가 있었고 종료 코드는 모두 0이었다.
+
+Editor 빌드 초기에 Enhanced Input이 기존 키 바인딩 사용을 컴파일 오류로 검출했다. 왼쪽 마우스를 Enhanced Input 액션과 매핑으로 연결하고, 후속 링커 오류에서 누락된 `InputCore` 의존성을 추가한 뒤 빌드했다. 실패 로그 세 개와 최종 성공 로그를 함께 보관했다.
+
+### Editor 바이너리 사전 검증
+
+`CoopRPGEditor Win64 Development` 빌드 후 `UnrealEditor.exe -server` 한 개와 `-game` 두 개로 첫 작업을 검증했다. A는 351.58 cm에서 거절, 167.18 cm에서 승인됐다. B는 351.75 cm에서 거절, 167.54 cm에서 승인됐다. 두 거절 시 HP·스태미나가 100이었고, 승인 후 두 클라이언트에서 표적 HP 100→90→80과 각자 스태미나 100→90을 관찰했다. 세 프로세스 모두 종료 코드 0을 반환했다.
+
+첫 기동에서 SDK 확인 직후 서버 수신 포트 대기가 만료됐다. 해당 시험 프로세스에만 `UE_SKIP_UBT_SDK_SETUP=1`을 적용해 접속까지 진행했다. 다음 실행은 `exec` 파일 검색 경로 문제로 입력을 실행하지 못했다. 매크로를 `Binaries`에 배치한 뒤 실제 입력을 재실행해 통과했다. 실행 ID `v02-basic-attack-20261114-172032`의 `editor-process-smoke`, `editor-process-skip-sdk-smoke`, `editor-process-smoke-retry`에 각각 로그를 보관했다. 사전 검증의 판정 원본은 마지막 폴더의 `combat-result.json`이다.
+
+### 독립 패키지 결과
+
+전용 `CoopRPGServer.exe`에 `CoopRPGClient.exe` 두 개를 접속시켜 같은 시험을 한 번 수행했다. 두 클라이언트가 입력한 요청이 서버에 네 번 도달했다. 별도 PID의 세 프로세스가 90.78초의 실행에서 모두 정상 종료했다.
+
+| 요청자 | 시작 위치의 서버 거절 | 접근 후 서버 승인 | 소유자 스태미나 |
+|---|---|---|---|
+| A | 351.75 cm · `OutOfRange` | 167.54 cm · 표적 HP 100→90 | 100→90 |
+| B | 351.58 cm · `OutOfRange` | 167.18 cm · 표적 HP 90→80 | 100→90 |
+
+두 거절 시 표적 HP와 해당 요청자의 스태미나는 100이었다. 이후 각 소유자의 승인도 스태미나 100에서 시작했다. 서버 승인 뒤 두 클라이언트에서 표적 HP가 100→90→80으로 일치했고, 승인 시각부터 HP 복제 로그까지 최장 61 ms였다. 이 수치는 같은 호스트에서 본 로그 시각 차이다. 이 시험은 V02의 첫 승인·거리 거절 경로를 통과했다. T1의 요청자별 반복 수, 비용 부족·쿨다운·무효 대상·중복 접촉, V03 취소는 남아 있다.
+
+**근거** · 실행 ID `v02-basic-attack-20261114-172032`의 `packaged-two-client/`에 `server.log`, `a.log`, `b.log`, `processes.json`, 자동 판정 `combat-result.json`을 보관했다. 같은 실행 폴더의 `packaged-binary-hashes.json`에서 두 실행 파일을 식별한다.
+
+**근거 및 더 읽기** · [서버 공격 흐름](../Architecture.md#gas-basic-attack) · [정상·거절 반복과 상태 수렴 기준](#test-conditions)
+
+<a id="v02-attack-input-regression"></a>
+
+## 2026-11-15 · V02 공격 입력 통합 회귀
+
+**판정** · 로컬 루프백의 독립 전용 서버 1개와 Client 2개에서 이동, 클릭당 GAS 활성화 요청 1회, 서버의 거리 거절과 승인을 확인했다. Server·Client Win64 Development 증분 빌드에 각각 5작업(34.19초)과 6작업(34.11초)이 들었다. 06:18:08~06:19:38 KST에 세 프로세스를 실행했고 각각 종료 코드 0을 확인했다.
+
+| 요청자 | 두 클라이언트에서 본 +X 이동 | 왼쪽 클릭과 GAS 요청 | 거리 250 cm 기준 서버 판정 |
+|---|---:|---|---|
+| A | +186.16 cm | 2회 클릭 → 요청 2회 | 351.75 cm 거절, 167.54 cm 승인 |
+| B | +186.16 cm | 2회 클릭 → 요청 2회 | 351.58 cm 거절, 167.18 cm 승인 |
+
+각 Client에서 W를 번갈아 넣고 입력 전·A 이동 후·B 이동 후의 두 Pawn 좌표를 대조했다. 입력한 쪽만 이동했고 같은 Pawn의 양측 X 좌표 차이는 최대 0.001 cm 미만이었다. 왼쪽 버튼은 클릭마다 18 또는 21프레임 동안 눌렀다. 각 누름 직후 클라이언트의 `CallServerTryActivateAbility`가 한 번씩 찍혔고 서버 판정은 총 4건이었다. 두 거절의 표적 HP·요청자 스태미나는 100 그대로였다. 두 승인 뒤 표적 HP는 양쪽에서 100→90→80, 각 요청자의 스태미나는 100→90이었다.
+
+Editor 전체 타깃 빌드는 SDK 전환으로 3,730개 작업이 예약돼 중단했다. 기존 SDK로 돌아간 시도도 엔진 의존 작업 3,743개가 예약돼 중단했다. 두 시도의 엔진 중간물 정리 이후 Editor 재빌드는 대기 중이다. 패키지 Cook에는 기존 Editor를 사용했고, 실행 시험에는 C++ 변경을 새로 빌드한 Server·Client를 사용했다.
+
+추가 Cook 경로 없이 표준 명령으로 Client를 다시 패키징했다. 06:21:03~06:22:34 KST에 같은 전용 서버와 표준 Client 2개로 재실행해 위의 이동·클릭당 요청 1회·서버 판정·복제 조건을 다시 통과했다.
+
+이번 범위는 동일 호스트에서 Enhanced Input의 키 주입으로 재현한 고정 표적 시험이다. 무기 장착, 비용 부족·쿨다운·무효 대상·네트워크 에뮬레이션과 T1 반복은 이후 시험한다.
+
+**근거** · [공격 액션](../../Game/Content/Input/IA_Attack.uasset) · [공통 입력 매핑](../../Game/Content/Input/IMC_Player.uasset) · [입력 바인딩과 ASC 호출](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp). 실행 ID `v02-attack-input-20261115`의 `packaged-two-client/`에 서버·Client 로그, `processes.json`, `combat-result.json`, `input-regression-result.json`을 보관했다. 표준 Client의 같은 근거는 `packaged-standard-client/`에 있다. 실행 폴더의 빌드·패키징 로그와 `test-input-hashes.json`·`standard-package-hashes.json`에서 대응 산출물을 확인할 수 있다.
+
+<a id="v02-gas-source-layout"></a>
+
+## 2026-11-15 · V02 GAS 소스 정리 후 Editor 회귀
+
+**판정** · 소스 엔진 UE 5.8.4의 CoopRPGEditor Win64 Development에서 CoopRPG 모듈과 필요한 엔진 의존 산출물을 빌드했다. SDK 10.0.26100.0, 최대 4개 병렬, NoUBA, -Module=CoopRPG 조건으로 140개 작업을 351.03초에 마쳤고 종료 코드 0을 확인했다. 파일 여섯 개를 이동하고 관련 include를 수정했다. 이동 전과 문자열 치환 후의 바이트를 대조해 경로 외 코드 변경이 없음을 확인했다.
+
+첫 호출은 SDK 인수가 PowerShell에서 분리되어 타깃 규칙 탐색 단계에서 실패했다. 인수를 수정한 뒤 엔진 변경 제한을 둔 전체 Editor 및 CoopRPG 모듈 빌드가 각각 엔진 의존 산출물을 요구해 종료 코드 5를 반환했다. 성공한 빌드는 게임 모듈과 그 의존성까지를 대상으로 했다.
+
+새 DLL의 Build ID가 엔진 매니페스트와 일치함을 확인한 뒤 같은 PC에서 UnrealEditor 실행 파일을 전용 서버 모드 1개와 게임 모드 2개로 기동했다. 기존 입력 매크로로 두 클라이언트가 시작 위치에서 한 번씩 공격하고, 전진한 뒤 한 번씩 다시 공격했다. 세 프로세스가 모두 정상 종료했고 실행은 130.7초였다.
+
+| 요청자 | 사거리 밖 거절 | 사거리 안 승인 | 소유 클라이언트 스태미나 |
+|---|---:|---:|---:|
+| A | 351.58 cm | 164.05 cm | 100→90 |
+| B | 351.75 cm | 167.54 cm | 100→90 |
+
+거리 거절 두 건에서 서버 체력과 스태미나는 100 그대로였다. 승인 두 건에서 본 표적 체력은 양쪽 클라이언트에서 100→90→80이었다. 이 기록은 이동된 C++를 빌드한 Editor 바이너리의 루프백 확인이며, 독립 패키지 재빌드·장비 간 접속은 실행하지 않았다.
+
+**근거** · [이동한 GA](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [이동한 GE](../../Game/Source/CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.cpp) · [이동한 AttributeSet](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp). 로컬 실행 v02-gas-layout-20261115-111811의 editor-module-with-dependencies.log, built-binaries.json, editor-two-client/combat-result.json 및 세 프로세스 로그에 기록했다.
+
+<a id="v02-log-context"></a>
+
+## 2026-11-15 · V02 로그의 서버·클라이언트 구분 확인
+
+공격 입력은 LogCoopRPGInput의 Verbose로 기록하고, 입력·서버 판정·속성 복제 끝에 NetMode, PIE, Func를 표기했다. PIE 번호는 로그를 찍은 액터의 월드에서 읽는다. 기존 자동 판정기가 읽는 이벤트와 필드 순서는 유지했다.
+
+열려 있던 원본 Editor 때문에 원본 DLL 링크가 LNK1104로 실패했다. Source·Config·입력·맵 등 28개 파일을 해시 대조한 검증 복사본에서 CoopRPGEditor 모듈 12개 작업을 17.19초에 빌드했다. 처음에는 모듈 단독 빌드가 새 디렉터리에 모듈 매니페스트를 만들지 않아 실행을 시작하지 못했다. 현재 엔진과 Build ID·모듈명이 일치하는 매니페스트를 복사본에 연결해 재검증했다. PIE 설정은 검증 복사본의 Saved에 적용했다.
+
+| 실행 | 확인 결과 |
+|---|---|
+| 단일 프로세스 PIE | 데디케이티드 서버 PIE=0, 클라이언트 PIE=1·2. Enhanced Input 키 주입 4번이 각각 해당 Client의 Verbose 입력과 서버 판정 한 줄로 이어졌다. 거리 밖 거절 2건에는 속성 변경이 없었다. 승인마다 두 Client의 OnRep_Health와 입력한 쪽의 OnRep_Stamina가 남았다. |
+| Editor 전용 서버·Game Client 별도 프로세스 | 기존 전투 자동 판정과 이동·입력 자동 판정이 모두 통과했다. 클릭 4회에 GAS 서버 호출 4회, 승인·거절 각 2회, 표적 체력 100→90→80, 각 소유자 스태미나 100→90을 확인했다. PIE 밖이므로 각 프로세스의 PIE 번호는 -1이다. |
+
+**근거** · [로그 문맥 구현](../../Game/Source/CoopRPG/Debug/CoopRPGLogContext.cpp) · [수동 검증 방법](#v02-manual-attack-log). 로컬 실행 v02-log-context-20261115-120233의 isolated-build.log, PIE-config.log, pie-result.json, editor-two-client-retry/combat-result.json 및 input-regression-result.json에 보존했다.
+
+<a id="v02-log-context-original-editor"></a>
+
+### 원본 Editor 재빌드 및 기동
+
+사용자가 저장 후 닫은 원본 CoopRPG 프로젝트에서 Editor 모듈을 증분 빌드했다. DLL 링크 1개 작업이 7.96초에 완료됐고 종료 코드 0이 나왔다. 새 DLL 해시가 직전 DLL과 다르고 프로젝트 모듈 매니페스트의 Build ID가 엔진과 일치함을 확인했다. 원본 프로젝트의 대화형 Editor를 열어 새 DLL 로드와 L_Movement 로드를 확인했다. 실행 인수에서 공격 입력의 Verbose 출력을 켰다. 두 클라이언트 수동 플레이는 사용자 확인 범위다.
+
+**근거** · [수동 검증 방법](#v02-manual-attack-log). 로컬 실행 v02-original-editor-20261115-122011의 editor-build.json, editor-startup.json 및 editor-startup.log에 보존했다.
+
+<a id="v02-manual-attack-result"></a>
+
+### 사용자 수동 검증 · L_Movement
+
+사용자가 원본 Editor의 PIE에서 전용 서버 1개와 클라이언트 2개를 실행했다. 두 클라이언트의 접속과 종료를 확인했고, `AttackInput` 4건이 각각 서버 판정 1건으로 이어졌다. 다음 표는 사용자 제공 Output Log의 순서다.
+
+| 입력 월드 | 서버 판정 (PIE=0) | 속성 복제 |
+|---|---|---|
+| Client PIE=1 | 351.75 cm · 사거리 밖 거절 | 체력·스태미나 100 유지 |
+| Client PIE=2 | 351.58 cm · 사거리 밖 거절 | 체력·스태미나 100 유지 |
+| Client PIE=2 | 87.50 cm · 승인 | 표적 체력 100→90이 두 창에 복제, 스태미나 100→90은 PIE=2에 복제 |
+| Client PIE=1 | 74.12 cm · 승인 | 표적 체력 90→80이 두 창에 복제, 스태미나 100→90은 PIE=1에 복제 |
+
+거리 제한은 250 cm였다. 두 입력 로그에 같은 액터 이름이 찍혔으므로 입력 창은 PIE 번호로 구분했다. 이번 수동 확인은 입력·서버 판정·OnRep까지다. GAS RPC 자체의 호출 횟수는 [기존 자동 검증](#v02-log-context)에 근거한다.
+
+**근거** · 사용자 제공 PIE Output Log (2026-11-15). 로컬 실행 `v02-manual-attack-20261115-142318`의 `attack-log.txt`에 원문 줄 번호와 전투 로그를 보존했다.
+
+<a id="v02-manual-attack-log"></a>
+
+## V02 단타 수동 검증과 로그 필터
+
+원본 Editor가 변경 전에 열려 있었다면 작업을 저장하고 창을 닫은 뒤, `CoopRPGEditor Win64 Development`를 빌드하고 다시 연다. 새 빌드에서 `L_Movement`를 열고 Play 메뉴에서 `New Editor Window (PIE)`, 플레이어 수 `2`, `Play as Client`를 선택한다. 단일 프로세스 실행은 켜고 개별 서버 실행은 끈다. [PIE 설정 상세](#에디터에서-먼저-확인하기)를 참고한다.
+
+1. 에디터의 **Output Log**를 열고 입력란에 아래 명령을 한 줄씩 실행한다. 첫 명령은 `AttackInput`을 표시한다. 둘째 명령은 클릭이 GAS의 서버 활성화 호출까지 갔는지 확인할 때 켠다.
+
+   ```text
+   Log LogCoopRPGInput Verbose
+   AbilitySystem.ServerRPCBatching.Log 1
+   ```
+
+2. Output Log의 **Filters**에서 `LogCoopRPGInput`, `LogCoopRPGMelee`, `LogCoopRPGCombatAttributes`를 선택하고 메시지 표시를 켠다. 서버 호출도 볼 때는 `LogAbilitySystem`을 추가한다. 카테고리가 목록에 아직 없으면 해당 로그를 한 번 발생시킨 뒤 선택한다. 검색창에는 `AttackInput`, `AttackRejected`, `AttackApproved`, `HealthReplicated`, `StaminaReplicated` 또는 `PIE=1`처럼 보고 싶은 항목을 넣는다.
+
+3. A·B 모두 시작 위치에서 왼쪽 버튼을 한 번씩 누른다. 그다음 A·B가 차례로 `W`로 짧게 전진한 뒤 한 번씩 누른다. 클릭마다 `AttackInput`과 뒤이은 서버 판정 한 줄을 확인하고, 승인 후에는 복제를 확인한 다음 다른 창으로 넘어간다.
+
+   | 확인 지점 | 찾을 로그 |
+   |---|---|
+   | 입력 창 | `AttackInput` · `NetMode=Client` · 해당 창의 `PIE` · `Func=ACoopRPGCharacter::Attack` |
+   | 전용 서버 | `AttackRejected`의 `OutOfRange` 또는 `AttackApproved` · `NetMode=DedicatedServer` · `Func=UCoopRPGMeleeAbility::ActivateAbility` |
+   | 복제 | 승인마다 `HealthReplicated`는 서로 다른 두 Client PIE 번호에 한 줄씩, `StaminaReplicated`는 공격한 Client PIE 번호에 한 줄만 |
+
+   거절 두 건에서는 HP·스태미나가 유지돼야 한다. 승인 두 건에서는 양쪽 표적 체력 `100→90→80`, 각 공격자의 스태미나 `100→90`을 확인한다. `Before=100 After=100` 같은 초기값 통지는 변화 수에서 제외한다. `PIE`는 월드 인스턴스 번호다. PIE 밖에서 별도 프로세스로 실행하면 `PIE=-1`이므로 프로세스별 로그 파일로 구분한다.
+
+4. 재현을 마치면 아래 명령으로 상세 출력을 원래 수준으로 돌린다.
+
+   ```text
+   Log LogCoopRPGInput Log
+   AbilitySystem.ServerRPCBatching.Log 0
+   ```
+
+**근거** · [V02 판정 기준](#v02-basic-attack) · [입력·서버 판정·복제 로그 검증](#v02-log-context) · [Epic 로깅과 콘솔 명령](https://dev.epicgames.com/documentation/unreal-engine/logging-in-unreal-engine)
+
 ## 현재 기록
 
 | 기록 | 종류·상태 | 한계 |
@@ -564,7 +723,7 @@ PIE에서는 A 창에 W, B 창에 D를 차례로 입력해 각각 자기 Pawn만
 | 초기 문서 검수 | 2026-10-29 통과: 새 Markdown 6개 상대 파일 링크 검사에서 누락 0건. 요구/제안/미결정/사실, 사용자 진술의 구분과 게임 미착수 상태를 내용 검토. `Get-FileHash` 작성 전후 비교로 임시 문서 3개 SHA-256 일치 확인 | 외부 웹 링크 재접속·환경 재측정·게임 시험은 미실시 |
 | 후속 내용 검토 | 2026-10-29: 6문서 대조 후 4개 수정. 목적별 근거 누락, 작은 작업의 기록 부담, 제안 채택 주체·단계별 시험·일정 기점의 모호함 보완. 상대 파일 링크 누락 0건, 추가한 상태 구분 앵커와 제목 대응 확인, 임시 문서 3개 해시 불변 | 문서 범위의 검토 완료. 게임 설계·일정의 실행 가능성이나 채용 효과 검증은 아님 |
 | 문서 사용 기준 정비 | 2026-10-29: 기존 6문서 수정. 열람/수정 시점·포함 경계·최소 양식·검증 기준을 대조하고 PowerShell로 상대 링크 30개·사용 앵커·각 문서의 기준 항목 확인, 오류 0건. 새 문서 생성·파일 삭제 없음 | 현재 `Docs/X` 경로가 없어 해시 비교 불가, 이동·삭제 경위 미확인. 외부 링크 재접속·환경 도구 재측정·게임 시험 미실시 |
-| 게임 시험 전체 | 미실행 | 프로젝트·빌드 없음 |
+| [게임 시험](#active-tests) | V01 통과 · V02 첫 단타 패키지 확인 | 단계별 현재 판정과 각 결과의 확인 범위는 연결한 시험을 따른다. |
 
 최근 문서 검수(2026-10-29): Roadmap의 D01~D12를 사실 3항목·선택 12항목·가설 6항목으로 분리하고 관련 6문서의 용어·참조를 맞췄다. PowerShell로 21행의 담당/시점/방법 필드, ID 중복·누락·참조, 상대 링크 31개와 사용 앵커를 검사해 오류 0건을 확인했다. 내용 검토에서는 기존 확인 사실 보존, 사용자 결정과 AI 기술 판단 구분, 실행 허용 범위 유지를 확인했다. 새 문서·설치·게임 구현·빌드·게임 시험은 없으며 각 항목 자체의 해결을 뜻하지 않는다. `Docs/X`는 여전히 없어 보존 해시 비교는 불가하다.
 
@@ -577,7 +736,7 @@ PIE에서는 A 창에 W, B 창에 D를 차례로 입력해 각각 자기 Pawn만
 | ID | 대상 | 현행 확인 결과 | 현재 결과 |
 |---|---|---|---|
 | V01 | 독립 실행·소유권 | 에디터 없이 Server1/클라이언트2 접속/이동, 자기 Pawn 조작, 서버 종료 감지·전체 재실행 | [자동 검증 통과](#v01-server-shutdown) · 새 프로세스 3회 접속·양방향 이동·서버 선종료 감지·정상 종료. [수동 1회](#v01-manual-result)에서 사용자가 이동 복제를 관찰했고 양쪽 연결 종료 로그를 확인함 |
-| V02 | GAS 단타·권한 | 정상/실제 서버 거절, 비용·쿨다운·대상·거리 검사, 공격당 중복 피해 없음, 양측 최종값 일치 | 미실행 |
+| V02 | GAS 단타·권한 | 정상/실제 서버 거절, 비용·쿨다운·대상·거리 검사, 공격당 중복 피해 없음, 양측 최종값 일치 | [두 클라이언트의 승인·거리 거절](#v02-basic-attack) · [공격 입력 통합 회귀](#v02-attack-input-regression) · V02 부분 통과, 세부 경계와 T1 반복 대기 |
 | V03 | 능력 수명 | 거절/명시 취소 후 재실행·자기 임시 상태 정리. 통합 후 사망/Result/재시작과 취소 경합 | 미실행 |
 | V04 | 적 AI·사망·전리품 생성 | 서버의 탐지·추격·근접 공격과 피격, 적 사망 뒤 공격 중지, 겹친 마지막 타격에도 사망 확정·전리품 생성 1회 | 미실행 |
 | V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | 미실행 |
@@ -606,7 +765,7 @@ D05~D07의 ASC·공격 경계·세부 비용 선택은 해당 구현 전, D12의
 
 | 목적 | 제출할 최소 근거 | 현재 확보·후속 |
 |---|---|---|
-| GAS·DS | 별도 실행·권한·거절·취소·수명·네트워크 조건과 시험 | [V01 패키지 반복 검증](#v01-server-shutdown) 확보. V02/V03/V08 미실행 |
+| GAS·DS | 별도 실행·권한·거절·취소·수명·네트워크 조건과 시험 | [V01 패키지 반복 검증](#v01-server-shutdown) · [V02 첫 승인·거리 거절 패키지 시험](#v02-basic-attack). V03/V08 미실행 |
 | 스텔라 이후 확장 | 확인 가능한 이전 자체 구현과 GAS의 책임/제약 비교 | 비교 방향만 있음. 실제 코드와 본인 설명·작은 변경 확인 후 작성 |
 | AI 활용 | 문제 정의·위임 범위·본인 채택/수정 판단·실제 검증 결과 | AI 기본 이동 시험 / 사용자 속도 변경 후 빌드·플레이 확인 |
 | 학습 실행 | Part/차시→직접 설명·변형→적용→결과 | 사용자 500→300 cm/s 비교 확인 / 입력·이동 역할 설명은 미기록 |

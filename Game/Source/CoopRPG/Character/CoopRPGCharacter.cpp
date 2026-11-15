@@ -1,5 +1,10 @@
 #include "CoopRPGCharacter.h"
 
+#include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
+#include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
+#include "CoopRPG/Debug/CoopRPGLogContext.h"
+
+#include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -9,6 +14,8 @@
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "UObject/ConstructorHelpers.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGInput, Log, All);
 
 ACoopRPGCharacter::ACoopRPGCharacter()
 {
@@ -43,6 +50,35 @@ ACoopRPGCharacter::ACoopRPGCharacter()
 
     static ConstructorHelpers::FObjectFinder<UInputAction> MoveAsset(TEXT("/Game/Input/IA_Move.IA_Move"));
     MoveAction = MoveAsset.Object;
+
+    static ConstructorHelpers::FObjectFinder<UInputAction> AttackAsset(TEXT("/Game/Input/IA_Attack.IA_Attack"));
+    AttackAction = AttackAsset.Object;
+
+    AbilitySystem = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystem"));
+    AbilitySystem->SetIsReplicated(true);
+    AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+    CombatAttributes = CreateDefaultSubobject<UCoopRPGCombatAttributes>(TEXT("CombatAttributes"));
+}
+
+UAbilitySystemComponent* ACoopRPGCharacter::GetAbilitySystemComponent() const
+{
+    return AbilitySystem;
+}
+
+void ACoopRPGCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+    AbilitySystem->InitAbilityActorInfo(this, this);
+    if (HasAuthority())
+    {
+        AbilitySystem->GiveAbility(FGameplayAbilitySpec(UCoopRPGMeleeAbility::StaticClass()));
+    }
+}
+
+void ACoopRPGCharacter::NotifyControllerChanged()
+{
+    Super::NotifyControllerChanged();
+    AbilitySystem->InitAbilityActorInfo(this, this);
 }
 
 void ACoopRPGCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -52,6 +88,7 @@ void ACoopRPGCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
     if (UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(PlayerInputComponent))
     {
         Input->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACoopRPGCharacter::Move);
+        Input->BindAction(AttackAction, ETriggerEvent::Started, this, &ACoopRPGCharacter::Attack);
     }
 }
 
@@ -61,4 +98,11 @@ void ACoopRPGCharacter::Move(const FInputActionValue& Value)
     // The fixed camera looks along world +X. Screen right is world +Y.
     AddMovementInput(FVector::ForwardVector, Axis.Y);
     AddMovementInput(FVector::RightVector, Axis.X);
+}
+
+void ACoopRPGCharacter::Attack()
+{
+    UE_LOG(LogCoopRPGInput, Verbose, TEXT("AttackInput Actor=%s %s"),
+        *GetNameSafe(this), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    AbilitySystem->TryActivateAbilityByClass(UCoopRPGMeleeAbility::StaticClass());
 }

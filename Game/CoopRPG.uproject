@@ -5,6 +5,7 @@
   "Description": "Cooperative RPG portfolio",
   "Plugins": [
     { "Name": "EnhancedInput", "Enabled": true },
+    { "Name": "GameplayAbilities", "Enabled": true },
     { "Name": "AndroidFileServer", "Enabled": false }
   ],
   "Modules": [

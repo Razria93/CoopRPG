@@ -5,7 +5,7 @@ public class CoopRPG : ModuleRules
     public CoopRPG(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });
-        PrivateDependencyModuleNames.Add("EnhancedInput");
+        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "GameplayAbilities" });
+        PrivateDependencyModuleNames.AddRange(new[] { "EnhancedInput", "GameplayTags", "GameplayTasks" });
     }
 }
