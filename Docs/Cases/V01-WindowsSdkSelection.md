@@ -2,7 +2,7 @@
 
 CoopRPG · 2026-11-07 · UE 5.8.4 · 트러블슈팅 기록
 
-첫 패키징 빌드에서 타깃마다 Windows SDK가 다르게 선택됐다. SDK를 명시한 개별 빌드로 설정을 맞추고 Cook·Stage를 분리했다. 이후 Client 추가에서는 기존 서버·도구를 재사용했다. IDE용 프로젝트 로컬 설정은 아래의 적용 후보로 구분한다.
+첫 패키징 빌드에서 타깃마다 Windows SDK가 다르게 선택됐다. SDK를 명시한 개별 빌드로 설정을 맞추고 Cook·Stage를 분리했다. 이후 Client 추가에서는 기존 서버·도구를 재사용했다. 11월 15일에는 [CoopRPG에만 SDK를 고정하고 IDE 빌드의 재사용 여부를 확인](#coop-ide-sdk-26100)했다.
 
 **근거** · [당시 실패와 재검증](../Validation/Index.md#v01-first-client) · [Client 추가 실측](../Validation/Environment.md#v01-client-build)
 
@@ -34,9 +34,9 @@ CoopRPG · 2026-11-07 · UE 5.8.4 · 트러블슈팅 기록
 |---|---|
 | 소스 엔진과 CLI | UE 5.8.4, MSVC 14.44.35216, 명시 SDK 10.0.26100.0으로 V01 빌드 성공 |
 | 기존 IDE 산출물 | `Game/Intermediate/Build/Win64/x64/UnrealEditor/` 아래 Development와 DebugGame의 `CoopRPG/CoopRPG.Shared.rsp`에 `10.0.22621.0` 헤더 경로가 남아 있음 |
-| 프로젝트 로컬 설정 | `Game/Saved/UnrealBuildTool/BuildConfiguration.xml`에 SDK 지정이 없는 상태를 읽기 확인함. 아래 설정 적용 후 새 IDE 빌드는 미검증 |
+| 프로젝트 로컬 설정 | 2026-11-15에 `Game/Saved/UnrealBuildTool/BuildConfiguration.xml`에 SDK `10.0.26100.0`을 지정했다. SDK 선택과 증분 빌드 판정은 [후속 검증](#coop-ide-sdk-26100)을 참조한다. |
 
-CoopRPG만 IDE에서 SDK 26100으로 맞출 경우, 위 프로젝트 로컬 XML의 기존 설정에 아래 항목을 병합하는 것을 후보로 둔다. UE 5.8.4의 UBT 소스에서 `WindowsPlatform`의 `WindowsSdkVersion` XML 속성과 `-WindowsSDKVersion` 인자를 확인했다. 저장 위치는 로컬 생성물 경로이므로 새 장비에서는 적용 절차를 다시 수행하고 실제 선택값을 확인한다.
+CoopRPG만 IDE에서 SDK 26100으로 맞추기 위해 위 프로젝트 로컬 XML에 아래 항목을 추가했다. UE 5.8.4의 UBT 소스에서 `WindowsPlatform`의 `WindowsSdkVersion` XML 속성과 `-WindowsSDKVersion` 인자를 확인했다. 저장 위치는 로컬 생성물 경로이므로 새 장비에서는 적용 절차를 다시 수행하고 실제 선택값을 확인한다.
 
 **근거** · [Epic UBT 설정 문서](https://dev.epicgames.com/documentation/en-us/unreal-engine/build-configuration-for-unreal-engine)
 
@@ -50,9 +50,26 @@ CoopRPG만 IDE에서 SDK 26100으로 맞출 경우, 위 프로젝트 로컬 XML�
 ```
 
 1. 프로젝트별로 엔진 버전·경로, 타깃과 구성, MSVC와 SDK, 확인한 로그 위치를 기록한다. 다른 프로젝트에는 해당 엔진이 지원하고 기존 검증에서 사용한 조합을 기준으로 삼는다.
-2. IDE 설정을 적용한다면 기존 XML을 보존한 뒤 해당 프로젝트에만 병합한다. Visual Studio에서 `Development Editor | Win64`의 CoopRPG를 빌드하고 출력의 SDK 선택값을 확인한다. 로그와 컴파일 옵션이 `26100`을 가리킬 때 적용을 확인한 것으로 기록한다.
+2. 새 장비에서는 기존 XML을 보존한 뒤 해당 프로젝트에만 병합한다. Visual Studio의 `Development Editor`가 호출하는 UBT 타깃의 로그와 실제 컴파일 옵션이 `26100`을 가리키는지 확인한다. 기존 엔진을 재사용해야 하면 일반 빌드 전에 보호 조건을 붙여 확인한다.
 3. 여러 프로젝트가 같은 소스 엔진의 중간 산출물을 공유한다면, SDK를 바꾸어 빌드했을 때 어느 산출물이 다시 만들어지는지 확인한다. 호환성이 확인된 조합의 재사용을 우선하고, 서로 다른 조합이 필요하면 산출물 분리를 실제 비용에 따라 검토한다.
 4. 예상 밖의 대규모 빌드가 잡히면 SDK·엔진 경로·타깃·구성과 로그를 먼저 대조한다. Cook·Stage나 접속 시험 시간은 컴파일 시간과 따로 기록한다.
+
+<a id="coop-ide-sdk-26100"></a>
+## 2026-11-15 · CoopRPG 전용 SDK 적용과 빌드 재사용 점검
+
+**판정:** Visual Studio의 `Development Editor`가 요청하는 `CoopRPGEditor`·`ShaderCompileWorker` 양쪽에 SDK `10.0.26100.0`이 적용됐다. 같은 타깃과 `-FromMsBuild`로 UBT를 호출하고, 기존 엔진 산출물의 덮어쓰기를 막는 `-NoEngineChanges`를 추가했다. UBT가 CoopRPG의 XML을 읽었고, 양쪽 타깃의 리소스 컴파일러와 헤더 경로가 `26100`을 가리켰다. 검증 명령에는 SDK 인자를 별도로 전달하지 않았다.
+
+| 확인 범위 | 실제 결과 |
+|---|---|
+| IDE와 같은 두 타깃 | 6.22초 후 종료 코드 5. 갱신이 필요한 기존 엔진 파일 7,130개(오브젝트 1,936개 포함)를 보고했고, 예정된 컴파일과 링크를 실행하기 전에 중단했다. 파일 개수와 빌드 작업 개수는 다르다. |
+| CoopRPG 모듈만 지정 | 3.58초 후 종료 코드 5. Core 등 엔진 중간 산출물에 선행 갱신이 필요해 게임 모듈의 새 빌드도 중단했다. |
+| 이전에 검증한 실행 파일 | Editor·Engine·UnrealEd·ShaderCompileWorker 및 게임 DLL의 파일 크기와 수정 시간이 전후 동일했다. 게임 DLL의 SHA-256이 마지막 정상 기동 때와 같았고 엔진과 게임 모듈의 BuildId도 일치했다. 이번 점검에서는 에디터를 다시 띄우지 않았다. |
+
+**근거** · 로컬 실행 `v02-ide-sdk-20261115-131133`의 `IDE-guarded-ubt.log`, `module-guarded-ubt.log` 및 각 `*-result.json` · [이전 에디터 기동 확인](../Validation/Index.md#v02-log-context-original-editor)
+
+로그에는 `ShaderCompileWorker`의 일부 중간 라이브러리가 없거나 미리 컴파일한 헤더가 더 새롭고, Editor의 Core 공통 컴파일 옵션이 `22621`에서 `26100`으로 바뀐 것이 남아 있다. 최종 바이너리는 유지됐지만 이 상태에서 IDE의 일반 빌드가 기존 엔진을 모두 재사용할 수 있다고 판단할 근거는 없다. 기존 DLL로 실행이 필요할 때는 이전에 검증한 에디터를 사용한다. 새 C++ 변경을 반영하려면 엔진 쪽 선행 갱신 범위를 따로 결정한다.
+
+SDK 고정은 이 프로젝트의 Git 제외 `Saved` 아래에만 저장했다. Visual Studio 전역·사용자 UBT·엔진의 설정 XML과 다른 프로젝트 설정을 수정하지 않았다. 다만 UBT가 계획을 만들면서 공유 엔진의 `Intermediate` 내 컴파일 옵션 파일을 다시 썼다. 같은 소스 엔진 경로를 공유하는 다른 프로젝트가 별도 SDK로 빌드하면 중간 산출물을 다시 평가할 수 있다.
 
 ## 근거 및 더 읽기
 
