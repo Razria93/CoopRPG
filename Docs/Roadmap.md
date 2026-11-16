@@ -96,7 +96,8 @@
 - **확인:** 같은 맵의 전용 서버와 두 클라이언트에서 적 탐지·추격·이동 복제, 사거리 이탈 무피해, 실제 피격과 회복약 소모, 장착 플레이어의 반격을 확인했다. [자동 시험](Validation/Index.md#v04-enemy-first-combat)
 - **사용자 확인:** 사거리 밖 무피해와 실제 피격 뒤 HP `60→90`·회복약 `1→0`을 재현했다. [수동 검증](Validation/Index.md#v04-enemy-combat-user-result)
 - **표시 보완:** 체력 복제 행의 소유자를 표시하고 새 패키지의 두 클라이언트에서 실제 PlayerId를 확인했다. [Before/After와 자동 검증](Validation/Index.md#v04-health-subject-attribution) · [사용자 양쪽 표시 확인](Validation/Index.md#v04-health-subject-user-result)
-- **다음:** 서버에서 적 사망을 한 번 확정하고 대기 중인 공격을 정리한다. 두 사람의 마지막 타격이 겹쳐도 전리품 생성이 한 번인지 확인한 뒤 팀 지급으로 연결한다.
+- **확인:** 두 플레이어의 마지막 타격이 겹친 두 회차에서 사망·전리품 생성이 각각 1회였다. 사망 뒤 추가 피해가 없고 양쪽의 전리품 ID가 일치했다. [자동 시험](Validation/Index.md#v04-death-loot-once) · [버튼 실행 사용자 확인](Validation/Index.md#v04-death-loot-button-user-result)
+- **다음:** V05 적 전리품 획득을 연결한다. 두 클라이언트가 같은 전리품을 요청할 때 한 건만 유효하게 처리하고 팀 수량이 양쪽에 한 번 반영되는지 확인한다.
 
 <a id="v05-current-card"></a>
 ### 이전 작업 · V05 공용 상자·장착·회복 · 2026-11-16

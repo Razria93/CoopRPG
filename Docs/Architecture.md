@@ -81,7 +81,7 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 서버는 `L_Movement?EnemyCombat`에서 ASC를 가진 적 캐릭터 한 마리를 생성한다. 게임 모드가 선택한 적 또는 고정 표적의 ASC를 기존 공격 GA가 사용한다. V04의 적은 Playing 상태에서 주변 360cm 안의 살아 있는 플레이어 한 명을 탐지한다. 평평한 검증 맵에서는 `CharacterMovement`로 목표 방향을 따라가고 위치는 기존 캐릭터 이동 복제 경로로 전달한다.
 
-서버는 135cm 안에서 0.9초 공격을 준비한 뒤 대상의 생존과 거리를 다시 확인한다. 조건이 맞으면 기존 즉시 피해 GE를 대상 ASC에 적용한다. 라운드가 멈추거나 적 자신의 HP가 0이면 추격과 대기 공격을 정리한다. 피격과 회복으로 바뀐 HP는 양쪽에, 회복약 수량은 소유자에게 복제된다.
+서버는 135cm 안에서 0.9초 공격을 준비한 뒤 대상의 생존과 거리를 다시 확인한다. 조건이 맞으면 기존 즉시 피해 GE를 대상 ASC에 적용한다. 라운드가 멈추면 추격과 대기 공격을 정리한다. 적의 ASC 체력이 양수에서 0으로 바뀌면 서버가 즉시 사망 상태를 확정하고 추격·대기 공격·충돌을 정리한다. 먼저 사망을 표시한 뒤 `ACoopRPGEnemyLoot`을 한 번 생성한다. 게임 모드는 사망한 적을 현재 유효 표적에서 제외하므로 이미 시작된 다른 타격도 확정 시점에 유효 대상을 잃는다. 적의 사망 플래그와 전리품의 고유 ID는 각 Actor의 복제로 전달한다. 피격과 회복으로 바뀐 HP는 양쪽에, 회복약 수량은 소유자에게 복제된다.
 
 **근거** · [적 캐릭터](../Game/Source/CoopRPG/Character/CoopRPGEnemy.cpp) · [게임 모드의 표적 선택](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [패키지 검증](Validation/Index.md#v04-enemy-first-combat)
 
@@ -103,9 +103,9 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 **근거** · [장착 복제](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [서버 권한·거절](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [회복 GE](../Game/Source/CoopRPG/AbilitySystem/Effects/CoopRPGRecoveryEffect.cpp) · [2인 패키지 시험](Validation/Index.md#v05-equipment-recovery)
 
-아래 적 전리품 동작은 이후 구현 설계다.
+적 전리품은 서버에서 사망 전환당 한 번 생성하며 양쪽 클라이언트가 같은 ID를 받는다. [사망·전리품 생성 검증](Validation/Index.md#v04-death-loot-once)
 
-적의 생존→사망 전환은 서버에서 한 번 확정한다. 그 전환에서 생성한 전리품은 공용 상자와 같은 서버 검증·소진 처리 흐름을 사용한다. 획득을 확정하면 팀 전리품 수량을 올려 양쪽 클라이언트에 복제한다. 시험에서는 사망, 전리품 생성, 팀 지급이 각각 한 번인지 확인한다.
+팀 지급은 후속 설계다. 전리품 획득은 공용 상자의 서버 검증·소진 처리 흐름을 참고한다. 획득을 확정하면 팀 전리품 수량을 올려 양쪽 클라이언트에 복제한다. 시험에서는 유효한 획득과 팀 지급이 각각 한 번인지 확인한다.
 
 **근거** · [상자와 라운드 규칙](Project.md#game-rules) · [V04~V06 시험 기준](Validation/Index.md#active-tests)
 

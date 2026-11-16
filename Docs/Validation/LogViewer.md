@@ -298,6 +298,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · [V04 실행 근거](Index.md#v04-enemy-first-combat) · [로그 표시 규칙](../../Tools/Validation/CombatLogReader.psm1)
 
+<a id="enemy-death-loot-logs"></a>
+### 적 사망과 전리품 생성 로그
+
+서버의 `적 사망 확정`은 치명타 HP 전환과 대기 공격 취소 여부를 보여준다. `적 전리품 생성`의 ID를 양쪽 클라이언트의 `적 전리품 복제` ID와 대조한다. `적 사망 복제`와 전리품 복제는 각 Actor의 관찰이다. 뒤따르는 플레이어 타격이 무산되면 서버의 `피해 확정 실패` 상세에 `InvalidTarget`이 표시된다.
+
+**근거** · [두 타격 경합 원본 결과](Index.md#v04-death-loot-once) · [전리품 ID OnRep](../../Game/Source/CoopRPG/Loot/CoopRPGEnemyLoot.cpp)
+
 <a id="health-subject-labels"></a>
 ### 체력 복제 행의 소유자
 
