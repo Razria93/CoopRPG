@@ -42,21 +42,31 @@ class Case:
         self.expected_exits = set()
         self.checks = []
 
-    def start(self, role, args, fps, commands=()):
+    def start(self, role, args, fps, commands=(), *, server_quit_frame=960, client_driver_end=900):
         server = role == "server"
         target = "Server" if server else "Client"
         exe = self.stage / f"Windows{target}/CoopRPG/Binaries/Win64/CoopRPG{target}.exe"
         if server:
             # Dedicated startup DEFER handles quit without a local player console.
-            exec_commands = ("defer " * 960) + "quit"
+            exec_commands = ("defer " * server_quit_frame) + "quit"
         else:
             gate = self.macros / f"{role}-signal.exec"
             gate.touch()
             macro = self.macros / f"{role}-driver.exec"
-            driver = [("defer " * frame) + command for frame, command in commands]
-            # Gate files remain in place. Swap their contents when both peers are ready.
-            driver += [("defer " * frame) + f"exec {gate.as_posix()}" for frame in range(40, 900, 3)]
-            macro.write_text("\n".join(driver) + "\n", encoding="ascii")
+            # Keep the pending DEFER queue bounded across startup and world changes.
+            scheduled = [*commands, *((frame, f"exec {gate.as_posix()}")
+                                      for frame in range(40, client_driver_end, 3))]
+            chunk_size = 180 if client_driver_end > 900 else 900
+            last_frame = max(frame for frame, _ in scheduled)
+            first_frames = range(0, last_frame + 1, chunk_size)
+            chunks = [macro if first == 0 else macro.with_stem(f"{macro.stem}-{first}")
+                      for first in first_frames]
+            for index, first in enumerate(first_frames):
+                driver = [("defer " * (frame - first)) + command for frame, command in scheduled
+                          if first <= frame < first + chunk_size]
+                if index + 1 < len(chunks):
+                    driver.append(("defer " * chunk_size) + f"exec {chunks[index + 1].as_posix()}")
+                chunks[index].write_text("\n".join(driver) + "\n", encoding="ascii")
             exec_commands = f"exec {macro.as_posix()}"
         flags = [str(exe), *args, "-unattended", "-nosound", "-NoSplash", "-forcelogflush",
                  f"-ABSLOG={(self.path / (role + '.log')).as_posix()}"]
