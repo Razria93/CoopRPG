@@ -18,7 +18,7 @@
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 11월5일 운영 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 현재 기능 결과는 [V06 라운드 종료 카드](#v06-round-outcomes-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
+- 현재 기능 결과는 [V06 다음 맵과 새 라운드 카드](#v06-round-travel-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -124,11 +124,18 @@
 - **연계:** [V06 라운드 종료 판정](#v06-round-outcomes-card)에서 세 종료 조건과 우선순위를 검증했다.
 
 <a id="v06-round-outcomes-card"></a>
-### 현재 작업 · V06 라운드 종료 판정과 경합 · 2026-11-16
+### 이전 작업 · V06 라운드 종료 판정과 경합 · 2026-11-16
 
 - **확인:** 패키지 전용 서버와 클라이언트 두 개로 사망·시간초과·접속 종료와 우선순위 경합 세 가지를 확인했다. 종료는 1회 확정됐으며 연결을 유지한 창이 같은 결과·점수를 받았다. [실행 결과](Validation/Index.md#v06-round-outcomes)
 - **사용자 확인:** 별도 세 판에서 사망, 기본 5분 만료, B 창 종료를 재현했다. 원본 로그에서 판마다 서버 확정 한 번과 연결 유지 클라이언트의 결과·0점을 대조했다. [수동 검증](Validation/Index.md#v06-round-outcomes-user-result)
-- **다음:** 결과 표시 뒤 서버 주도로 다음 맵에 이동하고 두 클라이언트가 같은 맵에서 조작 가능한지 확인한다. 새 라운드 상태 초기화와 이전 라운드 요청 거절을 검증한다. [게임 규칙](Project.md#game-rules)
+- **연계** · 결과 이후의 전환은 [V06 다음 맵과 초기화](#v06-round-travel-card)에서 확인했다.
+
+<a id="v06-round-travel-card"></a>
+### 현재 작업 · V06 다음 맵과 새 라운드 · 2026-11-16
+
+- **확인** · 성공·사망·시간초과 각 1회에서 서버가 두 결과 표시 확인을 모은 뒤 한 번 이동했다. 같은 두 클라이언트 프로세스가 새 맵에서 각각 새 Pawn을 움직였다. 새 `RoundId`, 초기값, 두 명 재준비, 이전 요청 거절을 확인했다. [실행 근거](Validation/Index.md#v06-round-travel)
+- **사용자 확인** · 두 창을 직접 조작해 사망 결과에서 두 맵을 왕복했다. 다음 맵에서 초기 HUD·상자 재사용과 두 참가자가 다시 준비한 뒤 시작되는 300초 타이머를 확인했다. [수동 검증](Validation/Index.md#v06-round-travel-user-result)
+- **다음** · Playing 중 새 참가, 세 번째 접속, 참가자 이탈 후 안내를 별도 시험한다. 이동 시 원래 두 클라이언트의 재접속과 새 참가 거절 규칙을 함께 검증한다. [V06 남은 시험](Validation/Index.md#active-tests)
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬
 

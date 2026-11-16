@@ -328,6 +328,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · [종료 사유와 우선순위 시험](Index.md#v06-round-outcomes)
 
+<a id="round-travel-logs"></a>
+### 결과 표시 확인과 다음 맵 이동 로그
+
+클라이언트별 `라운드 결과 HUD 표시`, 서버 `결과 표시 확인 수신` 1/2·2/2, `다음 맵 이동 시작`을 같은 `RoundId`로 대조한다. 이동 시작 이벤트는 서버의 요청 시점이다. 목적지 도착은 서버의 새 `LootRoundCreated` 원문 `Map`과 각 클라이언트 접속 로그에서 확인한다. 새 라운드에서 이전 회차의 상자 획득은 `라운드 불일치`로 표시된다.
+
+**근거** · [패키지 시험](Index.md#v06-round-travel) · [뷰어 파서](../../Tools/Validation/CombatLogReader.psm1)
+
 <a id="health-subject-labels"></a>
 ### 체력 복제 행의 소유자
 
