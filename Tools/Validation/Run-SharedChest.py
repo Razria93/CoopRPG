@@ -179,19 +179,49 @@ def trial(stage, path, lead, invalid_first, port):
                    and {e["fields"]["Stock"] for e in opened} == {"1"})
 
         if invalid_first:
+            mover = lead
+            other = "b" if mover == "a" else "a"
             case.check("opening before Playing is rejected", bool(case.events("server", "ChestRejected",
                                                                                 Action="Open", Reason="NotPlaying")))
-            case.signal("a", "Input.+key S\n" + ("defer " * 33) + "Input.-key S")
+            case.signal(mover, "Input.+key S\n" + ("defer " * 33) + "Input.-key S")
             time.sleep(0.16)
-            case.signal("a", "")
+            case.signal(mover, "")
+            case.wait("server closes the out-of-range view", lambda: case.events(
+                "server", "ChestClosed", Reason="OutOfRange", RequesterPlayerId=ids[mover]))
+            case.wait("closed view reaches its owner", lambda: case.events(mover, "ChestViewReplicated", Open="0"))
+            case.check("the other view stays open", not case.events(other, "ChestViewReplicated", Open="0"))
+            def range_rejections():
+                return case.events("server", "ChestRejected", Action="Open", Reason="OutOfRange",
+                                   RequesterPlayerId=ids[mover])
+
+            earlier_rejections = len(range_rejections())
+            case.signal(mover, press("E"))
+            case.wait("opening from outside the range is denied after auto-close",
+                      lambda: len(range_rejections()) > earlier_rejections)
+            case.signal(mover, "")
+            case.signal(other, press("G"))
+            case.wait("other player can take a weapon", lambda: case.events(
+                "server", "ChestWeaponGranted", Stock="2->1", RequesterPlayerId=ids[other]))
+            case.signal(other, "")
+            case.signal(other, press("F"))
+            case.collect_take_calls((other,))
+            case.wait("other player can collect the last recovery item", lambda: case.events(
+                "server", "ChestGranted", RequesterPlayerId=ids[other]))
+            case.wait("updated weapon and recovery stocks reach the mover", lambda: (
+                case.events(mover, "WeaponStockReplicated", Stock="1")
+                and case.events(mover, "ChestStockReplicated", Stock="0")))
+            case.signal(mover, "Input.+key W\n" + ("defer " * 33) + "Input.-key W")
+            time.sleep(0.16)
+            case.signal(mover, "")
             time.sleep(1.65)
-            case.signal("a", press("F"))
-            case.collect_take_calls(("a",))
-            case.wait("first request rejected for distance",
-                      lambda: case.events("server", "ChestRejected", Action="Take", Reason="OutOfRange",
-                                          RequesterPlayerId=ids["a"]))
-            case.signal("b", press("F"))
-            case.collect_take_calls(("b",))
+            case.check("returning does not reopen the view", len(case.events(mover, "ChestViewReplicated", Open="1")) == 1)
+            case.signal(mover, press("E"))
+            case.wait("explicit reopen shows both updated stocks", lambda: (
+                case.events("server", "ChestOpened", RequesterPlayerId=ids[mover], Stock="0", WeaponStock="1")
+                and case.events(mover, "ChestViewReplicated", Open="1", Stock="0", WeaponStock="1")))
+            case.signal(mover, "")
+            case.signal(mover, press("F"))
+            case.collect_take_calls((mover,))
         else:
             first = lead or "a"
             other = "b" if first == "a" else "a"
@@ -210,7 +240,7 @@ def trial(stage, path, lead, invalid_first, port):
         grants = case.events("server", "ChestGranted")
         winner = next(role for role, player in ids.items() if player == grants[0]["fields"]["RequesterPlayerId"])
         loser = "b" if winner == "a" else "a"
-        reason = "OutOfRange" if invalid_first else "Depleted"
+        reason = "Depleted"
         case.wait("winner sees personal item count 1", lambda: case.events(winner, "RecoveryCountReplicated", Count="1"))
         case.wait("loser denied", lambda: case.events("server", "ChestRejected", Action="Take", Reason=reason,
                                                     RequesterPlayerId=ids[loser]))
@@ -232,17 +262,25 @@ def trial(stage, path, lead, invalid_first, port):
         second_outcome = datetime.fromisoformat(denied[0]["time"])
         gap = round((second_outcome - first_outcome).total_seconds() * 1000)
         if invalid_first:
-            case.check("earlier invalid request leaves the single item for B", winner == "b" and gap <= 0)
+            case.check("only the mover was automatically closed and the other player got the item",
+                       winner == other and len(case.events("server", "ChestClosed", Reason="OutOfRange")) == 1
+                       and not case.events(other, "ChestViewReplicated", Open="0"))
         else:
             case.check("the two real requests compete within 250 ms", 0 <= gap <= 250)
 
         if invalid_first:
             # Reattempts exercise the same depletion check after the result has replicated.
-            case.signal("b", press("F"))
+            case.signal(other, press("F"))
             case.wait("later request is rejected as depleted", lambda: case.events("server", "ChestRejected",
-                         Action="Take", Reason="Depleted", RequesterPlayerId=ids["b"]))
-            case.signal("b", "")
+                         Action="Take", Reason="Depleted", RequesterPlayerId=ids[other]))
+            case.signal(other, "")
             case.check("repeat requests do not grant again", len(case.events("server", "ChestGranted")) == 1)
+            case.signal(mover, press("Q"))
+            case.wait("explicit close reaches the server and owner", lambda: (
+                case.events("server", "ChestClosed", Reason="Manual", RequesterPlayerId=ids[mover])
+                and len(case.events(mover, "ChestViewReplicated", Open="0")) == 2))
+            case.signal(mover, "")
+            case.check("the other player did not close during the test", not case.events(other, "ChestViewReplicated", Open="0"))
     except (RuntimeError, OSError, StopIteration, IndexError, KeyError) as exc:
         failure = str(exc)
     finally:
@@ -268,7 +306,7 @@ def main():
     out = (options.run_root / options.attempt).resolve()
     out.mkdir()
     cases = [("", False)] if options.single else [
-        ("a", False), ("b", False), ("a", False), ("b", False), ("", False), ("a", True),
+        ("a", False), ("b", False), ("a", False), ("b", False), ("", False), ("a", True), ("b", True),
     ]
     results = []
     for i, (lead, invalid_first) in enumerate(cases, 1):
