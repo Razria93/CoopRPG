@@ -123,6 +123,15 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 **근거** · [구역과 서버 검사](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [기한·점수 복제](../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp) · [패키지 검증](Validation/Index.md#v06-extraction-success)
 
+<a id="round-outcome-arbitration"></a>
+### 라운드 종료 판정과 우선순위
+
+`GameMode`가 Playing에 들어가는 두 컨트롤러를 기록한다. 참가자가 접속을 종료하면 `Logout`에서 이탈 사실을 보존한다. 서버는 이동 및 전투 타이머가 갱신된 뒤 참가자의 생존과 체류를 수집한다. `GameState`가 같은 시점의 서버 시계로 300초 기한과 탈출 기한을 확인해 **접속 종료 → 사망 → 시간초과 → 탈출 성공** 순으로 결과를 고른다. 같은 판정의 후보와 최종 사유는 프레임 번호와 함께 기록한다.
+
+한 회차의 최종 상태는 `Result`, 종료 사유, 점수를 포함한다. 성공은 1점이고 실패·중단은 0점이다. 확정 뒤 새로운 입력이나 참가자 정리로 결과가 바뀌지 않는다. 연결을 유지한 클라이언트는 같은 결과를 복제받아 HUD에 표시한다. 전투와 전리품 획득은 서버의 라운드 상태를 검사한다.
+
+**근거** · [참가자·종료 입력](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [우선순위 및 결과 복제](../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp) · [전용 패키지 검증](Validation/Index.md#v06-round-outcomes)
+
 ### 빌드에서 제외하는 코드와 실행 중 권한
 
 소스 저장소 공개 범위, 실행 파일에 포함되는 코드, 네트워크로 보내는 상태는 각각 관리한다. 클라이언트 배포물에는 컴파일된 코드와 콘텐츠가 들어가므로, 실행 파일과 수신 데이터는 분석될 수 있다고 가정한다. 서버 전용 로직의 빌드 제외, 비밀 키를 서버 환경에서만 관리하는 일, 숨겨야 할 상태를 복제 대상에서 제외하는 일은 각각 다른 노출을 줄인다. 게임 결과의 무결성은 서버가 요청을 검증하고 상태 변경을 통제하는 구조에 달려 있다.
