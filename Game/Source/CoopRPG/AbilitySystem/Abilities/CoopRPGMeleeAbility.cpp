@@ -1,5 +1,6 @@
 #include "CoopRPGMeleeAbility.h"
 
+#include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
@@ -70,7 +71,7 @@ bool UCoopRPGMeleeAbility::CheckCooldown(FGameplayAbilitySpecHandle Handle, cons
 void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
     FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
-    auto* Attacker = Cast<APawn>(ActorInfo->AvatarActor.Get());
+    auto* Attacker = Cast<ACoopRPGCharacter>(ActorInfo->AvatarActor.Get());
     UAbilitySystemComponent* Source = ActorInfo->AbilitySystemComponent.Get();
     if (!IsValid(Attacker) || !Attacker->HasAuthority() || !IsValid(Source))
     {
@@ -81,6 +82,13 @@ void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     if (Source->GetNumericAttribute(UCoopRPGCombatAttributes::GetHealthAttribute()) <= 0.0f)
     {
         LogFailedCheck(ActorInfo, TEXT("AttackerDead"), ANSI_TO_TCHAR(__FUNCTION__));
+        EndAbility(Handle, ActorInfo, ActivationInfo, false, true);
+        return;
+    }
+
+    if (!Attacker->HasMeleeWeapon())
+    {
+        LogFailedCheck(ActorInfo, TEXT("Unarmed"), ANSI_TO_TCHAR(__FUNCTION__));
         EndAbility(Handle, ActorInfo, ActivationInfo, false, true);
         return;
     }

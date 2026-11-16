@@ -8,6 +8,7 @@
 class UAbilitySystemComponent;
 class UCoopRPGCombatAttributes;
 class UInputAction;
+class UStaticMeshComponent;
 struct FInputActionValue;
 
 UCLASS()
@@ -19,6 +20,11 @@ public:
     ACoopRPGCharacter();
 
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    float GetHealth() const;
+    bool HasMeleeWeapon() const { return bHasMeleeWeapon; }
+    void EquipMeleeWeapon();
 
 protected:
     virtual void BeginPlay() override;
@@ -33,6 +39,9 @@ private:
     UFUNCTION(Server, Reliable)
     void ServerCancelAttack();
 
+    UFUNCTION()
+    void OnRep_MeleeWeapon();
+
 private:
     UPROPERTY()
     TObjectPtr<UInputAction> MoveAction;
@@ -45,4 +54,10 @@ private:
 
     UPROPERTY()
     TObjectPtr<UInputAction> AttackAction;
+
+    UPROPERTY()
+    TObjectPtr<UStaticMeshComponent> WeaponMesh;
+
+    UPROPERTY(ReplicatedUsing = OnRep_MeleeWeapon)
+    bool bHasMeleeWeapon = false;
 };

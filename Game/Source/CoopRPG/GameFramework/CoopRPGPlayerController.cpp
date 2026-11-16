@@ -1,6 +1,7 @@
 #include "CoopRPGPlayerController.h"
 
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
+#include "CoopRPG/AbilitySystem/Effects/CoopRPGRecoveryEffect.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
@@ -92,6 +93,8 @@ void ACoopRPGPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ACoopRPGPlayerController::OpenSharedChest);
     InputComponent->BindKey(EKeys::Q, IE_Pressed, this, &ACoopRPGPlayerController::CloseSharedChest);
     InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACoopRPGPlayerController::TakeRecoveryItem);
+    InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ACoopRPGPlayerController::TakeMeleeWeapon);
+    InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACoopRPGPlayerController::UseRecoveryItem);
 }
 
 void ACoopRPGPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -139,14 +142,25 @@ void ACoopRPGPlayerController::CloseSharedChest()
 
 void ACoopRPGPlayerController::TakeRecoveryItem()
 {
+    RequestChestItem(ECoopRPGChestItem::Recovery);
+}
+
+void ACoopRPGPlayerController::TakeMeleeWeapon()
+{
+    RequestChestItem(ECoopRPGChestItem::MeleeWeapon);
+}
+
+void ACoopRPGPlayerController::RequestChestItem(ECoopRPGChestItem Item)
+{
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     if (State && OpenedChest)
     {
         ++NextPickupRequest;
-        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestTakeRequested Chest=%s Round=%s Request=%u %s"),
-            *GetNameSafe(OpenedChest), *State->GetRoundId().ToString(), NextPickupRequest,
+        const TCHAR* Event = Item == ECoopRPGChestItem::MeleeWeapon ? TEXT("ChestWeaponRequested") : TEXT("ChestTakeRequested");
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Chest=%s Round=%s Request=%u %s"),
+            Event, *GetNameSafe(OpenedChest), *State->GetRoundId().ToString(), NextPickupRequest,
             *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
-        ServerTakeRecovery(OpenedChest, State->GetRoundId(), NextPickupRequest);
+        ServerTakeChestItem(OpenedChest, State->GetRoundId(), NextPickupRequest, Item);
     }
 }
 
@@ -241,16 +255,24 @@ void ACoopRPGPlayerController::ServerSetChestOpen_Implementation(ACoopRPGSharedC
     }
 }
 
-void ACoopRPGPlayerController::ServerTakeRecovery_Implementation(ACoopRPGSharedChest* Chest, FGuid RoundId, uint32 Request)
+void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGSharedChest* Chest, FGuid RoundId,
+    uint32 Request, ECoopRPGChestItem Item)
 {
+    const bool bTakingWeapon = Item == ECoopRPGChestItem::MeleeWeapon;
+    const TCHAR* Action = bTakingWeapon ? TEXT("TakeWeapon") : TEXT("Take");
+    if (!bTakingWeapon && Item != ECoopRPGChestItem::Recovery)
+    {
+        LogChestRejection(Action, TEXT("InvalidItem"), Chest, RoundId, Request);
+        return;
+    }
     if (const TCHAR* Failure = GetChestRejection(Chest, RoundId))
     {
-        LogChestRejection(TEXT("Take"), Failure, Chest, RoundId, Request);
+        LogChestRejection(Action, Failure, Chest, RoundId, Request);
         return;
     }
     if (OpenedChest != Chest)
     {
-        LogChestRejection(TEXT("Take"), TEXT("NotOpen"), Chest, RoundId, Request);
+        LogChestRejection(Action, TEXT("NotOpen"), Chest, RoundId, Request);
         return;
     }
 
@@ -261,15 +283,38 @@ void ACoopRPGPlayerController::ServerTakeRecovery_Implementation(ACoopRPGSharedC
     }
     if (Request <= LastPickupRequest)
     {
-        LogChestRejection(TEXT("Take"), TEXT("DuplicateRequest"), Chest, RoundId, Request);
+        LogChestRejection(Action, TEXT("DuplicateRequest"), Chest, RoundId, Request);
         return;
     }
     LastPickupRequest = Request;
 
+    if (bTakingWeapon)
+    {
+        // GetChestRejection has already checked the possessed character and its health.
+        auto* CurrentCharacter = CastChecked<ACoopRPGCharacter>(GetPawn());
+        if (CurrentCharacter->HasMeleeWeapon())
+        {
+            LogChestRejection(Action, TEXT("AlreadyEquipped"), Chest, RoundId, Request);
+            return;
+        }
+        const int32 StockBefore = Chest->GetWeaponStock();
+        if (!Chest->TryTakeWeapon())
+        {
+            LogChestRejection(Action, TEXT("Depleted"), Chest, RoundId, Request);
+            return;
+        }
+
+        CurrentCharacter->EquipMeleeWeapon();
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestWeaponGranted Chest=%s Round=%s Request=%u Stock=%d->%d Equipped=1 %s"),
+            *GetNameSafe(Chest), *RoundId.ToString(), Request, StockBefore, Chest->GetWeaponStock(),
+            *CoopRPG::Debug::DescribePlayerRequestContext(CurrentCharacter, ANSI_TO_TCHAR(__FUNCTION__)));
+        return;
+    }
+
     const int32 StockBefore = Chest->GetRecoveryStock();
     if (!Chest->TryTakeRecovery())
     {
-        LogChestRejection(TEXT("Take"), TEXT("Depleted"), Chest, RoundId, Request);
+        LogChestRejection(Action, TEXT("Depleted"), Chest, RoundId, Request);
         return;
     }
 
@@ -278,6 +323,79 @@ void ACoopRPGPlayerController::ServerTakeRecovery_Implementation(ACoopRPGSharedC
     ForceNetUpdate();
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestGranted Chest=%s Round=%s Request=%u Stock=%d->%d Recovery=%d %s"),
         *GetNameSafe(Chest), *RoundId.ToString(), Request, StockBefore, Chest->GetRecoveryStock(), RecoveryCount,
+        *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::UseRecoveryItem()
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (State && State->GetRoundId().IsValid())
+    {
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("RecoveryUseRequested Round=%s %s"),
+            *State->GetRoundId().ToString(), *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        ServerUseRecovery(State->GetRoundId());
+    }
+}
+
+void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId)
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId)
+    {
+        LogRecoveryRejection(TEXT("WrongRound"), RoundId);
+        return;
+    }
+    if (!State->IsRoundPlaying())
+    {
+        LogRecoveryRejection(TEXT("NotPlaying"), RoundId);
+        return;
+    }
+
+    auto* CurrentCharacter = Cast<ACoopRPGCharacter>(GetPawn());
+    UAbilitySystemComponent* ASC = CurrentCharacter ? CurrentCharacter->GetAbilitySystemComponent() : nullptr;
+    if (!ASC || CurrentCharacter->GetHealth() <= 0.0f)
+    {
+        LogRecoveryRejection(TEXT("NotAlive"), RoundId);
+        return;
+    }
+    if (RecoveryCount <= 0)
+    {
+        LogRecoveryRejection(TEXT("NoRecovery"), RoundId);
+        return;
+    }
+    const float HealthBefore = CurrentCharacter->GetHealth();
+    if (HealthBefore >= UCoopRPGCombatAttributes::MaxHealth)
+    {
+        LogRecoveryRejection(TEXT("FullHealth"), RoundId);
+        return;
+    }
+
+    const FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(UCoopRPGRecoveryEffect::StaticClass(), 1.0f,
+        ASC->MakeEffectContext());
+    if (!Spec.IsValid())
+    {
+        LogRecoveryRejection(TEXT("InvalidEffect"), RoundId);
+        return;
+    }
+    ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
+    const float HealthAfter = CurrentCharacter->GetHealth();
+    if (HealthAfter <= HealthBefore)
+    {
+        LogRecoveryRejection(TEXT("NoHealing"), RoundId);
+        return;
+    }
+
+    const int32 CountBefore = RecoveryCount--;
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("RecoveryUsed Round=%s HP=%.2f->%.2f Recovery=%d->%d %s"),
+        *RoundId.ToString(), HealthBefore, HealthAfter, CountBefore, RecoveryCount,
+        *CoopRPG::Debug::DescribePlayerRequestContext(CurrentCharacter, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId) const
+{
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("RecoveryUseRejected Round=%s Reason=%s Recovery=%d %s"),
+        *RoundId.ToString(), Reason, RecoveryCount,
         *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 

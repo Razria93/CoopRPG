@@ -12,6 +12,8 @@ class COOPRPG_API UCoopRPGCombatAttributes : public UAttributeSet
 public:
     UCoopRPGCombatAttributes();
 
+    static constexpr float MaxHealth = 100.0f;
+
     GAMEPLAYATTRIBUTE_PROPERTY_GETTER(UCoopRPGCombatAttributes, Health)
     GAMEPLAYATTRIBUTE_VALUE_GETTER(Health)
     GAMEPLAYATTRIBUTE_PROPERTY_GETTER(UCoopRPGCombatAttributes, Stamina)

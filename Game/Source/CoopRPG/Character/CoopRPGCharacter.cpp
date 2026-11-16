@@ -11,13 +11,16 @@
 #include "Engine/StaticMesh.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerState.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "InputCoreTypes.h"
+#include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGInput, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEquipment, Log, All);
 
 ACoopRPGCharacter::ACoopRPGCharacter()
 {
@@ -40,6 +43,15 @@ ACoopRPGCharacter::ACoopRPGCharacter()
     Head->SetRelativeLocation(FVector(0.0f, 0.0f, 60.0f));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
     Head->SetStaticMesh(Sphere.Object);
+
+    WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeleeWeapon"));
+    WeaponMesh->SetupAttachment(GetRootComponent());
+    WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    WeaponMesh->SetRelativeScale3D(FVector(0.9f, 0.11f, 0.08f));
+    WeaponMesh->SetRelativeLocation(FVector(30.0f, 43.0f, 16.0f));
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
+    WeaponMesh->SetStaticMesh(Cube.Object);
+    WeaponMesh->SetVisibility(false);
 
     auto* CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(GetRootComponent());
@@ -69,6 +81,36 @@ ACoopRPGCharacter::ACoopRPGCharacter()
 UAbilitySystemComponent* ACoopRPGCharacter::GetAbilitySystemComponent() const
 {
     return AbilitySystem;
+}
+
+void ACoopRPGCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(ACoopRPGCharacter, bHasMeleeWeapon);
+}
+
+float ACoopRPGCharacter::GetHealth() const
+{
+    return CombatAttributes->GetHealth();
+}
+
+void ACoopRPGCharacter::EquipMeleeWeapon()
+{
+    if (HasAuthority() && !bHasMeleeWeapon)
+    {
+        bHasMeleeWeapon = true;
+        WeaponMesh->SetVisibility(true);
+        ForceNetUpdate();
+    }
+}
+
+void ACoopRPGCharacter::OnRep_MeleeWeapon()
+{
+    WeaponMesh->SetVisibility(bHasMeleeWeapon);
+    const APlayerState* State = GetPlayerState();
+    UE_LOG(LogCoopRPGEquipment, Log, TEXT("MeleeWeaponReplicated Actor=%s Equipped=%d EquippedPlayerId=%d %s"),
+        *GetNameSafe(this), bHasMeleeWeapon ? 1 : 0, State ? State->GetPlayerId() : INDEX_NONE,
+        *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGCharacter::BeginPlay()

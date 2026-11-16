@@ -6,6 +6,13 @@
 
 class ACoopRPGSharedChest;
 
+UENUM()
+enum class ECoopRPGChestItem : uint8
+{
+    Recovery,
+    MeleeWeapon
+};
+
 UCLASS()
 class COOPRPG_API ACoopRPGPlayerController : public APlayerController
 {
@@ -31,6 +38,9 @@ private:
     void OpenSharedChest();
     void CloseSharedChest();
     void TakeRecoveryItem();
+    void TakeMeleeWeapon();
+    void UseRecoveryItem();
+    void RequestChestItem(ECoopRPGChestItem Item);
 
     UFUNCTION(Server, Reliable)
     void ServerReadyForRound(FGuid RoundId);
@@ -39,7 +49,12 @@ private:
     void ServerSetChestOpen(ACoopRPGSharedChest* Chest, FGuid RoundId, bool bOpen);
 
     UFUNCTION(Server, Reliable)
-    void ServerTakeRecovery(ACoopRPGSharedChest* Chest, FGuid RoundId, uint32 Request);
+    void ServerTakeChestItem(ACoopRPGSharedChest* Chest, FGuid RoundId, uint32 Request, ECoopRPGChestItem Item);
+
+    UFUNCTION(Server, Reliable)
+    void ServerUseRecovery(FGuid RoundId);
+
+    void LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId) const;
 
     const TCHAR* GetChestRejection(const ACoopRPGSharedChest* Chest, FGuid RoundId) const;
     void LogChestRejection(const TCHAR* Action, const TCHAR* Reason,
