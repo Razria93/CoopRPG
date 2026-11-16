@@ -885,3 +885,15 @@ Engine\Build\BatchFiles\Build.bat UnrealEditor Win64 Development -WaitMutex -Win
 임시 문서에서 경로·설치 조사 사실, 사용자 조건, 기존 자료 검토 범위와 중요한 미결정만 선별했다. 새 목적·AI/MVP 운영 원칙은 이후 사용자 지시를 반영했다. 과거 24일 상세 일정·기능 번호·고정 콘텐츠 수·제출 분량은 채택하지 않았다. 일부 시험 수치는 검증 색인에 미확정 후보로만 보존했다.
 
 새 작업은 현재 문서만으로 이어갈 수 있으며 `Docs/X`를 필수로 읽을 필요가 없다. 임시 문서는 수정·삭제하지 않는다.
+
+
+<a id="v02-package-build-20261115"></a>
+## 2026-11-15 · 비용·쿨다운의 독립 패키지 빌드
+
+Editor 단독 사전 점검은 `-NoEngineChanges`에서 종료5로 차단됐다. 기존 엔진 갱신 대상6,628파일 중 obj1,796개였으며 작업 수와 같지 않다. 이전 SDK 사례의 IDE 복합 타깃7,130파일과는 호출 범위가 다르다. 45~90분은 이전 빌드·현재 동시 에디터 사용을 고려한 추정이며 실제 재빌드 시간은 아니다. 사용자는 Editor 재빌드를 보류하고 독립 Server·Client 검증을 선택했다.
+
+두 게임 타깃은 `CoopRPGServer/CoopRPGClient Win64 Development -Project=C:/CoopRPG/Game/CoopRPG.uproject -NoEngineChanges -NoHotReloadFromIDE -NoUBA -MaxParallelActions=4`로 빌드했다. 프로젝트 로컬 SDK26100 설정을 사용했고 엔진 변경 차단을 유지했다. 최종 Mixed 수정 빌드는 Server25.34초·Client27.81초에 성공했다. 이전 컴파일 실패와 수정 과정은 `v02-cost-cooldown-20261115-165043/build-01~03/`에 있다.
+
+UAT `BuildCookRun -skipbuild -skipbuildeditor -skipcook -stage -pak`로 변경하지 않은 콘텐츠의 Cook 결과를 재사용하고 새 네이티브 실행 파일을 별도 Stage했다. 서버는 `-server -noclient -serverplatform=Win64`, 클라이언트는 `-client`를 지정했다. 최종 Stage는 Server11.80초·Client11.44초다. 콘텐츠나 Cook에 영향 있는 입력을 바꾸면 이 생략 절차를 그대로 적용하지 않는다. 새 Editor/PIE·Shipping/Test 빌드는 미실행이다.
+
+**근거** · [기존 SDK 문제](../Cases/V01-WindowsSdkSelection.md#coop-ide-sdk-26100) · [게임 검증과 수동 안내](Index.md#v02-cost-cooldown). 원본 명령·결과는 로컬 `v02-cost-cooldown-20261115-165043`의 guard/build/final/package JSON·로그를 따른다. 다른 프로젝트의 실행 중 에디터·전역 SDK 설정은 수정하지 않았다.

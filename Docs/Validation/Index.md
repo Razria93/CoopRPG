@@ -664,6 +664,297 @@ Editor 전체 타깃 빌드는 SDK 전환으로 3,730개 작업이 예약돼 중
 
 **근거** · 사용자 제공 PIE Output Log (2026-11-15). 로컬 실행 `v02-manual-attack-20261115-142318`의 `attack-log.txt`에 원문 줄 번호와 전투 로그를 보존했다.
 
+
+<a id="v02-cost-cooldown"></a>
+### 2026-11-15 · 비용 경계와 2초 쿨다운
+
+**판정:** 독립 패키지 Server 1개·Client 2개에서 비용 부족·쿨다운의 실제 서버 거절, 정상 입력의 로컬 차단, 만료 후 재사용과 플레이어별 독립성을 통과했다. 같은 최종 패키지의 이동·입력·거리 거절 회귀도 통과했다. 사용자 수동 재현과 새 Editor/PIE 확인은 대기다. V02/G2 전체 완료를 뜻하지 않는다.
+
+**조건:** 기준 HEAD `45a1876` 위 미커밋 구현. 소스 UE `C:/UE/5.8.4`, SDK 10.0.26100.0, Win64 Development. 같은 PC의 루프백 통신이며 추가 지연·손실은 주지 않았다. 경계 시험은 서버 15 FPS·클라이언트 30 FPS, 기존 회귀는 30 FPS다. 실행 ID `v02-cost-cooldown-20261115-165043`의 `final/package/input-package-hashes.json`에 코드·자산·실행 파일·패키지 해시가 있다. 콘텐츠를 변경하지 않아 기존 WindowsServer/WindowsClient Cook 결과를 재사용하고 새 네이티브 실행 파일을 UAT로 Stage했다.
+
+| 항목 | 실제 결과 |
+|---|---|
+| 비용 부족 | 각 요청자 Stamina9·표적 HP100·사거리 안·쿨다운 없음. 정상 클릭은 로컬 차단, 별도 GAS 요청 5회씩은 서버 `Reason=Cost` 거절. HP100·Stamina9 유지 |
+| 비용 경계 | 각 요청자 Stamina10에서 승인 1회. HP100→90·Stamina10→0 |
+| 쿨다운 | 첫 승인 뒤 각 요청자의 실제 서버 요청 5회씩 거절. 추가 피해·비용 없음. 정상 클릭의 로컬 차단도 각각 확인 |
+| 만료·재사용 | 서버 GE 만료 뒤 다시 승인. 최초 승인 이후 HP90→80·Stamina90→80 |
+| 정상 반복 | 요청자 각각 표적 HP100에서 3회 승인 후70, Stamina100→70 |
+| 독립성 | A의 쿨다운 중 B 승인. 두 차례 교차 공격 후 표적 HP60, 각 요청자 Stamina80. 추가 서버 요청은 각 2회 쿨다운 거절 |
+| 입력·서버 경계 | 각 Client 정상 클릭10회: 전송8·로컬 차단2. 개발용 요청12회를 별도로 전송. 합계 서버 승인16·거절24와 클라이언트 송신40건 대조 |
+| 복제·수명 | 승인16건의 HP를 양쪽 Client에서, 비용을 각 소유자에서 확인. 같은 호스트 로그 시각 차의 HP 최장 86ms. 서버15 FPS에서 조기 만료·거절에 따른 연장을 확인하는 시험 허용 범위는1.99~2.25초로 두었다. 서버 쿨다운16개의 관측 수명 2.067~2.133초. 2초 설정의 프레임 단위 만료이며 정밀 타이머나 별도 PC 지연 측정이 아님 |
+| 종료·회귀 | 최종 경계 실행 세 프로세스 정상 종료. 기존 전투·입력 자동 판정을 수정하지 않고 이동·클릭당 요청·거리 거절·HP/비용 복제 회귀 통과 |
+| 개발용 권한 | 서버에 `-CoopCombatTest`가 없으면 두 클라이언트의 초기화 요청 모두 거절. 표적 HP·Stamina100 유지. Shipping/Test에서 명령 등록·컴포넌트 생성 제외는 코드 확인이며 해당 구성의 빌드는 미실행 |
+
+**처음 실패한 내용과 수정:** 태그 접근자의 임시값 참조 반환 오류를 값 반환으로 수정했다. 첫 실행은 긴 서버 명령행에서 로그 생성 전 종료했고 명령 길이를 줄여 재시도했다. `boundaries-02`에서는 플레이어 ASC가 Minimal이어서 소유자의 쿨다운 태그가 없었다. 서버 거절은 동작했지만 로컬 차단·소유자 스냅샷이 실패했다. 엔진의 `MinimalReplicationTags`가 `COND_SkipOwner`이고 Minimal은 소유자에 활성 GE를 보내지 않는 경로임을 대조해 플레이어만 Mixed로 바꿨다. 서버의 파일 기반 종료 예약도 동작하지 않아 시간초과·강제 종료로 보존했다. 최종 실행은 짧은 직접 DEFER 예약과 서버 15 FPS를 사용해 정상 종료했다. 이전 실패는 최종 통과로 덮어쓰지 않았다.
+
+**시험 경로:** `Coop.Test.Request`는 개발 클라이언트에서 사전 검사만 생략하고 기존 `CallServerTryActivateAbility`를 호출한다. 서버의 활성화·비용·쿨다운·거리·표적 검사는 그대로다. 일반 클릭과 이 요청을 분리 집계하며 서버 함수 직접 호출·모의 Pawn으로 대체하지 않았다. `Coop.Test.Prepare`는 소유자 자원·쿨다운과 공용 표적을 초기화하는 시험 전용 RPC다. 실제 게임의 회복·공격 기능으로 사용하지 않는다.
+
+**한계:** 엔진 Editor 의존 빌드는 사용자 선택으로 보류했다. 새 코드는 독립 Server·Client에서 확인했으며 기존 Editor DLL에는 이번 기능이 없다. 무효 대상·중복 접촉·상태 거절의 나머지 T1 시험, V03 취소, 지연·손실·LAN·사용자 수동 재현은 미실행이다. 최종 경계 로그에는 프로세스별 GameplayCue 검색 경로 경고1건과 서버 정상 종료의 DEFER 처리42.29ms 경고가 남았다. Error·Fatal·Ensure는 없었으며 경고0건을 주장하지 않는다.
+
+**근거** · [판정 스크립트](../../Tools/Validation/Verify-CombatBoundaries.py) · [실행 스크립트](../../Tools/Validation/Run-CombatBoundaries.ps1) · [소유자 복제 선택](../Architecture.md#gas-basic-attack). 로컬 `v02-cost-cooldown-20261115-165043`의 `baseline.json`·`source-before/`·`build-01~03/`·`package/`·`boundaries-01~02/`는 보존 자료다. 최종 결과는 `final/boundaries-03/boundary-result.json`·세 로그·`processes.json`, `final/regression/combat-result.json`·`input-regression-result.json`, `final/probe-disabled/disabled-result.json`에서 확인한다. 빌드·패키징 시간은 각 `*-result.json`의 실제값을 따른다.
+
+<a id="v02-manual-input"></a>
+### 수동 검증 런처와 창 전환 입력 · 2026-11-15
+
+**판정:** 수동 모드의 커서 표시·잠금 해제, 전환 클릭 보호, 이동 키 초기화와 기존 입력 회귀를 확인했다. 전면 표시는 요청과 실제 성공을 구분한다. 백그라운드에서 실행한 두 번의 런처는 Windows의 포커스 요청 제한을 만나 경고·직접 클릭 경로를 확인했으며, 자동 포커스 성공으로 기록하지 않는다.
+
+- **범위와 빌드:** `ACoopRPGPlayerController`가 로컬 `-CoopManualInput` 실행에서만 `GameAndUI`·`DoNotLock`·커서 표시를 적용한다. 포커스 상실 시 엔진의 키 초기화 경로를 사용하고 첫 왼쪽 누름/뗌을 소비한다. 일반 실행의 이동·GA·GE·서버 판정과 자동 시험 스크립트는 유지했다. Shipping/Test에서는 수동 모드와 개발용 명령을 활성화하지 않는다. 해당 구성의 실제 빌드는 미실행이다.
+- **실행 환경:** 소스 엔진 `C:/UE/5.8.4`, Win64 Development, 같은 PC의 전용 서버1·독립 클라이언트2. 최종 증분 빌드 Server22.38초·Client24.03초, 기존 Cook 재사용 Stage37.52초·37.39초. `-NoEngineChanges`로 실행했고 전체 엔진 재빌드·Editor 빌드는 하지 않았다. 초기 생성·보완 빌드도 원본 로그에 보존했다.
+- **근거 위치:** 로컬 실행 ID `v02-manual-input-20261115-172824`. `baseline.json`·`before/`는 기존 미커밋23개 원본, `build-01~03/`는 빌드, `final/package/`는 Stage 결과와 코드·패키지 해시다. `manual-input-result.json`의 로그/창 메타데이터 대조40개가 통과했다. 화면 조작은 AI의 Computer Use이며 사용자의 학습·수동 재현 완료를 뜻하지 않는다.
+
+| 확인 | 실제 결과 |
+|---|---|
+| 창 배치·항상 위 | 모니터 작업 영역 `(1920,3)–(3840,1035)` 안에 A/B를 겹치지 않게 배치. 옵션 미지정 시 둘 다 topmost=false, 지정 시 둘 다 true. 각각의 `processes.json`에 실제 사각형·PID·포커스 결과 보존 |
+| 커서·잠금 | 게임 화면의 커서 표시를 관찰. 별도 캡처 해제 키 없이 B 제목 표시줄을 드래그해 y15→65로 이동. 클릭 전환과 Alt+Tab 모두 가능 |
+| 전환 클릭 | A 최초 클릭, A→B 클릭 전환, B→A Alt+Tab 복귀와 이동 시험 뒤 복귀의 첫 클릭4건 소비. 공격 요청0건. 의도적인 후속 클릭만 A2건·B1건 발생 |
+| 이동 중 전환 | W 이벤트 한 번으로 이동 상태를 만든 뒤 실제 Alt+Tab 전환. 두 클라이언트에서 `HeldWBefore=1 W=0`. 명시적 W 해제 명령보다 먼저 정지하고, 약2초 간격 두 관측의 서버·클라이언트 위치 동일·속도0 |
+| 정지 위치 | 벽에 닿기 전의 A 서버X439.318cm·ClientX439.390cm, B 서버X1296.442cm·ClientX1296.371cm. 같은 실행에서 로컬/서버 차이1cm 미만. A 복귀 후 OS W 누름을 새로 전달했을 때 다시 이동한 후 정지 |
+| 전투 유지 | 수동 클릭3건 = 거리 밖 거절2·거리 안 승인1. 승인 때 표적HP100→90이 양쪽에, Stamina100→90은 공격 소유자에 복제 |
+| 기존 자동 판정 | `-CoopManualInput` 없이 기존 두 판정기를 수정하지 않고 재실행. 각자 이동 약186.16cm, 클릭4회/RPC4건, 승인2·거리 거절2, HP·비용 복제와 세 프로세스 정상 종료 통과 |
+
+**재시도와 해석 한계:** 첫 창 실행 `final/manual-20261115-173605-586`은 사용자가 포커스에 개입했다고 알려 재시작했다. 최종 입력 시험은 `final/manual-20261115-173846-117`이다. A의 최초 이동 시험은 벽에 닿아 정지 원인 분리가 어려웠으므로, 열린 바닥에서 `A-Short`로 다시 수행했다. W 홀드는 1회 게임 입력 이벤트 주입, 창 전환·클릭·복귀 후 W 탭은 OS UI 조작이다. 물리 키보드를 계속 누르는 사람의 체감 시험은 별도 확인할 수 있다.
+
+기존 판정기를 Windows PowerShell5.1로 실행했을 때 문자열 메타데이터 직렬화와 Pawn 그룹 판정에서 실패했다. 그 산출물을 보존하고 기존 사용 환경인 PowerShell7에서 같은 로그를 재판정해 통과했다. 게임을 수정하거나 판정 기준을 낮추지 않았다. 런처 자체는 Windows PowerShell5.1에서 실행·검증했다. 전체 비용·쿨다운115개 시험은 이번 UI 변경에서 반복하지 않았으며 [직전 결과](#v02-cost-cooldown)와 구분한다.
+
+수동 창은 Alt+F4로 종료하고 해당 실행의 숨긴 서버만 명시적으로 종료했다. 이것을 서버 정상 종료 시험으로 세지 않는다. 사용자의 요청에 따라 Computer Use 세션도 정리했다. 다른 프로젝트와 기존 미커밋 변경을 임의 복원하거나 커밋하지 않았다. 보존/코드·패키지 대조118개와 저장소6개 검사가 통과했고, 관련 없는 기존 미커밋17개는 바이트 단위로 동일하다. 일지·Roadmap의 기존 줄을 순서대로 보존했다. `preservation-result.json`·`repository-check/result.json`에 근거가 있다. Editor/PIE 최신화와 비용·쿨다운 사용자 재현은 여전히 대기다.
+
+**근거** · [런처](../../Tools/Validation/Start-CombatManual.ps1) · [수동 입력 처리](../../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [입력 책임](../Architecture.md#manual-validation-input) · [Microsoft 창 배치 API](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowpos) · [Microsoft 전면 표시 제한](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow). UE5.8.4 로컬 소스 `PlayerController.cpp`의 `FInputModeGameAndUI::ApplyInputMode`, `GameViewportClient.cpp`의 `LostFocus`, `EnhancedPlayerInput.cpp`의 `FlushPressedKeys`와 대조했다. 세부 근거는 실행 폴더의 `final/manual-*/processes.json`·각 로그·`observations/`, `final/Binaries/`의 재현 명령, `final/input-regression/`의 두 판정 JSON과 `checker-attempts.json`에서 확인한다.
+
+<a id="v02-live-log-viewer"></a>
+### 수동 검증 로그 창 보완 · 2026-11-15
+
+**문제와 변경:** 사용자가 게임·PowerShell 어디에서도 입력 결과를 볼 수 없다고 지적했다. 파일에 로그가 남는 것과 사람이 조작 중 결과를 확인할 수 있는 것은 달랐다. 수동 런처에 읽기 전용 로그 창을 기본으로 연결했다. 게임 두 창 아래에서 A 입력·로컬 차단·복제 / 서버 초기화·승인·거절 / B 입력·로컬 차단·복제를 구분한다. 원래 로그·자동 판정·게임 코드는 유지한다.
+
+**실제 확인:** Windows PowerShell5.1 구문·로그 읽기·분류17개 검사를 통과했다. 기존 비용·쿨다운 시험 원본에서 클라/서버 거절, 승인16건, 속성 복제·준비값을 읽었다. 파일이 열린 상태의 추가 읽기, UTF-8 문자가 나눠 기록된 경우, 중복 방지와 파일 축소도 확인했다. 기존 로그를 읽은 검사를 새 게임 시험으로 세지 않는다.
+
+새 실행 `manual-20261115-180808-418`에서 기존 패키지를 재사용했다. 첫 뷰어는 숨긴 보조 콘솔의 첫 창 표시 문제로 표시되지 않았다. 폼을 한 번 다시 표시하도록 수정하고 같은 로그에 재연결했다. 실제 GUI 창 생성과 오류 출력 없음, AI의 포커스 클릭(18:11:25) → 공격 클릭(18:11:33) → 서버 승인 HP80→70·Stamina90→80 및 양쪽 Health 복제를 확인했다. 실행 중 사용자 조작도 섞여 있어 전체 클릭 수를 AI 시험 수로 집계하지 않는다. 이후 사용자가 **“창이 보이고 로그도 갱신돼요”**라고 확인했다. 이는 표시·갱신 확인이며 비용·쿨다운 모든 경계의 사용자 검증 완료를 뜻하지 않는다.
+
+**범위와 한계:** 뷰어는 250ms마다 추가 로그를 읽고 최근 선택 이벤트150개/창을 표시한다. 시작 시 파일 마지막128KiB부터 읽으므로 전체 기록은 원본 파일을 따른다. 게임에 명령을 보내지 않는다. 숨긴 콘솔과 별개로 GUI를 표시하며, 표시 실패 시 런처 경고와 `log-viewer.stderr.log`를 남긴다. 항상 위를 선택해도 키보드 포커스는 별개이며 마지막에 게임 창으로 한 번만 요청한다. 자동화 도구가 PowerShell 호스트 GUI를 노출하지 않아 뷰어의 픽셀·작은 화면 검수는 수행하지 못했다. 사용자 표시·갱신 확인과 프로세스의 실제 창 생성 확인으로 범위를 구분한다. 이번 작업은 게임·엔진 빌드 없이 진행했고 전체 비용·쿨다운 시험은 반복하지 않았다. 최종 로그 읽기·분류17개, 기존 변경 보존58개, 저장소6개 검사가 통과했다. 게임 소스는 이번 턴 시작과 동일하며 커밋은 하지 않았다. 마지막 포커스 요청을 로그 창 생성 뒤로 옮긴 순서는 코드로 검토했으며, 사용자가 조작 중이므로 그 수정 뒤 새 전체 실행은 반복하지 않았다. Computer Use를 종료하고 게임·로그 창은 사용자 재현을 위해 유지했다.
+
+**근거** · [수동 런처](../../Tools/Validation/Start-CombatManual.ps1) · [로그 창](../../Tools/Validation/Watch-CombatManual.ps1) · [읽기·분류](../../Tools/Validation/CombatLogReader.psm1) · [사용 안내](#v02-cost-cooldown-manual). 로컬 `v02-log-viewer-20261115-180432`의 `baseline.json`·`before/`, `reader-check/results.json`·`reader-check-final/results.json`, `observations.json`·`viewer-fixed.stderr.log`, `preservation-result.json`·`repository-check/result.json`에 변경 전 상태와 확인 근거를 보존한다. 실제 게임 로그는 `v02-manual-input-20261115-172824/final/manual-20261115-180808-418`이다.
+
+<a id="v02-viewer-phase1"></a>
+### 로그 도구 1차 · 두 모니터·통합 탭·표시 규칙 · 2026-11-15
+
+**요구와 결과:** 사용자가 전용 검증 화면, 통합/서버/클라이언트별 탐색, 읽기 쉬운 일정한 로그 표현을 요청했다. AI가 기존 WinForms 뷰어를 보완했다. 두 모니터 역할 선택·설정 보존, 통합/서버/클라이언트 1/2 탭, 검색·결과 필터·상세 원문·글자 크기·표시 멈춤·따라가기, 프로세스와 파일 상태를 추가했다. 요청 ID 전달은 [설계](LogViewer.md#request-design)만 작성했고 게임 코드·패키지·자동 판정 규칙은 바꾸지 않았다.
+
+| 확인 | 실제 결과·근거 범위 |
+|---|---|
+| 호환·데이터 | Windows PowerShell5.1 기존 읽기/분류17개, 새 데이터·시각·모니터/설정36개 통과. 부분 UTF-8·파일 축소/교체·읽기 오류·자정/늦은 로그·미분류/Warning·원문 수치 유지 포함 |
+| UI 동작 | 실제 WinForms 컨트롤과 이벤트 처리기16개 통과. 탭/필터, 멈춘 동안 수집, 원문, 늦은 사건 이후 선택 유지, 글자, 파일 오류/복구·프로세스 종료 표시. OS 마우스 조작 시험과는 구분 |
+| 두 모니터 | 새 실행 `manual-20261115-184407-927`에서 오른쪽 게임2개·왼쪽 최대화 뷰어. 두 화면 작업 영역2560×1392, DPI96. 프로세스·배치 메타데이터와 앱 자체 렌더링 확인. 한 번의 전면 요청은 Windows가 거절해 경고를 남김 |
+| 가독성 | 넓은 창과1000×700·900×480 자체 렌더링 확인. 최소 높이는 한두 행만 표시하므로 장시간 검증에는 최대화를 권장한다. 필터 줄바꿈·표/상세 스크롤·하단 상태를 검수. Computer Use에서 PowerShell 호스트 GUI가 노출되지 않아 데스크톱 직접 조작 검수와 구분 |
+| 대량 로그 | 합성1만 건을 수집하고 최근3천 건 보관·7천 건 제거 수를 확인. 처음에는 한 Tick 최장약6초로 UI가 막혀, 출처별8KiB 제한 후 같은1만 건 단일 출처 시험에서 최장318.05ms를 관측했다. 전체1만 건 수집·3천 건 보관·7천 건 제거를 확인했다. 실제 타이밍은 아래 실행 JSON을 따르며 지속 고부하 처리량이나 사람 체감의 일반 보장이 아님 |
+
+**실패·수정:** 초기 파서 편집의 구문 오류, PowerShell 컬렉션 직렬화와 자동 변수명 충돌, 설정 파일 교체의 빈 백업 경로를 발견해 수정했다. 테스트의 완료 플래그 오류도 통과로 처리하지 않고 후속 실행에서 확인했다. 처음 대량 처리의 약6초 지연을 발견해 읽기 양을 제한하고 대기량을 노출했다. 표시 멈춤 중 필터 선택과 보이는 데이터가 어긋나지 않도록 필터 조작을 잠그고, 상세 글자도 크기 조절을 따르도록 했다. 실패 산출물은 보존한다.
+
+**보존·최종 검토:** 시작 미커밋29개 원본과 이번 대상 외21개 파일의 해시 일치를 확인했다. 변경·이력 보존61개 및 저장소6개 검사 통과. 마지막 읽기 전용 검토 에이전트1명이 알려진 사건의 Error 수준이 오류 필터에서 누락되는 P2 1건을 재현했다. Level 기반 필터·요약·색을 보완하고36개 검사와 독립 재확인으로 해소했다. 추가 필수 수정은 발견하지 못했다. 도구5개·문서6개를 변경/추가했고 게임 코드·HEAD·브랜치·스테이징은 유지했다. 커밋·푸시·빌드는 하지 않았다.
+
+**후속 사용자 확인 · 2026-11-15:** 사용자가 왼쪽 모니터의 새 로그 창에서 서버/클라이언트1 탭 전환과 `Attack` 검색 후 목록 변경을 확인하고 “탭과 검색 모두 정상이에요”라고 답했다. 탭·검색의 사람 조작 확인을 완료했다. 표시 멈춤·글자 조절 등 모든 UI 동작이나 비용·쿨다운 게임 시험까지 확인한 것으로 확대하지 않는다.
+
+**한계와 다음:** 물리 모니터 분리·혼합 DPI는 미실행이며 모니터 누락/음수 좌표 복구는 합성 배치 검사다. 이번에 공격·비용·쿨다운 전체 게임 시험을 반복하지 않았다. 기존 비용·쿨다운 결과와 [사용자 재현](#v02-cost-cooldown-manual)을 구분한다. 요청 ID 계측·패킷 분석·Editor 빌드는 보류다.
+
+**근거** · [사용 안내·로그 규칙·설계](LogViewer.md) · [검사 스크립트](../../Tools/Validation/Test-CombatViewer.ps1). 로컬 실행 `v02-viewer-phase1-20261115-183936`의 `baseline.json`·`before/`, `legacy-reader-reviewed/`, `model-check-final/result.json`, `ui-contract-fixture-final/ui-result.json`, `synthetic-volume/`·`synthetic-volume-bounded/`, `preview/reviewed-*.png`, `preservation-result.json`·`repository-check-final/result.json`·`review-result.json`에 원본·검사·렌더링을 보존한다. 실제 새 게임 실행 폴더는 `v02-manual-input-20261115-172824/final/manual-20261115-184407-927`이다. 원시 자료는 Git 제외 로컬 자료이며 공개 다운로드 링크가 아니다.
+
+<a id="v02-viewer-parallel"></a>
+### 병렬 로그 비교 · 정렬·관찰 필터·2~4분할 · 2026-11-15
+
+**요구와 결과:** 사용자가 상단 높이 정렬·기능 구분선·관찰 필터와 출처별 병렬 비교를 채택했다. AI가 기존 읽기 전용 WinForms 뷰어에 2~4칸, 칸별 출처·목록·상세, 모아 보기·공통 행 비교를 추가했다. 시작 정렬은 시각순이다. 공통 행의 회색 빈칸은 다른 출처의 사건이며 요청 관계를 추정하지 않는다. 게임 C++·패키지·자동 판정 규칙·요청 ID 계측은 변경하지 않았다.
+
+| 확인 | 실제 결과·근거 범위 |
+|---|---|
+| 기존 회귀 | Windows PowerShell5.1 읽기·분류·시각·모니터·설정 검사36개 통과. 기존16건 승인 로그를 단일 보기에서도 동일하게 조회 |
+| 병렬 UI | 실제 WinForms 컨트롤·이벤트 검사40개 통과. 관찰 필터, 중앙 정렬·구분선, 2/3/4칸 전환, 출처 선택, 독립 상세, 모아 보기의 독립 스크롤, 공통 행의 스크롤·목록/상세 경계 정렬, 모드 전환 시 공통 위치 복구 포함. 종료 후 별도 설정 파일에서 보기·분할·표시 모드·출처4개 저장도 확인 |
+| 갱신 경계 | 늦은 시각 로그 삽입 후 선택 EventId·보이는 기준 행 유지, 표시 멈춤 동안 수집 지속/화면 고정, 재개·빈 검색·최신 복귀·선택 기록 제거 확인 |
+| 대량 로그 | 과거 실제 로그 복사본과 합성2건·추가1만 건에서 총10,340건 수집, 전체3,000건 보관·7,340건 제거. 네 칸이 같은 보관 목록을 사용하며 출처별 실로그 수와 빈칸 수를 구분. 최종 시험 최장 Tick477.95ms. 전체 UI 시험44.98초이며 지속 고부하 처리량 보장은 아님 |
+| 가독성 | 최종 코드의 단일·2분할1000×700, 3/4분할1920×1000, 18pt 좁은 창 등 자체 렌더링6장 확인. 현재 장비 작업 영역1920×1032·DPI96에서 기본12pt 네 칸 너비 확보. 큰 글자·좁은 창은 바깥 스크롤로 접근하며 동시에 보이는 행·상세가 줄어드는 한계 명시 |
+
+**실패·수정:** 최초 검사에서 네이티브 ComboBox가 표시된 후 높이를 바꿔 중앙 정렬이 어긋났다. 실제 창 표시 이후 재배치하도록 수정했다. 검사 결과 JSON을 PowerShell5.1 기본 인코딩으로 읽는 문제는 UTF-8을 명시해 수정했다. 자체 검토에서 출처 선택칸을 덮는 헤더 배치, 큰 글자 선택칸 너비, 모아 보기의 서로 다른 스크롤 위치가 공통 행 비교로 넘어오는 문제를 보완했다. 저장된 큰 글자 설정으로 새 칸을 만들 때도 열 너비를 조절하도록 보완하고40번째 검사로 확인했다. 그 재검사 과정에서 검사 스크립트 복사 시 UTF-8 BOM이 빠져 한글 문자열이 손상된 실패를 보존했으며, PS5.1용 BOM을 유지해 최종40개를 통과했다. 실패한 첫 실행과 중간 통과 실행을 삭제하지 않았다.
+
+**보존·검사:** 시작 미커밋32개를 원본 보관하고 이번 수정 대상 외27개 파일의 바이트 해시 일치를 확인했다. 도구3개·문서4개가 이번 변경 범위이며 그중 도구2개가 새 파일이다. 기존 일지·Roadmap 행과 이전 검증 기록을 보존했다. 저장소6개 검사와 diff 공백 검사 통과. HEAD·브랜치·스테이징은 유지했으며 커밋·푸시·엔진/게임 빌드는 하지 않았다.
+
+**검증의 한계와 다음:** UI 검사는 앱 자신의 컨트롤 이벤트와 DrawToBitmap 렌더링이다. OS 마우스·서로 다른 DPI·물리 모니터 연결 해제·사용자의 새 병렬 UI 조작까지 검증한 것은 아니다. 시험용 로그 복사본에 합성 기록을 추가했으며 원본 게임 로그는 보존했다. 이번에 게임의 비용·쿨다운 시험을 새로 수행한 것으로 계산하지 않는다. 다음은 [직접 재현](#v02-cost-cooldown-manual)이며 V02 잔여 경계와 V03 완료 상태는 그대로다.
+
+**재검사:** [병렬 UI 검사](../../Tools/Validation/Test-CombatParallel.ps1)는 로컬 `v02-cost-cooldown-20261115-165043/final/boundaries-03`의 세 로그를 입력 자료로 사용한다. 원본은 수정하지 않고 새 OutputDirectory에 복사한다. 이 자료가 없는 장비에서 바로 실행할 수 있는 독립 CI 검사는 아니다.
+
+**근거** · [병렬 사용법](LogViewer.md#parallel) · [뷰어](../../Tools/Validation/Watch-CombatManual.ps1) · [행 구성](../../Tools/Validation/CombatLogViews.psm1). 로컬 `v02-viewer-parallel-20261115-193244`의 `baseline.json`·`before/`, `legacy-ready/result.json`, `ui-check-01`·`ui-check-02`·`ui-check-03`·`ui-check-final`·`ui-check-restored-font`·`ui-check-font-final/ui-result.json`과 PNG6장·`settings.json`, `preservation-result.json`·`repository-ready/result.json`에 결과를 보존한다. Git 제외 로컬 근거이며 공개 다운로드 링크가 아니다.
+
+<a id="v02-viewer-export"></a>
+### 로그 창 캡처·Excel 내보내기 · 2026-11-15
+
+**요구와 선택:** 사용자가 로그 창 캡처와 Excel 내보내기를 요청했다. AI는 현재 화면 PNG와 필터·선택 출처에 해당하는 목록 전체 XLSX를 별도로 저장하도록 구성했다. 화면에 보이는 행 수와 내보내는 사건 수를 구분하고, 중복 출처·통합 칸·공통 행 비교의 빈칸이 사건 수를 늘리지 않게 했다. 새 외부 패키지·Excel 설치 의존성 없이 Windows PowerShell5.1과 .NET으로 저장한다.
+
+**구현:** `창 캡처`·`Excel 저장`·`저장 폴더`를 상단에 추가했다. 결과는 실행 로그의 `Exports` 아래 고유 이름으로 생성하고 하단에 결과·경로를 표시한다. PNG에는 별도 상태 JSON을, XLSX에는 `로그`·`내보내기 정보` 시트를 저장한다. 선택한 순간의 필터·정렬·출처·멈춤 상태와 수집/보관 한도를 남긴다. 저장 중 읽기 타이머만 잠시 멈추며 실패 뒤에도 복귀한다.
+
+| 확인 | 실제 결과·한계 |
+|---|---|
+| 저장 동작 | 합성120건을 사용한 실제 WinForms 버튼 처리기25개 검사 통과. 단일 서버+승인 검색20건, 4칸+통합120건 중복 제거, 반복 출처의 합집합80건, 빈 필터0건 저장 |
+| PNG | 단일·4분할의 실제 저장 PNG1920×1000과 상태 JSON 확인. 앱 자체 렌더링이며 OS 화면 전체 캡처가 아님 |
+| 표시 멈춤 | 수집121건으로 늘어난 동안 화면120건을 내보내고, 해제 후121건 저장. 화면 갱신 당시 수집 수·저장 당시 수집 수 구분 |
+| 파일 재열기 | ZIP/XML과 openpyxl 읽기 전용 대조55개 통과. 모든 내보낸 행의 EventId·순서·원문·요약·출처·필드와 필터 정보 일치. 한글·XML 특수문자·이모지·제어문자·이스케이프처럼 보이는 문자열 보존. 수식처럼 시작하는 문자열에도 formula 요소 없음 |
+| 실패 경로 | 32,768자 셀 저장 거절, 미완성 XLSX 제거, 기존 파일 경로 재사용 거절과 해시 보존, 디렉터리 대신 파일이 있는 경로의 실패 표시·타이머 복귀 확인. 의도적인 오류 시험이며 성공 저장으로 계산하지 않음 |
+| 가독성 | 저장된 PNG2장, 단일/2~4분할·좁은 창의 기존 UI 렌더링, Artifact Tool로 다시 읽은 XLSX 두 시트의 대표 범위를 검수. 헤더·필터·고정 영역·원문/정보 분리 확인. 네이티브 Microsoft Excel UI에서의 직접 열기·조작은 미시험 |
+| 대량·회귀 | 3,000행 XLSX 저장348.34ms 실측 후 독립 재열기3,001행(헤더 포함) 확인. 기존 읽기·분류36개, 병렬 UI40개, 저장소6개 검사 통과. 장비·파일시스템이 다른 환경의 성능 보장은 아님 |
+
+**보존·범위:** 시작 미커밋34개를 보관하고 이번 대상 외28개 파일의 해시 일치를 확인했다. 이번 변경은 뷰어·기존 병렬 검사 연결·내보내기 도구3개·기존 문서4개다. 게임 코드·패키지·요청 ID 계측·HEAD·브랜치·스테이징은 유지했다. 커밋·푸시·엔진 빌드·새 게임 검증은 수행하지 않았다. 개발 도구의 내보내기 기능이며 V02 비용·쿨다운 사람 확인 완료를 뜻하지 않는다.
+
+**검토와 다음:** 창 캡처는 현재 보이는 영역, Excel은 보관된 필터 결과 전체라는 차이를 [사용 안내](LogViewer.md#export)에 명시했다. 원문 파일 전체를 내보내는 기능·저장 경로 선택 대화상자는 이번 범위 밖이다. 원본 경로·텍스트도 파일에 포함된다. 다음 작업은 사용자의 비용·쿨다운 [수동 재현](#v02-cost-cooldown-manual)과 V02 잔여 경계 확인이다.
+
+**근거** · [저장 검사](../../Tools/Validation/Test-CombatExport.ps1) · [내보내기 모듈](../../Tools/Validation/CombatLogExport.psm1) · [XLSX 작성기](../../Tools/Validation/CombatWorkbookWriter.cs). 로컬 `v02-viewer-export-20261115-201216`의 `baseline.json`·`before/`, `export-check-01/export-result.json`·`Exports/`·`volume.json`, `xlsx-verification.json`·`xlsx-logs.png`·`xlsx-info.png`, `parallel-regression/ui-result.json`, `reader-regression/result.json`, `preservation-result.json`·`repository-check/result.json`에 원본·실측·검사를 보존한다. 합성 로그와 과거 로그 재생은 새 게임 시험으로 기록하지 않는다.
+
+<a id="v02-viewer-pane-gap"></a>
+### 병렬 보기 출처 선택 영역 여백 · 2026-11-15
+
+사용자 화면과 같은 11pt·3분할에서 선택 상자 하단과 표 머리글 사이 0px을 재현했다. 선택 상자를 전용 행의 위쪽에 맞추고 실제 높이와 화면 배율로 헤더 높이를 계산했다. DPI 96에서 11pt·3분할, 18pt·3분할 좁은 창, 12pt·2/4분할의 모든 칸에서 간격 8px을 확인했다. WinForms 배치·동작 검사 44개를 통과했고 11pt와 18pt의 자체 렌더링을 검수했다.
+
+**근거** · [뷰어 배치](../../Tools/Validation/Watch-CombatManual.ps1) · [병렬 UI 검사](../../Tools/Validation/Test-CombatParallel.ps1). 로컬 `v02-viewer-pane-gap-20261115-203620`의 `before-gap/ui-result.json`, `verified-gap/ui-result.json`·`three-aligned-11pt.png`·`large-font-narrow.png`에 재현과 검증을 보존했다.
+
+<a id="v02-viewer-connection"></a>
+### 접속 단계와 카테고리 · 동일 로그 Before / After · 2026-11-15
+
+사용자 요청에 따라 원본 로그와 수정 전 뷰어를 보존했다. 기존 버튼 처리기로 Before를 저장한 뒤 분류·카테고리 메뉴를 변경하고 같은 로그를 재생했다. 전체 20→24건, `접속 흐름` 10건을 PNG·상태 JSON·XLSX로 남겼다. 기존 20건의 EventId와 원문이 일치했고 로그인·입장 요청이 각각 2건 추가됐다. 카테고리와 원본 수치는 XLSX·JSON 및 로컬 `v02-viewer-connection-20261115-205319`의 `before/verified.json`과 `after/verified.json`으로 대조했다.
+
+독립 검사는 읽기·분류 41개, 병렬 WinForms UI 48개, 내보내기 25개다. 접속 분류, 검색·결과·출처와 카테고리의 결합, 다중 선택, 카테고리의 내보내기 반영과 표시 멈춤을 확인했다. 파일 재생과 실제 UI 버튼 처리기로 검증했으며 접속 콜백 계측과 신규 게임 실행은 후속 작업이다.
+
+**근거** · [Before / After와 자료 위치](LogViewer.md#connection-before-after) · [읽기 검사](../../Tools/Validation/Test-CombatViewer.ps1) · [병렬 UI 검사](../../Tools/Validation/Test-CombatParallel.ps1)
+
+<a id="v02-viewer-live-manual"></a>
+### 패키지 수동 검증 준비 · 2026-11-15
+
+사용자가 접속·공격 로그를 직접 확인할 수 있도록 런처로 같은 PC의 전용 서버 1개와 클라이언트 2개, 라이브 로그 뷰어를 열었다. 서버의 `Join succeeded` 2건과 각 클라이언트의 `Welcomed by server`·`ManualInputEnabled`, 뷰어에서 세 게임 프로세스 실행 상태를 확인했다. 공격 로그에 대한 사용자 확인은 이어서 진행한다. 로컬 실행 `manual-20261115-211148-227`의 `processes.json`, `server.log`, `a.log`, `b.log`, `viewer-status-*.json`에 근거를 남겼다.
+
+**근거** · [검증 환경 선택과 직접 실행](LogViewer.md#choose-environment) · [공격 수동 시험 절차](#v02-cost-cooldown-manual)
+
+**후속 관측 · 사용자 공격 로그 대조:** 실행 `manual-20261115-211148-227`의 사용자 XLSX 207행과 프로세스별 원문을 확인했다. 클라 A/B의 요청 제출은 4/17건이다. 서버는 10건 승인, 11건 거절했다. 거절은 사거리 밖 5건과 표적 HP 0 도달 뒤 `InvalidTarget` 6건이다. 클라 B의 쿨다운 차단 9건에는 모두 `Submitted=0`이 기록됐다. 서버 승인에서 HP 100→0의 10단계가 양쪽 클라의 `OnRep_Health`에 순서와 값이 일치했다. 비용 부족과 서버 쿨다운 시험 요청은 이 실행의 확인 범위에서 빠져 있다.
+
+클라 B의 대표 승인 시각(KST)은 21:15:31.708 GAS의 `CallServerTryActivateAbility`, .730 프로젝트의 `Submitted=1`, .740 서버 승인 HP 40→30, .783 클라 B 복제, .792 클라 A 복제다. 클라 A의 첫 성공에서는 RPC 호출 로그가 21:13:50.756, 서버 승인이 .767, `Submitted=1`이 .777에 찍혔다. `Submitted`는 GAS 함수가 반환한 후 쓰므로 시각순 화면에서 서버 판정 뒤에 보일 수 있다. 개별 사례는 시각·행위자·HP 전이를 대조했으며 요청 ID는 미계측이다. 로컬 근거는 `server.log:758,762,782,791,793`, `a.log:948,962,964,967,986`, `b.log:946,976,1022,1024,1027,1057,1062`와 `Exports/CoopRPG-20261115-211647-572-f8a4d433.xlsx`다.
+
+<a id="v02-viewer-gas-rpc"></a>
+### GAS 호출과 함수 반환 표시 · 2026-11-15
+
+사용자 공격 원본·사용자 내보내기·수정 전 뷰어를 보관하고 기존 캡처·Excel 버튼으로 Before를 저장했다. `LogAbilitySystem`의 `CallServerTryActivateAbility` 항목과 `AttackDispatch` 반환을 구분해 같은 로그로 After를 저장했다. 전체 207→228행, 첫 승인 9→10행으로 변경됐다. 기존 행의 원문과 EventId가 동일했고, 추가 행은 원본 호출 21건이다. 분류 46개·병렬 UI 48개·내보내기 25개 검사를 통과했다. 로컬 `v02-viewer-gas-rpc-20261115-222530`의 `before/verified.json`·`after/verified.json`에 파일·행·해시 대조를 남겼다. 게임 패키지는 지난 사용자 실행의 로그를 재생했다.
+
+**근거** · [화면과 파일 비교](LogViewer.md#gas-rpc-before-after) · [분류 검사](../../Tools/Validation/Test-CombatViewer.ps1)
+
+**창 전환 로그 분류 조정:** 새 수동 실행 `manual-20261115-223713-939`에서 공격 입력 없이 기록된 초기화 7건은 모두 W 0→0이었다. 이전 키 잔류 시험에서 확인한 입력 해제 동작은 사용하고, 뷰어에서 `ManualInputFlushed`를 `창 전환 키 초기화`로 표시해 `상태·기타`에 배치했다. `공격 흐름`에서는 해당 행을 빼고 `ManualFocusClickConsumed`를 표시한다. 48개 분류 검사와 같은 실행 로그의 재분류 결과는 로컬 `focus-filter-check`에 보존했다. [화면 사용법](LogViewer.md#reading)
+
+<a id="v02-viewer-detail"></a>
+### 상세창 정보 배치 · 동일 로그 Before / After · 2026-11-15
+
+기존 `manual-20261115-223713-939`의 22:44:26 서버 승인과 클라 1 스태미나 복제에 대해 수정 전후 상세를 WinForms 창에서 저장했다. EventId·원문·바이트 위치, 2분할·11pt·검색 등 비교 조건의 일치를 확인했다. 이벤트 코드가 EventId 위에 있고 함수명은 행위자 바로 아래에 표시된다. 서버 요청자와 두 행의 역할은 `미계측`이며 스태미나 상세의 `결과: 관찰`을 생략했다. 서버 거리 76.13 / 250.00cm와 원문 전체를 보존했다. 병렬 UI 48개 검사가 통과했다. 관측은 기존 파일을 재생한 결과다. 로컬 `v02-viewer-detail-20261115-231252`에 캡처와 상세 텍스트·해시를 남겼다.
+
+**근거** · [상세창 비교와 재생 조건](LogViewer.md#detail-before-after)
+
+<a id="v02-viewer-player-attribution"></a>
+### 서버 요청자와 Actor 역할 · 전용 서버와 두 클라이언트 · 2026-11-16
+
+UE 소스 엔진 `C:/UE/5.8.4`와 SDK `10.0.26100.0`으로 Win64 Development Server·Client를 증분 빌드했다. 각각 58.03초·36.64초에 프로젝트 작업 4개를 수행했다. 엔진 산출물과 기존 Cook을 재사용했고 별도 폴더로 Stage했다. Stage는 57.64초·37.36초였다.
+
+| 검증 | 기대와 실제 |
+|---|---|
+| 전용 서버 요청자 | 자동 입력으로 클라 1(256) → 클라 2(257) → 클라 1(256) → 클라 2(257). 서버 승인 4건에서 각 클라가 보고한 자기 PlayerId와 일치했다. 서버에서 두 공격 Pawn의 역할은 모두 `Authority`였다. |
+| 클라이언트의 자기 Pawn | 양쪽 창에서 자기 Pawn의 공격 입력과 스태미나 복제를 확인했다. 각각 스태미나 100→90→80과 `AutonomousProxy`가 기록됐다. |
+| 양쪽에서 본 고정 표적 | 양쪽에서 HP 100→90→80→70→60과 `SimulatedProxy`를 확인했다. 절차는 `L_Movement`의 일반 이동과 왼쪽 클릭 입력을 사용한 로컬 패키지 시험이다. 세 프로세스는 종료 코드 0을 반환했다. |
+| 실제 상세창 | 새 로그에서 서버 승인 4행·스태미나 4행·표적 HP 8행의 표시 순서와 원문을 검사했다. 이전 로그 두 행은 역할과 서버 요청자를 `미계측`으로 표시했다. 같은 PlayerId를 두 출처에 주입한 별도 재생에서는 서버 ID를 보존하고 출처를 미확인으로 표시했다. |
+| 기존 뷰어 | 읽기·분류 48개, 병렬 UI 48개 기존 검사 통과. |
+
+첫 실행은 UE 콘솔 `exec`가 `Binaries`를 포함하지 않은 매크로 경로 앞에 상대 경로를 붙여 입력을 읽지 못했다. 첫 로그를 보존한 뒤 `Binaries` 하위의 절대 경로로 고쳐 동일 패키지를 다시 실행했다. 두 클라이언트에서 자기 Pawn의 객체 이름이 우연히 같았으므로, 역할·스태미나는 각 세션 내부에서 대조하고 요청자 매핑은 PlayerId로 확인했다. 뷰어 첫 재생에서 Windows PowerShell이 BOM 없는 UTF-8 manifest를 잘못 읽은 문제는 인코딩을 명시해 해결했다.
+
+증거는 로컬 `Artifacts/Validation/v02-player-attribution-20261116-062605/` 아래 `alternating-attacks-02/verification.json`, `detail-new-02/`, `detail-legacy/`, `detail-conflict/`에 있다. Editor/PIE, 재접속, 개별 요청의 인과관계는 이번 시험 범위 밖이다.
+
+**근거** · [상세 표시 기준과 수동 실행](LogViewer.md#player-attribution) · [뷰어 검사](../../Tools/Validation/Test-CombatViewer.ps1)
+
+<a id="v02-viewer-player-attribution-manual"></a>
+#### 사용자 수동 재현 · 2026-11-16
+
+사용자가 새 패키지로 직접 플레이한 `manual-20261116-063934-869`에서 서버 승인 4건을 확인했다. 승인 순서는 클라이언트 1(PlayerId 256) 세 번, 클라이언트 2(PlayerId 257) 한 번이었다. 사거리 밖 거절은 각 플레이어 한 번이었다. 자기 Pawn의 스태미나는 클라이언트 1에서 100→90→80→70, 클라이언트 2에서 100→90으로 복제됐고 역할은 모두 `AutonomousProxy`였다. 고정 표적은 서버가 생성한 공용 복제 Actor이며, 양쪽의 `OnRep_Health`에 `SimulatedProxy`와 HP 100→90→80→70→60이 기록됐다. 이 역할은 해당 클라이언트에서 본 표적 Actor의 네트워크 역할이다. 피해는 전용 서버에서 판정했다.
+
+로컬 `Artifacts/Validation/v02-player-attribution-20261116-062605/manual-20261116-063934-869/Exports/`에 사용자가 저장한 PNG·상태 JSON·XLSX가 있다. 상태 JSON의 선택 행을 원본 `server.log`·`a.log`·`b.log`와 대조했다. 표시와 값의 대조에는 원본 로그를 사용했다.
+
+**근거** · [고정 표적의 서버 생성](../../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [표적 복제 설정](../../Game/Source/CoopRPG/Combat/CoopRPGAttackTarget.cpp) · [HP 복제 콜백](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp) · [Epic의 Actor 역할 설명](https://dev.epicgames.com/documentation/unreal-engine/actor-role-and-remote-role-in-unreal-engine)
+
+<a id="v02-viewer-toolbar"></a>
+### 로그 뷰어 상단 라벨과 그룹 · 2026-11-16
+
+사용자가 승인한 기준에 맞춰 첫 줄에 정렬·갱신을, 둘째 줄에 비교·화면 라벨을 붙였다. 카테고리는 버튼 이름으로 두고 상세·원문은 갱신 그룹에서 분리했다. 단일/병렬 보기, 검색 조건 및 기존 내보내기 메타데이터 형식을 유지했다.
+
+수동 실행 원본을 복사한 같은 로그 83건으로 비교했다. 1920×1000·11pt에서 두 줄이 표시됐다. 900×700·11pt 및 18pt에서는 그룹이 줄바꿈됐고 컨트롤이 겹치거나 그룹 경계에서 잘리지 않았다. 18pt·다분할의 작은 로그 영역은 이전과 동일했다. 실제 컨트롤에서 정렬 전환·일시정지·최신으로·상세 토글을 확인했다. 읽기·분류 48개, 병렬 UI 48개, 내보내기 25개 검사도 통과했다. 변경 전후 PNG와 검사 JSON은 로컬 `Artifacts/Validation/v02-viewer-toolbar-20261116-081608/`의 `before-layout/`과 `after-layout-final/`에 보관했다.
+
+**근거** · [상단 조작 방법](LogViewer.md#reading) · [병렬 보기 회귀 검사](../../Tools/Validation/Test-CombatParallel.ps1)
+
+<a id="v02-viewer-toolbar-order"></a>
+### 로그 뷰어 첫 줄 순서 · 2026-11-16
+
+사용자가 확정한 **검색 → 정렬 → 결과 │ 카테고리 │ 갱신 │ 상세·원문** 순서로 첫 줄을 배치했다. 둘째 줄은 **보기 → 분할 → 비교 │ 화면 │ 복사 │ 저장** 순서를 유지했다.
+
+같은 수동 로그 83건을 변경 전후에 재생했다. 1920×1000·11pt와 900×700·11pt/18pt에서 첫 줄 순서와 둘째 줄 그룹을 확인했다. 좁은 창에서는 그룹 단위로 줄바꿈됐고 컨트롤이 겹치거나 잘리지 않았다. 로그 영역 높이도 변경 전후 같았다. 읽기·분류 48개, 병렬 UI 48개, 내보내기 25개 회귀 검사를 통과했다. 로컬 `Artifacts/Validation/v02-viewer-toolbar-order-20261116-083556/`의 `before-layout/`과 `after-layout/`에 캡처와 배치 확인 JSON을 저장했다.
+
+**근거** · [상단 조작 방법](LogViewer.md#reading) · [직전 라벨과 그룹 검증](#v02-viewer-toolbar)
+
+<a id="v02-cost-cooldown-manual"></a>
+### 비용·쿨다운 직접 재현 · 독립 패키지
+
+이번 기능은 아래 새 패키지에서 확인한다. Editor 재빌드는 보류했으므로 기존 PIE에는 새 기능이 반영되지 않았다. 자동 시험과 [창 전환 시험](#v02-manual-input)은 AI가 실행했고, 아래 비용·쿨다운의 사용자 직접 재현은 아직 대기다.
+
+1. Windows PowerShell에서 실행한다. `Bypass`는 이번 프로세스에만 적용하며 시스템 실행 정책을 바꾸지 않는다. 서버는 백그라운드에서 실행하고 `Client A`·`Client B` 두 창을 선택한 게임 모니터에 배치한다. 다른 모니터가 있으면 로그 창을 그 화면에 최대화하고, 같은 모니터에서는 게임 아래에 배치한다. [모니터 목록 확인·명시적 선택](LogViewer.md#launch)을 먼저 참고한다. PowerShell에는 로그 폴더와 서버 PID가 출력된다. **자동 종료 시간은 없다.** 아래 명령은 다른 창에 가리지 않도록 `-AlwaysOnTop`을 사용한다. 필요 없으면 그 옵션을 뺀다.
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Validation/Start-CombatManual.ps1" -PackageRoot "C:/CoopRPG/Artifacts/Validation/v02-manual-input-20261115-172824/final/Stage" -AlwaysOnTop
+   ```
+
+   | 옵션 | 역할·기본값 |
+   |---|---|
+   | `-Layout SideBySide` | 기본 좌우 배치. 작업 표시줄을 제외한 영역에 맞춰 크기를 줄임 |
+   | `-Layout Stacked` | 위아래 배치. 이번 실제 UI 시험은 좌우 배치에서 수행 |
+   | `-AlwaysOnTop` | 두 클라이언트와 로그 창을 항상 위에 둠. 기본은 꺼짐. 키보드 포커스를 고정하는 기능은 아님 |
+   | `-FocusClient A` / `B` | 준비가 끝나면 해당 창에 전면·포커스를 한 번 요청. 기본 A |
+   | `-NoForeground` | 런처의 마지막 포커스 요청을 생략. 항상 위와는 별개 |
+   | `-NoLogViewer` | 로그 창을 열지 않고 게임 두 창만 배치. 기본은 로그 창 사용 |
+   | `-ListMonitors` | 모니터 목록만 출력. 패키지 경로 불필요 |
+   | `-GameMonitor 1 -LogMonitor 2` | 목록 번호로 게임/로그 화면을 선택. 저장된 선택과 장비 목록을 확인 |
+
+   Windows가 포커스 요청을 거절하면 경고가 나온다. A/B 제목 표시줄을 클릭해 시작한다. 주기적으로 다른 앱의 포커스를 빼앗거나 Windows 전역 설정을 바꾸지는 않는다. 런처는 구버전 패키지에서 `ManualInputEnabled`를 찾지 못하면 중단하므로 위 새 패키지를 사용한다.
+
+   **어디를 볼 것인가:** 단일 보기의 `통합` 탭에서 흐름을 살피고 `서버`·`클라이언트 1/2`로 좁힌다. 나란히 보려면 `보기 → 병렬 → 3분할 → 공통 행 비교`를 선택하고 각 칸을 서버·클라이언트1·클라이언트2로 지정한다. 독립적으로 읽을 때는 `모아 보기`를 사용한다. [두 표시 모드의 차이](LogViewer.md#parallel)를 참고한다. A는 클라이언트1, B는 클라이언트2다. 행을 선택하면 아래 상세에 NetMode·PIE·함수·Actor 등 원문이 나온다. `표시 멈춤`은 보이는 데이터와 필터를 고정하며 수집은 계속된다. `최신으로`를 누르면 복귀한다. [화면 사용법과 해석 한계](LogViewer.md#reading)를 따른다.
+
+   | 사건·단계 | 확인 기준 |
+   |---|---|
+   | `포커스 클릭` · 입력 | 창 전환 보호로 소비. 다음 클릭부터 공격 |
+   | `공격 입력 감지` / `GAS 서버 RPC 호출` / `GAS 활성화 함수 반환` | 입력 함수, GAS 호출 시점, 프로젝트의 반환값을 각각 확인 |
+   | `클라 차단` · 로컬 검사 | 비용 부족/쿨다운 사전 차단. 서버 거절과 구분 |
+   | `서버 승인` / `서버 거절` · 서버 판정 | 결과 글자와 실제 사유·관측값 확인. 승인은 초록, 거절은 주황 |
+   | `체력 복제` / `스태미나 복제` · 복제 관찰 | 해당 클라이언트의 이전→이후 값. Stamina는 소유자에서 확인 |
+   | `콘솔 명령 입력` → 서버의 `초기화 완료` | 명령 입력과 서버 반영 결과 구분. `Prepare 9`는 Stamina=9 확인 |
+
+   로그 창을 닫아도 게임은 종료되지 않는다. 다시 보려면 아래에서 `<로그 폴더>`를 현재 런처가 출력한 경로로 바꾼다. 게임 콘솔이 아니라 Windows PowerShell에서 실행한다.
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File "C:/CoopRPG/Tools/Validation/Watch-CombatManual.ps1" -LogDirectory "<로그 폴더>" -AlwaysOnTop
+   ```
+
+2. **게임 화면의 첫 왼쪽 클릭은 포커스 확보용이다.** 시작 직후·창 전환·입력 초기화 뒤에는 `ManualFocusClickConsumed`만 남고 공격 요청은 없다. 그다음 클릭부터 공격한다. 커서는 보이며 잠기지 않아 제목 표시줄이나 다른 창으로 이동할 수 있다. WASD를 누른 채 Alt+Tab으로 옮겼다면 키를 놓고, 돌아와 새로 눌러 조작한다. 이전 창이 계속 움직여서는 안 된다.
+
+   각 창에서 WASD로 표적에 접근한다. 첫 위치는 범위 밖이므로 왼쪽 클릭의 `OutOfRange`를 먼저 볼 수 있다. 표적 가까이 이동해 정상 승인을 확인한다. 아래 각 시험을 준비할 때 다른 창에서는 공격하지 않는다. 준비 명령이 공용 표적 HP도100으로 되돌리기 때문이다.
+
+3. 해당 클라이언트에서 `~` 콘솔을 열어 표의 명령을 실행하고 닫는다. 초기화 직후 서버 탭의 `초기화 완료`에 준비값이 반영된 것을 확인하고 다음 조작을 한다. 표의 클릭 횟수는 포커스용 클릭을 제외한 공격 클릭이다. 입력 초기화 뒤라면 먼저 `ManualFocusClickConsumed`를 확인하고 그다음 클릭부터 센다. 로그 원본은 출력된 폴더의 `server.log`, 왼쪽/오른쪽 Client는 `a.log`·`b.log`다. 평소에는 로그 창의 해당 출처 탭으로 확인하고 자세한 원본이 필요할 때 파일을 연다.
+
+   | 시험 | 순서 | 확인 |
+   |---|---|---|
+   | 비용 부족 | `Coop.Test.Prepare 9` → 왼쪽 클릭 → `Coop.Test.Request` → `Coop.Test.Snapshot ManualCost` | 클릭은 Client `AttackBlocked Reason=Cost`·`Submitted=0`. 시험 요청은 DedicatedServer `AttackRejected Reason=Cost`. HP100·Stamina9 유지 |
+   | 비용 경계 | `Coop.Test.Prepare 10` → 클릭1회 → `Coop.Test.Snapshot ManualBoundary` | 서버 승인·HP90·Stamina0. 거절 때와 달리 복제 값이 변함 |
+   | 쿨다운 | `Coop.Test.Prepare 100` → 클릭 후 즉시 다시 클릭 | 최초만 승인. 이후 클릭은 로컬 `Reason=Cooldown` 차단. 서버 거절도 직접 보려면 명령을 미리 복사한 뒤 최초 승인 후2초 이내 `Coop.Test.Request` 붙여넣기·실행 |
+   | 만료 | `CooldownChanged Count=0`으로 만료를 확인한 후 클릭 → `Coop.Test.Snapshot ManualReuse` | 추가 승인으로 HP80·Stamina80. 매 승인마다 새 쿨다운 시작 |
+   | 플레이어 독립 | 두 창에서 각각 `Coop.Test.Prepare 100` 완료 → A 클릭 →2초 안에 B 클릭 | B도 승인. 표적 HP80·각 소유자 Stamina90. A를 반복 클릭하면 A의 쿨다운 조건으로 차단 |
+
+4. A·B의 역할을 바꿔 핵심 경계를 한 번씩 확인한다. 거절은 속성이 변하지 않아 OnRep가 없을 수 있다. `CombatSnapshot`의 서버·클라이언트 HP/Stamina와 `Cooldown`을 함께 본다. 관찰 클라이언트의 다른 플레이어 Stamina는 복제 대상이 아니므로 값 일치를 요구하지 않는다. Minimal인 관찰용 태그와 Mixed 소유자의 GE 정보도 구분한다.
+5. 로그 창과 두 클라이언트를 창 닫기 또는 Alt+F4로 종료한 뒤, 런처가 마지막에 출력한 `Stop-Process -Id <이번 서버 PID>`로 백그라운드 서버를 끝낸다. 서버는 명시적 프로세스 종료이므로 V01의 정상 종료 검증과 구분한다. 실행 후 계속 남겨 두지 않는다. 기록할 것은 시험 조건·승인/거절·최종값·불일치와 해당 로그 폴더다. 실제로 확인하기 전에는 사람 확인 완료로 표시하지 않는다.
+
+창 전환 필터는 `LogCoopRPGManualInput`, `ManualFocusClickConsumed`, `ManualInputFlushed`다. `HeldWBefore=1 W=0`은 눌린 W가 입력 초기화로 해제됐다는 뜻이다. `Coop.Test.Snapshot <이름>`은 전투 상태와 함께 로컬·서버의 `MovementSnapshot` 좌표·속도를 기록한다. `Coop.Test.MoveKey down/up`은 수동 시험에서 W 이벤트를 한 번 주입하는 개발용 명령이며, 평소에는 실제 키로 조작한다. `Input.+key`는 매 프레임 키를 강제하므로 포커스 상실 시험에 사용하지 않는다.
+
+전투 필터는 `AttackInput`, `AttackDispatch`, `AttackBlocked`, `AttackRejected`, `AttackApproved`, `CombatSnapshot`, `CooldownChanged`, `HealthReplicated`, `StaminaReplicated`를 쓴다. 별도 프로세스이므로 `PIE=-1`은 정상이며 파일과 `NetMode`로 실행 위치를 구분한다. 기존 `Log LogCoopRPGInput Verbose`와 `AbilitySystem.ServerRPCBatching.Log 1`은 시작 스크립트에서 켠다. 개발용 명령은 기본 게임 실행에 활성화되지 않는다.
+
+**근거** · [실제 자동 시험](#v02-cost-cooldown) · [수동 실행 스크립트](../../Tools/Validation/Start-CombatManual.ps1) · [검사·GE와 복제 읽기](../Learning/GASMeleeAttack.md#attack-checks)
+
 <a id="v02-manual-attack-log"></a>
 
 ## V02 단타 수동 검증과 로그 필터
@@ -736,7 +1027,7 @@ Editor 전체 타깃 빌드는 SDK 전환으로 3,730개 작업이 예약돼 중
 | ID | 대상 | 현행 확인 결과 | 현재 결과 |
 |---|---|---|---|
 | V01 | 독립 실행·소유권 | 에디터 없이 Server1/클라이언트2 접속/이동, 자기 Pawn 조작, 서버 종료 감지·전체 재실행 | [자동 검증 통과](#v01-server-shutdown) · 새 프로세스 3회 접속·양방향 이동·서버 선종료 감지·정상 종료. [수동 1회](#v01-manual-result)에서 사용자가 이동 복제를 관찰했고 양쪽 연결 종료 로그를 확인함 |
-| V02 | GAS 단타·권한 | 정상/실제 서버 거절, 비용·쿨다운·대상·거리 검사, 공격당 중복 피해 없음, 양측 최종값 일치 | [두 클라이언트의 승인·거리 거절](#v02-basic-attack) · [공격 입력 통합 회귀](#v02-attack-input-regression) · V02 부분 통과, 세부 경계와 T1 반복 대기 |
+| V02 | GAS 단타·권한 | 정상/실제 서버 거절, 비용·쿨다운·대상·거리 검사, 공격당 중복 피해 없음, 양측 최종값 일치 | [두 클라이언트의 승인·거리 거절](#v02-basic-attack) · [공격 입력 통합 회귀](#v02-attack-input-regression) · [비용·쿨다운과 정상 반복](#v02-cost-cooldown) · V02 부분 통과, 무효 대상·중복 접촉·상태와 거리 T1 잔여 |
 | V03 | 능력 수명 | 거절/명시 취소 후 재실행·자기 임시 상태 정리. 통합 후 사망/Result/재시작과 취소 경합 | 미실행 |
 | V04 | 적 AI·사망·전리품 생성 | 서버의 탐지·추격·근접 공격과 피격, 적 사망 뒤 공격 중지, 겹친 마지막 타격에도 사망 확정·전리품 생성 1회 | 미실행 |
 | V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | 미실행 |

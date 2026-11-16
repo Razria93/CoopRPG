@@ -3,6 +3,7 @@
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
+#include "CoopRPG/Debug/CoopRPGCombatProbeComponent.h"
 
 #include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
@@ -59,6 +60,9 @@ ACoopRPGCharacter::ACoopRPGCharacter()
     // Owning client receives cooldown effects; observers receive their tags/cues.
     AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
     CombatAttributes = CreateDefaultSubobject<UCoopRPGCombatAttributes>(TEXT("CombatAttributes"));
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+    CreateDefaultSubobject<UCoopRPGCombatProbeComponent>(TEXT("CombatProbe"));
+#endif
 }
 
 UAbilitySystemComponent* ACoopRPGCharacter::GetAbilitySystemComponent() const
