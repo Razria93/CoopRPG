@@ -89,7 +89,7 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 <a id="shared-chest-implementation"></a>
 
-### 공용 상자 구현과 적 전리품 설계
+### 공용 상자와 적 전리품 구현
 
 두 명이 준비하면 서버 `GameMode`가 `GameState`의 라운드 상태를 Playing으로 바꾼다. 클라이언트는 복제된 현재 상자와 라운드 ID를 사용하고, 자기 소유의 `PlayerController`에서 열람·획득 RPC를 요청한다. 서버는 Playing, 요청 라운드, 지정 상자, 생존, 거리 220 cm와 열람 여부를 확인한다. 각 컨트롤러는 자신의 열람 포인터와 회복약 소지량을 받으므로 같은 상자를 열어도 상대의 열람·소지량을 가져오지 않는다.
 
@@ -105,9 +105,14 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 적 전리품은 서버에서 사망 전환당 한 번 생성하며 양쪽 클라이언트가 같은 ID를 받는다. [사망·전리품 생성 검증](Validation/Index.md#v04-death-loot-once)
 
-팀 지급은 후속 설계다. 전리품 획득은 공용 상자의 서버 검증·소진 처리 흐름을 참고한다. 획득을 확정하면 팀 전리품 수량을 올려 양쪽 클라이언트에 복제한다. 시험에서는 유효한 획득과 팀 지급이 각각 한 번인지 확인한다.
+<a id="enemy-loot-team-design"></a>
+#### 적 전리품 획득과 팀 지급
 
-**근거** · [상자와 라운드 규칙](Project.md#game-rules) · [V04~V06 시험 기준](Validation/Index.md#active-tests)
+서버 `GameState`는 현재 라운드에 생성된 드롭 한 개를 등록한다. 각 클라이언트의 `T` 입력은 소유 `PlayerController`에서 라운드 ID와 전리품 ID를 보낸다. 서버는 Playing, 두 식별자의 일치, 요청자의 Pawn 생존, 250 cm 거리와 획득 상태를 확인한다. 첫 유효 요청의 처리 안에서 전리품을 획득 상태로 바꾸고 팀 수량을 한 번 올린다. 이후 같은 전리품의 유효 조건 요청은 `AlreadyClaimed`로 거절한다. 획득 상태를 유지한 Actor는 라운드에 남겨 늦게 도착한 요청에도 판정을 내린다.
+
+전리품 Actor의 획득 상태로 양쪽에서 메시를 숨기고, `GameState`의 팀 수량을 두 클라이언트에 복제해 HUD에 표시한다. 두 상태의 도착 순서와 관계없이 서버의 지급 횟수는 한 번이다. 공용 상자의 회복약 소지량은 계속 컨트롤러 소유자에게 복제된다.
+
+**근거** · [요청과 서버 검증](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [라운드 등록·팀 지급](../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp) · [획득 상태 복제](../Game/Source/CoopRPG/Loot/CoopRPGEnemyLoot.cpp) · [V05 실행 검증](Validation/Index.md#v05-enemy-loot-team)
 
 ### 빌드에서 제외하는 코드와 실행 중 권한
 
