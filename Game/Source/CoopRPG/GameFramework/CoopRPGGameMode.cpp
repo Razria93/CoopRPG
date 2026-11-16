@@ -31,7 +31,7 @@ AActor* ACoopRPGGameMode::GetMeleeTarget() const
         return AttackTarget.Get();
     }
     const auto* State = GetGameState<ACoopRPGGameState>();
-    return State && State->IsRoundPlaying() ? Enemy.Get() : nullptr;
+    return State && State->IsRoundPlaying() && IsValid(Enemy.Get()) && !Enemy->IsDead() ? Enemy.Get() : nullptr;
 }
 
 void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)

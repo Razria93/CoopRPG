@@ -5,6 +5,7 @@
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
+#include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 
 #include "AbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -14,6 +15,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
+#include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEnemy, Log, All);
@@ -51,7 +53,7 @@ ACoopRPGEnemy::ACoopRPGEnemy()
     Movement->bOrientRotationToMovement = true;
     Movement->MaxWalkSpeed = 220.0f;
 
-    auto* EnemyVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("EnemyVisual"));
+    EnemyVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("EnemyVisual"));
     EnemyVisual->SetupAttachment(GetRootComponent());
     EnemyVisual->SetRelativeScale3D(FVector(0.62f, 0.62f, 1.65f));
     EnemyVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -73,13 +75,14 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
 
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    if (!HasAuthority() || !State || !State->IsRoundPlaying() || CombatAttributes->GetHealth() <= 0.0f)
+    if (!HasAuthority() || bDead)
     {
-        Target.Reset();
-        StopChasing();
-        bAttackPending = false;
-        NextActionTime = 0.0;
+        return;
+    }
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State || !State->IsRoundPlaying())
+    {
+        StopCombat();
         return;
     }
 
@@ -146,7 +149,7 @@ void ACoopRPGEnemy::OnRep_ReplicatedMovement()
     Super::OnRep_ReplicatedMovement();
 
     // One observation per client confirms significant replicated movement without logging each update.
-    if (HasActorBegunPlay() && !bObservedMovement)
+    if (HasActorBegunPlay() && !bDead && !bObservedMovement)
     {
         const double Distance = FVector::Dist2D(ObservationOrigin, GetReplicatedMovement().Location);
         if (Distance >= MovementObservationCm)
@@ -158,12 +161,32 @@ void ACoopRPGEnemy::OnRep_ReplicatedMovement()
     }
 }
 
+void ACoopRPGEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(ACoopRPGEnemy, bDead);
+}
+
 void ACoopRPGEnemy::BeginPlay()
 {
     Super::BeginPlay();
     AbilitySystem->InitAbilityActorInfo(this, this);
     ObservationOrigin = GetActorLocation();
     SetActorTickEnabled(HasAuthority());
+    if (HasAuthority())
+    {
+        AbilitySystem->GetGameplayAttributeValueChangeDelegate(UCoopRPGCombatAttributes::GetHealthAttribute())
+            .AddUObject(this, &ACoopRPGEnemy::HandleHealthChanged);
+    }
+}
+
+void ACoopRPGEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (HasAuthority())
+    {
+        AbilitySystem->GetGameplayAttributeValueChangeDelegate(UCoopRPGCombatAttributes::GetHealthAttribute()).RemoveAll(this);
+    }
+    Super::EndPlay(EndPlayReason);
 }
 
 ACoopRPGCharacter* ACoopRPGEnemy::FindTarget() const
@@ -196,6 +219,14 @@ void ACoopRPGEnemy::StopChasing()
     }
 }
 
+void ACoopRPGEnemy::StopCombat()
+{
+    StopChasing();
+    Target.Reset();
+    NextActionTime = 0.0;
+    bAttackPending = false;
+}
+
 void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
 {
     const bool bLivePlayer = IsLivePlayer(Player);
@@ -216,4 +247,62 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
     UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackHit Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f HP=%.2f->%.2f %s"),
         *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm,
         HealthBefore, Player->GetHealth(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGEnemy::HandleHealthChanged(const FOnAttributeChangeData& Change)
+{
+    if (!HasAuthority() || bDead || Change.OldValue <= 0.0f || Change.NewValue > 0.0f)
+    {
+        return;
+    }
+
+    const bool bDiscardedAttack = bAttackPending;
+    bDead = true;
+    StopCombat();
+    GetCharacterMovement()->DisableMovement();
+    SetActorTickEnabled(false);
+    ApplyDeathPresentation();
+    ForceNetUpdate();
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const FGuid RoundId = State ? State->GetRoundId() : FGuid();
+    UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyDeathConfirmed Actor=%s Round=%s HP=%.2f->%.2f PendingAttackDiscarded=%d %s"),
+        *GetName(), *RoundId.ToString(), Change.OldValue, Change.NewValue, bDiscardedAttack ? 1 : 0,
+        *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    SpawnDeathLoot(RoundId);
+}
+
+void ACoopRPGEnemy::SpawnDeathLoot(const FGuid& RoundId)
+{
+    const FVector Location = GetActorLocation() - FVector(0.0f, 0.0f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 20.0f);
+    const FTransform Transform(FRotator(0.0f, 45.0f, 0.0f), Location, FVector(0.35f));
+    FActorSpawnParameters SpawnParameters;
+    SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    auto* Drop = GetWorld()->SpawnActor<ACoopRPGEnemyLoot>(ACoopRPGEnemyLoot::StaticClass(), Transform, SpawnParameters);
+    if (!IsValid(Drop) || !Drop->GetDropId().IsValid())
+    {
+        UE_LOG(LogCoopRPGEnemy, Error, TEXT("EnemyLootSpawnFailed Actor=%s Round=%s %s"),
+            *GetName(), *RoundId.ToString(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+        return;
+    }
+
+    UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyLootSpawned Actor=%s Enemy=%s Round=%s DropId=%s %s"),
+        *GetNameSafe(Drop), *GetName(), *RoundId.ToString(), *Drop->GetDropId().ToString(),
+        *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGEnemy::ApplyDeathPresentation()
+{
+    GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    EnemyVisual->SetVisibility(false);
+}
+
+void ACoopRPGEnemy::OnRep_Dead()
+{
+    if (bDead)
+    {
+        ApplyDeathPresentation();
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyDeathReplicated Actor=%s %s"),
+            *GetName(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    }
 }

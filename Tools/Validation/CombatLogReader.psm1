@@ -202,6 +202,24 @@ function ConvertTo-CombatLogEvent([string]$Line) {
             }
             break
         }
+        '^EnemyDeathConfirmed$' {
+            $label='적 사망 확정';$stage='서버 판정';$outcome='승인'
+            $detail="HP $($fields['HP'] -replace '->',' → ')"
+            if($fields['PendingAttackDiscarded'] -eq '1'){$detail+=' · 대기 공격 취소'}
+            break
+        }
+        '^EnemyDeathReplicated$' {
+            $label='적 사망 복제';$stage='복제 관찰';break
+        }
+        '^EnemyLootSpawned$' {
+            $label='적 전리품 생성';$detail="ID $($fields['DropId'])";$stage='서버 판정';$outcome='승인';break
+        }
+        '^EnemyLootReplicated$' {
+            $label='적 전리품 복제';$detail="ID $($fields['DropId'])";$stage='복제 관찰';break
+        }
+        '^EnemyLootSpawnFailed$' {
+            $label='적 전리품 생성 실패';$stage='서버 판정';$kind='Error';$outcome='오류';break
+        }
         '^EnemyMovementObserved$' {
             $label='적 이동 복제';$detail="시작 위치에서 $($fields['Distance'])cm";$stage='복제 관찰';break
         }
