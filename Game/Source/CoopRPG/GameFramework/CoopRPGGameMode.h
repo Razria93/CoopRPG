@@ -6,6 +6,7 @@
 
 class ACoopRPGAttackTarget;
 class ACoopRPGEnemy;
+class ACoopRPGPlayerController;
 
 UCLASS()
 class COOPRPG_API ACoopRPGGameMode : public AGameModeBase
@@ -32,5 +33,7 @@ private:
     UPROPERTY()
     TObjectPtr<ACoopRPGEnemy> Enemy;
 
+    TArray<TWeakObjectPtr<ACoopRPGPlayerController>> RoundPlayers;
+    bool bParticipantDisconnected = false;
     bool bEnemyCombat = false;
 };

@@ -6,9 +6,25 @@
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
+#include "CoreGlobals.h"
 #include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRound, Log, All);
+
+namespace
+{
+    constexpr double RoundDurationSeconds = 300.0;
+    constexpr double ExtractionHoldSeconds = 3.0;
+
+    const TCHAR* GetRoundOutcome(ECoopRPGRoundEndReason Reason)
+    {
+        if (Reason == ECoopRPGRoundEndReason::Extracted)
+        {
+            return TEXT("Success");
+        }
+        return Reason == ECoopRPGRoundEndReason::Disconnected ? TEXT("Aborted") : TEXT("Failed");
+    }
+}
 
 void ACoopRPGGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -38,9 +54,16 @@ void ACoopRPGGameState::SetRoundPlaying(bool bPlaying)
 {
     if (HasAuthority() && RoundId.IsValid() && !HasRoundResult() && IsRoundPlaying() != bPlaying)
     {
+        const double Now = GetServerWorldTimeSeconds();
         if (!bPlaying)
         {
-            UpdateExtraction(false);
+            UpdateExtraction(false, Now);
+        }
+        RoundStatus.RoundDeadline = bPlaying && IsValid(ExtractionZone) ? Now + RoundDurationSeconds : 0.0;
+        if (RoundStatus.RoundDeadline > 0.0)
+        {
+            UE_LOG(LogCoopRPGRound, Log, TEXT("RoundClockStarted Round=%s Time=%.3f Deadline=%.3f Duration=%.0f"),
+                *RoundId.ToString(), Now, RoundStatus.RoundDeadline, RoundDurationSeconds);
         }
         RoundStatus.Phase = bPlaying ? ECoopRPGRoundPhase::Playing : ECoopRPGRoundPhase::Waiting;
         UE_LOG(LogCoopRPGRound, Log, TEXT("LootRoundPhase Round=%s Phase=%s"),
@@ -73,22 +96,75 @@ bool ACoopRPGGameState::TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop)
     return true;
 }
 
-void ACoopRPGGameState::UpdateExtraction(bool bEligible)
+void ACoopRPGGameState::EvaluateRound(bool bDisconnected, bool bDeath, bool bBothInside)
 {
     if (!HasAuthority() || !IsRoundPlaying())
     {
         return;
     }
 
-    constexpr double HoldSeconds = 3.0;
     const double Now = GetServerWorldTimeSeconds();
+    const bool bTimeout = RoundStatus.RoundDeadline > 0.0 && Now >= RoundStatus.RoundDeadline;
+    const bool bExtractionReady = bBothInside && IsExtractionInProgress() && Now >= RoundStatus.ExtractionDeadline;
+    ECoopRPGRoundEndReason Reason = ECoopRPGRoundEndReason::None;
+    if (bDisconnected)
+    {
+        Reason = ECoopRPGRoundEndReason::Disconnected;
+    }
+    else if (bDeath)
+    {
+        Reason = ECoopRPGRoundEndReason::Death;
+    }
+    else if (bTimeout)
+    {
+        Reason = ECoopRPGRoundEndReason::Timeout;
+    }
+    else if (bExtractionReady)
+    {
+        Reason = ECoopRPGRoundEndReason::Extracted;
+    }
+    else
+    {
+        UpdateExtraction(bBothInside, Now);
+        return;
+    }
+
+    const bool bSuccess = Reason == ECoopRPGRoundEndReason::Extracted;
+    const double HeldSeconds = IsExtractionInProgress()
+        ? Now - (RoundStatus.ExtractionDeadline - ExtractionHoldSeconds) : 0.0;
+    RoundStatus.Phase = ECoopRPGRoundPhase::Result;
+    RoundStatus.EndReason = Reason;
+    RoundStatus.TeamScore = bSuccess ? 1 : 0;
+    RoundStatus.ExtractionDeadline = 0.0;
+    RoundStatus.RoundDeadline = 0.0;
+    const FString ReasonName = StaticEnum<ECoopRPGRoundEndReason>()->GetNameStringByValue(static_cast<int64>(Reason));
+    UE_LOG(LogCoopRPGRound, Log,
+        TEXT("%s Round=%s Outcome=%s Score=%d Time=%.3f Held=%.3f Reason=%s Frame=%llu Disconnect=%d Death=%d Timeout=%d Extraction=%d"),
+        bSuccess ? TEXT("ExtractionResult") : TEXT("RoundResult"), *RoundId.ToString(), GetRoundOutcome(Reason),
+        RoundStatus.TeamScore, Now, HeldSeconds, *ReasonName, static_cast<unsigned long long>(GFrameCounter),
+        bDisconnected, bDeath, bTimeout, bExtractionReady);
+    ForceNetUpdate();
+}
+
+double ACoopRPGGameState::GetRoundRemainingSeconds() const
+{
+    return FMath::Max(0.0, RoundStatus.RoundDeadline - GetServerWorldTimeSeconds());
+}
+
+double ACoopRPGGameState::GetExtractionRemainingSeconds() const
+{
+    return FMath::Max(0.0, RoundStatus.ExtractionDeadline - GetServerWorldTimeSeconds());
+}
+
+void ACoopRPGGameState::UpdateExtraction(bool bEligible, double Now)
+{
     double& Deadline = RoundStatus.ExtractionDeadline;
     if (!bEligible)
     {
         if (IsExtractionInProgress())
         {
             UE_LOG(LogCoopRPGRound, Log, TEXT("ExtractionReset Round=%s Time=%.3f Elapsed=%.3f"),
-                *RoundId.ToString(), Now, Now - (Deadline - HoldSeconds));
+                *RoundId.ToString(), Now, Now - (Deadline - ExtractionHoldSeconds));
             Deadline = 0.0;
             ForceNetUpdate();
         }
@@ -97,29 +173,11 @@ void ACoopRPGGameState::UpdateExtraction(bool bEligible)
 
     if (!IsExtractionInProgress())
     {
-        Deadline = Now + HoldSeconds;
+        Deadline = Now + ExtractionHoldSeconds;
         UE_LOG(LogCoopRPGRound, Log, TEXT("ExtractionStarted Round=%s Time=%.3f Deadline=%.3f"),
             *RoundId.ToString(), Now, Deadline);
         ForceNetUpdate();
-        return;
     }
-    if (Now < Deadline)
-    {
-        return;
-    }
-
-    const double HeldSeconds = Now - (Deadline - HoldSeconds);
-    RoundStatus.Phase = ECoopRPGRoundPhase::Result;
-    RoundStatus.TeamScore = 1;
-    Deadline = 0.0;
-    UE_LOG(LogCoopRPGRound, Log, TEXT("ExtractionResult Round=%s Outcome=Success Score=%d Time=%.3f Held=%.3f"),
-        *RoundId.ToString(), RoundStatus.TeamScore, Now, HeldSeconds);
-    ForceNetUpdate();
-}
-
-double ACoopRPGGameState::GetExtractionRemainingSeconds() const
-{
-    return FMath::Max(0.0, RoundStatus.ExtractionDeadline - GetServerWorldTimeSeconds());
 }
 
 void ACoopRPGGameState::OnRep_TeamLootCount(int32 PreviousCount)
@@ -133,8 +191,12 @@ void ACoopRPGGameState::OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousSta
     const FString Context = CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__));
     if (HasRoundResult() && PreviousStatus.Phase != ECoopRPGRoundPhase::Result)
     {
-        UE_LOG(LogCoopRPGRound, Log, TEXT("ExtractionResultReplicated Round=%s Outcome=Success Score=%d %s"),
-            *RoundId.ToString(), GetTeamScore(), *Context);
+        const ECoopRPGRoundEndReason Reason = GetRoundEndReason();
+        const bool bSuccess = Reason == ECoopRPGRoundEndReason::Extracted;
+        const FString ReasonName = StaticEnum<ECoopRPGRoundEndReason>()->GetNameStringByValue(static_cast<int64>(Reason));
+        UE_LOG(LogCoopRPGRound, Log, TEXT("%s Round=%s Outcome=%s Score=%d Reason=%s %s"),
+            bSuccess ? TEXT("ExtractionResultReplicated") : TEXT("RoundResultReplicated"),
+            *RoundId.ToString(), GetRoundOutcome(Reason), GetTeamScore(), *ReasonName, *Context);
     }
     else if (PreviousStatus.ExtractionDeadline != RoundStatus.ExtractionDeadline)
     {

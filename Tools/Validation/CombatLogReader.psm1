@@ -103,7 +103,7 @@ function ConvertTo-CombatLogEvent([string]$Line) {
             $label=if($eventCode -eq 'AttackBlocked'){'클라 차단'}else{'서버 거절'}
             $stage=if($eventCode -eq 'AttackBlocked'){'로컬 검사'}else{'서버 판정'};$outcome='거절';$kind='Reject'
             $reason=[string]$fields['Reason']
-            $names=@{Cost='비용 부족';Cooldown='쿨다운 중';OutOfRange='사거리 밖';InvalidTarget='유효하지 않은 표적';AttackerDead='공격자 HP 0';Unarmed='무기 미장착';CommitFailed='커밋 실패 · 세부 원인 미확인'}
+            $names=@{Cost='비용 부족';Cooldown='쿨다운 중';OutOfRange='사거리 밖';InvalidTarget='유효하지 않은 표적';AttackerDead='공격자 HP 0';NotPlaying='라운드 종료';Unarmed='무기 미장착';CommitFailed='커밋 실패 · 세부 원인 미확인'}
             $detail=if($names.ContainsKey($reason)){$names[$reason]}elseif($reason){$reason}else{'사유 미기록'}
             if($reason){$detail+=" ($reason)"}
             if($fields.ContainsKey('Distance')){$detail+=" · 거리 $($fields['Distance'])cm"}
@@ -235,6 +235,17 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         }
         '^TeamLootCountReplicated$' {
             $label='팀 전리품 수량 복제';$detail="$($fields['Before']) → $($fields['After'])";$stage='복제 관찰';break
+        }
+        '^RoundClockStarted$' {$label='라운드 타이머 시작';$detail="$($fields['Duration'])초";break}
+        '^RoundResult(Replicated)?$' {
+            $reason=[string]$fields['Reason']
+            $names=@{Disconnected='플레이어 접속 종료';Death='플레이어 사망';Timeout='시간초과'}
+            $outcome=if($fields['Outcome'] -eq 'Aborted'){'중단'}else{'실패'}
+            if($eventCode -eq 'RoundResult'){$label="라운드 $outcome 확정";$stage='서버 판정'}
+            else{$label="라운드 $outcome 복제";$stage='복제 관찰'}
+            $name=if($names[$reason]){$names[$reason]}else{$reason}
+            $detail="$name · 팀 점수 $($fields['Score'])점"
+            break
         }
         '^ExtractionStarted$' {
             $label='공동 탈출 진행 시작';$detail='두 플레이어 연속 체류 3초';$stage='서버 판정';break

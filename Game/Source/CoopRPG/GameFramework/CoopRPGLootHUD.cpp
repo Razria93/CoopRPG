@@ -33,7 +33,8 @@ void ACoopRPGLootHUD::DrawHUD()
     const ACoopRPGExtractionZone* Zone = State->GetExtractionZone();
     const bool bShowExtraction = bPlaying && IsValid(Zone) && State->GetTeamLootCount() > 0;
     const float PanelHeight = bShowStock ? (bShowExtraction ? 182.0f : 162.0f) : 126.0f;
-    DrawRect(FLinearColor(0.02f, 0.04f, 0.08f, 0.90f), Pad, Pad, 306.0f, PanelHeight);
+    const bool bShowRoundClock = bPlaying && IsValid(Zone);
+    DrawRect(FLinearColor(0.02f, 0.04f, 0.08f, 0.90f), Pad, Pad, State->HasRoundResult() ? 380.0f : 306.0f, PanelHeight + (bShowRoundClock ? 20.0f : 0.0f));
     DrawText(TEXT("SHARED CHEST"), Accent, TextX, Pad + 8.0f, nullptr, 1.15f);
     if (Character)
     {
@@ -48,7 +49,22 @@ void ACoopRPGLootHUD::DrawHUD()
 
     if (State->HasRoundResult())
     {
-        DrawText(FString::Printf(TEXT("Extraction successful | Team score: %d"), State->GetTeamScore()),
+        const TCHAR* ResultText = TEXT("Extraction successful");
+        switch (State->GetRoundEndReason())
+        {
+        case ECoopRPGRoundEndReason::Disconnected:
+            ResultText = TEXT("Round aborted: player disconnected");
+            break;
+        case ECoopRPGRoundEndReason::Death:
+            ResultText = TEXT("Round failed: player died");
+            break;
+        case ECoopRPGRoundEndReason::Timeout:
+            ResultText = TEXT("Round failed: time expired");
+            break;
+        default:
+            break;
+        }
+        DrawText(FString::Printf(TEXT("%s | Team score: %d"), ResultText, State->GetTeamScore()),
             Accent, TextX, Pad + 98.0f);
         return;
     }
@@ -58,6 +74,13 @@ void ACoopRPGLootHUD::DrawHUD()
         DrawText(Controller->IsRoundReady() ? TEXT("Waiting for the other player") : TEXT("R  Ready"),
             Accent, TextX, Pad + 98.0f);
         return;
+    }
+
+    if (bShowRoundClock)
+    {
+        const int32 Seconds = FMath::CeilToInt(State->GetRoundRemainingSeconds());
+        DrawText(FString::Printf(TEXT("Time left: %d:%02d"), Seconds / 60, Seconds % 60),
+            FLinearColor::White, TextX, Pad + PanelHeight - 4.0f);
     }
 
     if (bShowExtraction)
