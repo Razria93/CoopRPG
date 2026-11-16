@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$RunRoot,[string]$Attempt='lifetime-01')
+param([Parameter(Mandatory)][string]$RunRoot,[string]$Attempt='lifetime-01',[switch]$EquipFromChest)
 $ErrorActionPreference='Stop'
 $out=Join-Path $RunRoot $Attempt
 if(Test-Path -LiteralPath $out){throw 'Use a fresh attempt'}
@@ -32,6 +32,15 @@ function Start-Client($role,[int]$offset){
     function Observe($frame,$label){At $frame "Coop.Test.Snapshot $role-$label"}
     function FiveAttacks($start){for($i=0;$i -lt 5;$i++){Click ($start+15*$i)}}
 
+    if($EquipFromChest){
+        # Equipment runs before either staggered combat sequence. Return to the far position for its first case.
+        $events.Add(@(110,'Input.+key R')); $events.Add(@(111,'Input.-key R'))
+        $events.Add(@(120,'Input.+key W')); $events.Add(@(153,'Input.-key W'))
+        $events.Add(@(180,'Input.+key E')); $events.Add(@(181,'Input.-key E'))
+        $events.Add(@(210,'Input.+key G')); $events.Add(@(211,'Input.-key G'))
+        $events.Add(@(240,'Input.+key Q')); $events.Add(@(241,'Input.-key Q'))
+        $events.Add(@(254,'Input.+key S')); $events.Add(@(287,'Input.-key S'))
+    }
     Observe 345 'FarBefore'
     FiveAttacks 360
     Observe 440 'FarAfter'
@@ -93,6 +102,7 @@ try{
     Start-Client b 2200
     Wait-Log a 'Welcomed by server'
     Wait-Log b 'Welcomed by server'
+    if($EquipFromChest){Wait-Log server 'ChestWeaponGranted .*Stock=1->0'}
     foreach($role in @('a','b','server')){
         if(!$processes[$role].WaitForExit(205000)){throw "$role timeout"}
         if($processes[$role].ExitCode -ne 0){throw "$role exit $($processes[$role].ExitCode)"}
