@@ -120,9 +120,10 @@ class Case:
     def check(self, description, passed):
         self.checks.append({"description": description, "passed": bool(passed)})
 
-    def finish(self):
+    def finish(self, *, expected_process_count=3):
         forced = []
-        for role in ("a", "b", "server"):
+        clients = [role for role in self.processes if role != "server"]
+        for role in (*clients, "server"):
             if role not in self.processes:
                 continue
             process = self.processes[role]
@@ -139,7 +140,7 @@ class Case:
             role: {"pid": p.pid, "exit": p.returncode, "forced": role in forced}
             for role, p in self.processes.items()
         }, indent=2), encoding="utf-8")
-        self.check("three processes exit normally", len(self.processes) == 3 and not forced
+        self.check("all started processes exit normally", len(self.processes) == expected_process_count and not forced
                    and all(p.returncode == 0 for p in self.processes.values()))
 
 
