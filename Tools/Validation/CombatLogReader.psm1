@@ -118,6 +118,14 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         '^LootRoundPhase$' {$label='루팅 라운드 상태';$detail=[string]$fields['Phase'];break}
         '^LootReadyRequested$' {$label='준비 RPC 호출';$stage='RPC 호출';$outcome='호출';break}
         '^LootPlayerReady$' {$label='플레이어 준비 완료';$stage='서버 판정';break}
+        '^RoundReadySlotsReplicated$' {
+            $label='팀 준비 상태 복제';$stage='복제 관찰'
+            $names=@{Disconnected='미접속';Waiting='준비 전';Ready='준비 완료'}
+            $p1=$names[[string]$fields['P1']];$p2=$names[[string]$fields['P2']]
+            if(!$p1){$p1='미계측'}
+            if(!$p2){$p2='미계측'}
+            $detail="P1 $p1 · P2 $p2";break
+        }
         '^ChestTakeRequested$' {$label='회복약 획득 RPC 호출';$detail="요청 $($fields['Request'])";$stage='RPC 호출';$outcome='호출';break}
         '^ChestWeaponRequested$' {$label='근접무기 획득 RPC 호출';$detail="요청 $($fields['Request'])";$stage='RPC 호출';$outcome='호출';break}
         '^RecoveryUseRequested$' {$label='회복약 사용 RPC 호출';$stage='RPC 호출';$outcome='호출';break}
