@@ -107,6 +107,31 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         }
         '^CancelRPCCalled$' {$label='취소 RPC 호출';$stage='RPC 호출';$outcome='호출';break}
         '^CancelRPCReceived$' {$label='취소 RPC 수신';$stage='RPC 수신';$outcome='수신';break}
+        '^LootRoundCreated$' {$label='루팅 라운드 생성';$detail="상자 재고 $($fields['Stock'])개";break}
+        '^LootRoundPhase$' {$label='루팅 라운드 상태';$detail=[string]$fields['Phase'];break}
+        '^LootPlayerReady$' {$label='플레이어 준비 완료';$stage='서버 판정';break}
+        '^ChestTakeRequested$' {$label='회복약 획득 RPC 호출';$detail="요청 $($fields['Request'])";$stage='RPC 호출';$outcome='호출';break}
+        '^ChestOpened$' {$label='상자 열람 승인';$detail="회복약 $($fields['Stock'])개";$stage='서버 판정';$outcome='승인';break}
+        '^ChestGranted$' {
+            $label='회복약 지급';$stage='서버 판정';$outcome='승인'
+            $detail="요청 $($fields['Request']) · 남은 수량 $($fields['Stock'] -replace '->',' → ')"
+            break
+        }
+        '^ChestRejected$' {
+            $label=if($fields['Action'] -eq 'Open'){'상자 열람 거절'}else{'회복약 획득 거절'}
+            $reason=[string]$fields['Reason'];$stage='서버 판정';$outcome='거절'
+            $names=@{WrongRound='라운드 불일치';NotPlaying='라운드 대기 중';InvalidChest='대상 불일치';NotAlive='사망 상태';OutOfRange='거리 초과';NotOpen='상자 닫힘';DuplicateRequest='중복 요청';Depleted='회복약 소진'}
+            $detail=if($names[$reason]){$names[$reason]}else{$reason}
+            if($fields['Request'] -and $fields['Request'] -ne '0'){$detail+=" · 요청 $($fields['Request'])"}
+            break
+        }
+        '^ChestViewReplicated$' {
+            $label=if($fields['Open'] -eq '1'){'내 상자 열람'}else{'내 상자 닫기'}
+            if($fields['Open'] -eq '1'){$detail="회복약 $($fields['Stock'])개"}
+            $stage='복제 관찰';break
+        }
+        '^ChestStockReplicated$' {$label='공용 상자 재고 복제';$detail="남은 회복약 $($fields['Stock'])개";$stage='복제 관찰';break}
+        '^RecoveryCountReplicated$' {$label='내 회복약 보유량 복제';$detail="$($fields['Count'])개";$stage='복제 관찰';break}
         '^AttackStarted$' {
             $label='공격 준비 시작';$stage='서버 판정'
             $detail="피해 확정 대기 $($fields['Windup'])초"
