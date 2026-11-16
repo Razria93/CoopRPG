@@ -4,7 +4,7 @@
 #include "Engine/TimerHandle.h"
 #include "CoopRPGMeleeAbility.generated.h"
 
-class ACoopRPGAttackTarget;
+class AActor;
 class UCoopRPGCombatProbeComponent;
 
 UCLASS()
@@ -33,7 +33,7 @@ private:
     void ResolveHit();
 
 private:
-    TWeakObjectPtr<ACoopRPGAttackTarget> PendingTarget;
+    TWeakObjectPtr<AActor> PendingTarget;
     FTimerHandle HitTimer;
     bool bHitPending = false;
 };
