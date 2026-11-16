@@ -27,6 +27,14 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundReady, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEnemyLootRequest, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundResultDisplay, Log, All);
 
+namespace
+{
+    bool IsWithinChestRange(const APawn& Pawn, const ACoopRPGSharedChest& Chest)
+    {
+        return FVector::DistSquared(Pawn.GetActorLocation(), Chest.GetActorLocation()) <= FMath::Square(220.f);
+    }
+}
+
 void ACoopRPGPlayerController::ReceivedPlayer()
 {
     Super::ReceivedPlayer();
@@ -107,6 +115,23 @@ void ACoopRPGPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ACoopRPGPlayerController::TakeMeleeWeapon);
     InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACoopRPGPlayerController::UseRecoveryItem);
     InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ACoopRPGPlayerController::TakeEnemyLoot);
+}
+
+void ACoopRPGPlayerController::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    if (!HasAuthority() || !IsValid(OpenedChest))
+    {
+        return;
+    }
+
+    if (const APawn* CurrentPawn = GetPawn(); CurrentPawn && !IsWithinChestRange(*CurrentPawn, *OpenedChest))
+    {
+        if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>())
+        {
+            CloseOpenedChest(State->GetRoundId(), TEXT("OutOfRange"));
+        }
+    }
 }
 
 void ACoopRPGPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -236,7 +261,7 @@ const TCHAR* ACoopRPGPlayerController::GetChestRejection(const ACoopRPGSharedChe
     {
         return TEXT("NotAlive");
     }
-    if (FVector::DistSquared(CurrentPawn->GetActorLocation(), Chest->GetActorLocation()) > FMath::Square(220.f))
+    if (!IsWithinChestRange(*CurrentPawn, *Chest))
     {
         return TEXT("OutOfRange");
     }
@@ -264,10 +289,7 @@ void ACoopRPGPlayerController::ServerSetChestOpen_Implementation(ACoopRPGSharedC
             return;
         }
 
-        OpenedChest = nullptr;
-        ForceNetUpdate();
-        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestClosed Chest=%s Round=%s %s"), *GetNameSafe(Chest),
-            *RoundId.ToString(), *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        CloseOpenedChest(RoundId, TEXT("Manual"));
         return;
     }
 
@@ -280,10 +302,19 @@ void ACoopRPGPlayerController::ServerSetChestOpen_Implementation(ACoopRPGSharedC
     {
         OpenedChest = Chest;
         ForceNetUpdate();
-        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestOpened Chest=%s Round=%s Stock=%d %s"),
-            *GetNameSafe(Chest), *RoundId.ToString(), Chest->GetRecoveryStock(),
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestOpened Chest=%s Round=%s Stock=%d WeaponStock=%d %s"),
+            *GetNameSafe(Chest), *RoundId.ToString(), Chest->GetRecoveryStock(), Chest->GetWeaponStock(),
             *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
     }
+}
+
+void ACoopRPGPlayerController::CloseOpenedChest(FGuid RoundId, const TCHAR* Reason)
+{
+    const ACoopRPGSharedChest* Chest = OpenedChest.Get();
+    OpenedChest = nullptr;
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestClosed Chest=%s Round=%s Reason=%s %s"), *GetNameSafe(Chest),
+        *RoundId.ToString(), Reason, *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGSharedChest* Chest, FGuid RoundId,
@@ -501,7 +532,9 @@ void ACoopRPGPlayerController::LogChestRejection(const TCHAR* Action, const TCHA
 
 void ACoopRPGPlayerController::OnRep_OpenedChest()
 {
-    const FString StockField = OpenedChest ? FString::Printf(TEXT(" Stock=%d"), OpenedChest->GetRecoveryStock()) : FString();
+    const FString StockField = OpenedChest
+        ? FString::Printf(TEXT(" Stock=%d WeaponStock=%d"), OpenedChest->GetRecoveryStock(), OpenedChest->GetWeaponStock())
+        : FString();
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestViewReplicated Chest=%s Open=%d%s %s"),
         *GetNameSafe(OpenedChest), OpenedChest ? 1 : 0, *StockField,
         *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
