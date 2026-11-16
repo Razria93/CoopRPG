@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
+#include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGGameState.generated.h"
 
 class ACoopRPGEnemyLoot;
@@ -58,6 +59,9 @@ public:
 
     void InitializeLootRound(ACoopRPGSharedChest* Chest, ACoopRPGExtractionZone* Zone);
     void SetRoundPlaying(bool bPlaying);
+
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);
     void EvaluateRound(bool bDisconnected, bool bDeath, bool bBothInside);

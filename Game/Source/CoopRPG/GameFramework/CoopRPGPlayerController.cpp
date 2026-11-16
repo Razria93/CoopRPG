@@ -8,6 +8,7 @@
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 #include "CoopRPGGameMode.h"
 #include "CoopRPGGameState.h"
+#include "CoopRPGLootHUD.h"
 #include "CoopRPGGameViewportClient.h"
 
 #include "AbilitySystemComponent.h"
@@ -367,6 +368,7 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
         }
 
         CurrentCharacter->EquipMeleeWeapon();
+        ClientGameplayFeedback({ECoopRPGFeedbackKind::WeaponAcquired, CurrentCharacter});
         UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestWeaponGranted Chest=%s Round=%s Request=%u Stock=%d->%d Equipped=1 %s"),
             *GetNameSafe(Chest), *RoundId.ToString(), Request, StockBefore, Chest->GetWeaponStock(),
             *CoopRPG::Debug::DescribePlayerRequestContext(CurrentCharacter, ANSI_TO_TCHAR(__FUNCTION__)));
@@ -383,6 +385,7 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
     // Both mutations run in this server RPC before replication or the next RPC.
     ++RecoveryCount;
     ForceNetUpdate();
+    ClientGameplayFeedback({ECoopRPGFeedbackKind::RecoveryAcquired, GetPawn()});
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestGranted Chest=%s Round=%s Request=%u Stock=%d->%d Recovery=%d %s"),
         *GetNameSafe(Chest), *RoundId.ToString(), Request, StockBefore, Chest->GetRecoveryStock(), RecoveryCount,
         *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
@@ -401,7 +404,7 @@ void ACoopRPGPlayerController::UseRecoveryItem()
 
 void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId)
 {
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId)
     {
         LogRecoveryRejection(TEXT("WrongRound"), RoundId);
@@ -449,9 +452,19 @@ void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId)
 
     const int32 CountBefore = RecoveryCount--;
     ForceNetUpdate();
+    ClientGameplayFeedback({ECoopRPGFeedbackKind::RecoveryUsed, CurrentCharacter});
+    State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::Recovery, CurrentCharacter, HealthAfter - HealthBefore});
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("RecoveryUsed Round=%s HP=%.2f->%.2f Recovery=%d->%d %s"),
         *RoundId.ToString(), HealthBefore, HealthAfter, CountBefore, RecoveryCount,
         *CoopRPG::Debug::DescribePlayerRequestContext(CurrentCharacter, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::ClientGameplayFeedback_Implementation(const FCoopRPGGameplayFeedback& Feedback)
+{
+    if (auto* HUD = Cast<ACoopRPGLootHUD>(GetHUD()))
+    {
+        HUD->ShowGameplayFeedback(Feedback);
+    }
 }
 
 void ACoopRPGPlayerController::TakeEnemyLoot()
@@ -475,6 +488,7 @@ void ACoopRPGPlayerController::ServerTakeEnemyLoot_Implementation(FGuid RoundId,
     const TCHAR* Failure = GetEnemyLootRejection(RoundId, DropId);
     if (!Failure && State->TryGrantEnemyLoot(State->GetEnemyLoot()))
     {
+        State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::TeamLootAcquired, GetPawn()});
         UE_LOG(LogCoopRPGEnemyLootRequest, Log, TEXT("EnemyLootGranted Round=%s DropId=%s TeamLoot=%d->%d %s"),
             *RoundId.ToString(), *DropId.ToString(), Before, State->GetTeamLootCount(), *Context);
         return;

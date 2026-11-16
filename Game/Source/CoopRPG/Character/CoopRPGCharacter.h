@@ -8,6 +8,7 @@
 class UAbilitySystemComponent;
 class UCoopRPGCombatAttributes;
 class UInputAction;
+class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
 struct FInputActionValue;
 
@@ -25,6 +26,9 @@ public:
     float GetHealth() const;
     bool HasMeleeWeapon() const { return bHasMeleeWeapon; }
     void EquipMeleeWeapon();
+    int32 GetDisplaySlot() const { return DisplaySlot; }
+    void SetDisplaySlot(int32 Slot);
+    void FlashPresentationHit();
 
 protected:
     virtual void BeginPlay() override;
@@ -42,6 +46,12 @@ private:
     UFUNCTION()
     void OnRep_MeleeWeapon();
 
+    UFUNCTION()
+    void OnRep_DisplaySlot();
+
+    void SetPresentationTint(bool bDarkened);
+    void RestorePresentationTint();
+
 private:
     UPROPERTY()
     TObjectPtr<UInputAction> MoveAction;
@@ -57,6 +67,20 @@ private:
 
     UPROPERTY()
     TObjectPtr<UStaticMeshComponent> WeaponMesh;
+
+    UPROPERTY()
+    TObjectPtr<UStaticMeshComponent> BodyMesh;
+
+    UPROPERTY()
+    TObjectPtr<UStaticMeshComponent> HeadMesh;
+
+    UPROPERTY()
+    TObjectPtr<UMaterialInstanceDynamic> PresentationMaterial;
+
+    UPROPERTY(ReplicatedUsing = OnRep_DisplaySlot)
+    int32 DisplaySlot = 0;
+
+    FTimerHandle HitFlashTimer;
 
     UPROPERTY(ReplicatedUsing = OnRep_MeleeWeapon)
     bool bHasMeleeWeapon = false;

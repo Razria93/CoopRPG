@@ -8,7 +8,8 @@ void UCoopRPGRoundTravelSeats::Reserve(FName Destination, TArray<FUniqueNetIdRep
 {
     constexpr double ReservationSeconds = 30.0;
     ReservedMap = Destination;
-    AwaitingPlayers = MoveTemp(Participants);
+    ReservedPlayers = MoveTemp(Participants);
+    AwaitingPlayers = ReservedPlayers;
     ExpiresAt = FPlatformTime::Seconds() + ReservationSeconds;
     UE_LOG(LogCoopRPGRoundTravelSeats, Log, TEXT("RoundTravelSeatsReserved Map=%s Count=%d Seconds=%.0f"),
         *ReservedMap.ToString(), AwaitingPlayers.Num(), ReservationSeconds);
@@ -18,6 +19,7 @@ void UCoopRPGRoundTravelSeats::Clear()
 {
     ReservedMap = NAME_None;
     AwaitingPlayers.Reset();
+    ReservedPlayers.Reset();
     ExpiresAt = 0.0;
 }
 
@@ -26,13 +28,15 @@ bool UCoopRPGRoundTravelSeats::Allows(FName Map, const FUniqueNetIdRepl& Connect
     return !IsActive(Map) || (ConnectionId.IsValid() && AwaitingPlayers.Contains(ConnectionId));
 }
 
-void UCoopRPGRoundTravelSeats::Admit(FName Map, const FUniqueNetIdRepl& ConnectionId)
+int32 UCoopRPGRoundTravelSeats::Admit(FName Map, const FUniqueNetIdRepl& ConnectionId)
 {
     if (IsActive(Map) && AwaitingPlayers.RemoveSingle(ConnectionId) == 1)
     {
         UE_LOG(LogCoopRPGRoundTravelSeats, Log, TEXT("RoundTravelSeatJoined Map=%s Remaining=%d"),
             *Map.ToString(), AwaitingPlayers.Num());
+        return ReservedPlayers.IndexOfByKey(ConnectionId);
     }
+    return INDEX_NONE;
 }
 
 bool UCoopRPGRoundTravelSeats::IsActive(FName Map) const

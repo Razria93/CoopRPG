@@ -219,14 +219,51 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
     }
 
     APlayerController* Player = Super::Login(NewPlayer, InRemoteRole, Portal, Options, UniqueId, ErrorMessage);
-    if (Player && GetNetMode() == NM_DedicatedServer)
+    if (!Player)
+    {
+        return nullptr;
+    }
+
+    int32 ReservedSlot = INDEX_NONE;
+    if (GetNetMode() == NM_DedicatedServer)
     {
         const FName Map(*UGameplayStatics::GetCurrentLevelName(this));
-        GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->Admit(Map, UniqueId);
+        ReservedSlot = GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->Admit(Map, UniqueId);
         UE_LOG(LogCoopRPGRoundAdmission, Log, TEXT("RoundPlayerAdmitted Map=%s Players=%d"),
             *Map.ToString(), GetNumPlayers());
     }
+    if (ReservedSlot != INDEX_NONE)
+    {
+        PlayerSlots[ReservedSlot] = Player;
+    }
+    else
+    {
+        for (auto& Slot : PlayerSlots)
+        {
+            if (!Slot.IsValid())
+            {
+                Slot = Player;
+                break;
+            }
+        }
+    }
     return Player;
+}
+
+void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
+{
+    Super::RestartPlayer(NewPlayer);
+    if (auto* Character = NewPlayer ? Cast<ACoopRPGCharacter>(NewPlayer->GetPawn()) : nullptr)
+    {
+        for (int32 Index = 0; Index < RoundCapacity; ++Index)
+        {
+            if (PlayerSlots[Index].Get() == NewPlayer)
+            {
+                Character->SetDisplaySlot(Index + 1);
+                break;
+            }
+        }
+    }
 }
 
 void ACoopRPGGameMode::Logout(AController* Exiting)
@@ -236,6 +273,13 @@ void ACoopRPGGameMode::Logout(AController* Exiting)
         && IsRoundParticipant(Exiting))
     {
         bParticipantDisconnected = true;
+    }
+    for (auto& Slot : PlayerSlots)
+    {
+        if (Slot.Get() == Exiting)
+        {
+            Slot.Reset();
+        }
     }
     Super::Logout(Exiting);
     UpdateLootRoundPhase(Exiting);
@@ -279,9 +323,9 @@ bool ACoopRPGGameMode::ReserveRoundTravelSeats(const FString& Destination) const
     }
 
     TArray<FUniqueNetIdRepl> ConnectionIds;
-    for (const auto& Participant : RoundPlayers)
+    for (const auto& Slot : PlayerSlots)
     {
-        if (const auto* Player = Participant.Get())
+        if (const auto* Player = Slot.Get(); Player && IsRoundParticipant(Player))
         {
             const APlayerState* PlayerState = Player->GetPlayerState<APlayerState>();
             if (PlayerState && PlayerState->GetUniqueId().IsValid())

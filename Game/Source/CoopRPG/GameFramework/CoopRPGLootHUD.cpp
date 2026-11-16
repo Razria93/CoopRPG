@@ -5,11 +5,156 @@
 #include "CoopRPGGameViewportClient.h"
 #include "CoopRPGPlayerController.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
+#include "CoopRPG/Character/CoopRPGEnemy.h"
+#include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
 #include "Engine/Canvas.h"
+#include "EngineUtils.h"
 #include "Engine/World.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGGameplayFeedback, Log, All);
+
+namespace
+{
+    constexpr double FeedbackLifetimeSeconds = 1.4;
+    constexpr int32 MaxItemRows = 4;
+    constexpr float ItemRowSpacing = 20.0f;
+    constexpr float ItemColumnWidth = 160.0f;
+}
+
+void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback)
+{
+    AActor* Subject = Feedback.Subject.Get();
+    FString Text;
+    FLinearColor Color(0.35f, 0.72f, 1.0f);
+    bool bNextToActor = true;
+    switch (Feedback.Kind)
+    {
+    case ECoopRPGFeedbackKind::Damage:
+    {
+        const FString Attacker = Feedback.AttackerSlot > 0 ? FString::Printf(TEXT("P%d"), Feedback.AttackerSlot)
+            : (Feedback.AttackerSlot == 0 ? TEXT("Enemy") : TEXT("Player"));
+        Text = FString::Printf(TEXT("-%.0f HP (By %s)"), Feedback.Amount, *Attacker);
+        Color = FLinearColor(1.0f, 0.36f, 0.33f);
+        bNextToActor = false;
+        if (auto* Player = Cast<ACoopRPGCharacter>(Subject))
+        {
+            Player->FlashPresentationHit();
+        }
+        else if (auto* Enemy = Cast<ACoopRPGEnemy>(Subject))
+        {
+            Enemy->FlashPresentationHit();
+        }
+        break;
+    }
+    case ECoopRPGFeedbackKind::Recovery:
+        Text = FString::Printf(TEXT("+%.0f HP"), Feedback.Amount);
+        Color = FLinearColor(0.36f, 1.0f, 0.55f);
+        bNextToActor = false;
+        break;
+    case ECoopRPGFeedbackKind::WeaponAcquired: Text = TEXT("Melee weapon acquired"); break;
+    case ECoopRPGFeedbackKind::RecoveryAcquired: Text = TEXT("Recovery item acquired"); break;
+    case ECoopRPGFeedbackKind::RecoveryUsed:
+        Text = TEXT("Recovery item used");
+        Color = FLinearColor(1.0f, 0.83f, 0.32f);
+        break;
+    case ECoopRPGFeedbackKind::TeamLootAcquired: Text = TEXT("Team loot acquired"); break;
+    }
+
+    if (FeedbackEntries.Num() >= 24)
+    {
+        FeedbackEntries.RemoveAt(0);
+    }
+    const double Now = GetWorld()->GetTimeSeconds();
+    int32 ItemRow = INDEX_NONE;
+    if (bNextToActor)
+    {
+        const TWeakObjectPtr<AActor> SubjectKey(Subject);
+        int32 NextRow = 0;
+        for (const FFeedbackEntry& Entry : FeedbackEntries)
+        {
+            if (Entry.Subject == SubjectKey && Entry.ItemRow != INDEX_NONE && Now - Entry.StartedAt <= FeedbackLifetimeSeconds)
+            {
+                NextRow = FMath::Max(NextRow, Entry.ItemRow + 1);
+            }
+        }
+        if (NextRow < MaxItemRows)
+        {
+            ItemRow = NextRow;
+        }
+    }
+    FeedbackEntries.Add({Subject, Feedback.Location, Text, Color, Now, bNextToActor, ItemRow});
+    const auto* Player = Cast<ACoopRPGCharacter>(Subject);
+    UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("GameplayFeedback Kind=%s Subject=%s Slot=%d Amount=%.2f AttackerSlot=%d %s"),
+        *UEnum::GetValueAsString(Feedback.Kind), *GetNameSafe(Subject), Player ? Player->GetDisplaySlot() : 0,
+        Feedback.Amount, Feedback.AttackerSlot, *CoopRPG::Debug::DescribeLogContext(GetOwningPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGLootHUD::DrawWorldLabel(const FVector& Location, const FString& Text, const FLinearColor& Color,
+    FVector2D Offset, int32 ItemRow)
+{
+    const FVector Screen = Project(Location);
+    if (Screen.Z <= 0.0f || Screen.X < 0.0f || Screen.X >= Canvas->ClipX || Screen.Y < 0.0f || Screen.Y >= Canvas->ClipY)
+    {
+        return;
+    }
+
+    float Width, Height;
+    GetTextSize(Text, Width, Height);
+    const bool bItem = ItemRow != INDEX_NONE;
+    const float Left = static_cast<float>(Screen.X + Offset.X) - (bItem ? 0.0f : Width * 0.5f);
+    const float ColumnWidth = bItem ? ItemColumnWidth : Width;
+    const float X = FMath::Clamp(Left, 4.0f, FMath::Max(4.0f, Canvas->ClipX - ColumnWidth - 4.0f));
+    const float ReservedRows = bItem ? ItemRowSpacing * (MaxItemRows - 1) : 0.0f;
+    const float AnchorY = FMath::Clamp(static_cast<float>(Screen.Y + Offset.Y), 4.0f,
+        FMath::Max(4.0f, Canvas->ClipY - Height - ReservedRows - 4.0f));
+    const float Y = AnchorY + (bItem ? ItemRow * ItemRowSpacing : 0.0f);
+    DrawRect(FLinearColor(0.02f, 0.03f, 0.05f, 0.85f), X - 3.0f, Y - 1.0f, Width + 6.0f, Height + 2.0f);
+    DrawText(Text, Color, X, Y);
+}
+
+void ACoopRPGLootHUD::DrawGameplayFeedback()
+{
+    for (TActorIterator<ACoopRPGCharacter> It(GetWorld()); It; ++It)
+    {
+        if (const int32 Slot = It->GetDisplaySlot(); Slot > 0)
+        {
+            DrawWorldLabel(It->GetActorLocation() + FVector(0.0f, 0.0f, 94.0f),
+                FString::Printf(TEXT("P%d"), Slot), CoopRPG::Presentation::PlayerColor(Slot));
+        }
+    }
+    for (TActorIterator<ACoopRPGEnemy> It(GetWorld()); It; ++It)
+    {
+        if (!It->IsDead())
+        {
+            DrawWorldLabel(It->GetActorLocation() + FVector(0.0f, 0.0f, 76.0f), TEXT("Enemy"), CoopRPG::Presentation::EnemyColor());
+        }
+    }
+
+    const double Now = GetWorld()->GetTimeSeconds();
+    FeedbackEntries.RemoveAll([Now](const FFeedbackEntry& Entry) { return Now - Entry.StartedAt > FeedbackLifetimeSeconds; });
+    TMap<TWeakObjectPtr<AActor>, int32> RowsBySubject;
+    for (int32 Index = FeedbackEntries.Num() - 1; Index >= 0; --Index)
+    {
+        const FFeedbackEntry& Entry = FeedbackEntries[Index];
+        const int32 Row = RowsBySubject.FindOrAdd(Entry.Subject)++;
+        const AActor* Subject = Entry.Subject.Get();
+        const FVector Location = Subject ? Subject->GetActorLocation() : Entry.Location;
+        const FVector Anchor = Location + FVector(0.0f, 0.0f, 100.0f);
+        if (Entry.bNextToActor)
+        {
+            if (Entry.ItemRow != INDEX_NONE)
+            {
+                DrawWorldLabel(Anchor, Entry.Text, Entry.Color, FVector2D(32.0, 0.0), Entry.ItemRow);
+            }
+            continue;
+        }
+        const FVector2D Offset(0.0, -15.0 - Row * 17.0 - (Now - Entry.StartedAt) * 14.0);
+        DrawWorldLabel(Anchor, Entry.Text, Entry.Color, Offset);
+    }
+}
 
 void ACoopRPGLootHUD::DrawHUD()
 {
@@ -26,6 +171,8 @@ void ACoopRPGLootHUD::DrawHUD()
     {
         return;
     }
+
+    DrawGameplayFeedback();
 
     constexpr float Pad = 18.0f;
     constexpr float TextX = Pad + 12.0f;

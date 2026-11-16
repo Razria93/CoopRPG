@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGPlayerController.generated.h"
 
 class ACoopRPGSharedChest;
@@ -63,6 +64,9 @@ private:
 
     UFUNCTION(Server, Reliable)
     void ServerUseRecovery(FGuid RoundId);
+
+    UFUNCTION(Client, Unreliable)
+    void ClientGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
 
     void TakeEnemyLoot();
 

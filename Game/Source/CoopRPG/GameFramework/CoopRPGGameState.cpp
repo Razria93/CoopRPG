@@ -1,5 +1,9 @@
 #include "CoopRPGGameState.h"
 
+#include "CoopRPGLootHUD.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
+
 #include "CoopRPGExtractionZone.h"
 
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
@@ -24,6 +28,18 @@ namespace
             return TEXT("Success");
         }
         return Reason == ECoopRPGRoundEndReason::Disconnected ? TEXT("Aborted") : TEXT("Failed");
+    }
+}
+
+void ACoopRPGGameState::MulticastGameplayFeedback_Implementation(const FCoopRPGGameplayFeedback& Feedback)
+{
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        const APlayerController* Controller = GetWorld()->GetFirstPlayerController();
+        if (auto* HUD = Controller ? Cast<ACoopRPGLootHUD>(Controller->GetHUD()) : nullptr)
+        {
+            HUD->ShowGameplayFeedback(Feedback);
+        }
     }
 }
 
