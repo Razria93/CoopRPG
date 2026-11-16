@@ -1587,6 +1587,46 @@ AI는 뷰어 Excel의 162개 사건을 실행 ID·출처·바이트 위치로 �
 
 **근거** · 로컬 `Artifacts/Validation/v06-round-admission-20261116-190801/final-02/manual-20261116-194258-506/`의 `UserHUD/`, `Exports/`, `server.log`·`a.log`·`b.log`·`c-full.log`·`c-playing.log`, `round-admission-user-audit.json`
 
+<a id="v07-default-playthrough"></a>
+## V07 기본 설정 한 판 완주 · 2026-11-16
+
+V06에서 검증한 Win64 Development 전용 서버 1개와 별도 Client A·B 패키지를 재사용했다. Server·Client 실행 파일과 컨테이너 12개의 SHA-256이 이전 기록과 일치했다. AI가 실제 게임 창에 Windows 키·마우스 입력을 보냈다. 세 프로세스의 실행 인수와 로그에서 `-CoopCombatTest`와 `Coop.Test.*` 호출이 없는 것을 확인했다.
+
+| 시점 | 확인한 결과 |
+| --- | --- |
+| 시작·무기 확보 | 두 클라이언트에서 `R`로 시작했다. A·B가 걸어서 같은 상자에 접근해 각각 무기 1개를 획득·장착했다. 서버 무기 재고는 2→1→0, 회복약은 A가 1개 확보했다. |
+| 기본 체력 적 처치 | 일반 왼쪽 클릭으로 각자 5타. 서버가 적 HP 100→0을 10회 적중으로 확정했고 사망·드롭은 각각 1회였다. 성공 HUD의 플레이어 HP는 A 100·B 60이었다. |
+| 팀 루팅 | A의 `T` 요청 한 번으로 팀 수량이 0→1이 됐다. 양쪽 로그에서 동일 드롭 ID와 팀 수량 1을 확인했다. |
+| 공동 탈출 | B가 먼저 들어갔을 때는 대기했다. A는 구역 왼쪽 경계에서 실제 `D` 입력을 추가해 진입했다. 양쪽이 연속 3.012초 체류한 뒤 서버 성공·1점이 한 번 확정됐다. 두 HUD·복제 로그가 일치했다. 시작부터 확정까지 서버 시계 90.006초였다. |
+| 다음 라운드 | 두 결과 표시 확인 뒤 `L_Movement_Round2`로 한 번 이동했다. 새 `RoundId`에서 양쪽 HP 100, 미장착, 회복약·팀 전리품 0, `R Ready`를 확인했다. A만 준비하면 기다렸고 B가 준비한 직후 양쪽에 5분 타이머가 시작됐다. |
+
+기동은 `Start-CombatManual.ps1`의 `-EnemyCombat` 옵션을 사용한다. 이 옵션이 서버에 `/Game/Maps/L_Movement?EnemyCombat`을 전달한다. 적 전투 실행에 필요한 URL 옵션과 기본 맵 경로는 각각 GameMode와 `DefaultEngine.ini`에서 확인했다. 무기 2개·회복약 1개는 상자 시작값이며, 지급 후 재고·소지량은 실행 상태다. 팀 전리품 목표 1개는 서버 규칙이며 실제 팀 수량은 복제 상태다. 300초·3초는 GameState의 시간 기준이고, 기한과 진행 값은 회차마다 계산된다. `DefaultGame.ini`의 Cook 목록 두 맵은 실제 패키지에서 각각 로드됐다.
+
+**범위** · 기존 기본값으로 현재 배치에서 완주 가능한 한 경로를 확인했다. 플레이 밸런스, 다른 PC나 지연 조건, 두 번째 라운드의 추가 완주는 후속이다. 사용자 직접 완주는 [별도 재현 기록](#v07-default-playthrough-user-result)에서 확인했다.
+
+**근거** · [런처](../../Tools/Validation/Start-CombatManual.ps1) · [기본 맵](../../Game/Config/DefaultEngine.ini) · [두 맵 Cook 목록](../../Game/Config/DefaultGame.ini) · [서버의 출현과 전리품 조건](../../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [상자 기본값](../../Game/Source/CoopRPG/Loot/CoopRPGSharedChest.h) · [타이머와 결과](../../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp) · 로컬 `Artifacts/Validation/v06-round-admission-20261116-190801/final-02/manual-20261116-205918-163/`의 `server.log`·`a.log`·`b.log`, `v07-os-input.jsonl`, 성공·초기화·재준비 PNG와 `v07-default-playthrough-audit.json`
+
+<a id="v07-default-playthrough-user-result"></a>
+### 사용자 직접 완주 · 두 명 장착부터 새 맵 재준비까지
+
+사용자가 기존 `final-02/Stage`의 전용 서버와 두 클라이언트로 직접 한 판을 완주하고 뷰어 PNG·상태 JSON·Excel을 제출했다. 일반 입력으로 진행했으며 실행 인수와 원본 로그에서 `-CoopCombatTest`와 `Coop.Test.*` 호출이 없음을 확인했다. AI는 Excel 315행을 사건 ID·출처·바이트 위치로 원본 로그와 대조했다.
+
+| 단계 | 서버·클라이언트 대조 |
+| --- | --- |
+| 무기 확보 | A·B에 각각 1개를 지급했다. 재고는 2→1→0, 두 창의 자기 Pawn에 장착 상태가 각각 복제됐다. |
+| 적 처치·루팅 | 기본 HP 100의 적에 A 7타·B 3타 적중. 사망·드롭·팀 지급 각각 1회. 양쪽에 같은 드롭 ID와 팀 전리품 1이 복제됐다. |
+| 두 사람 탈출 | 3.027초 연속 체류 후 `96CC7201…`에 성공·1점 1회. 양쪽 결과가 일치했고, 라운드 시작부터 확정까지 65.352초였다. |
+| 다음 맵 재준비 | 서버가 두 결과 표시 확인을 받고 `L_Movement_Round2`로 한 번 이동했다. A·B가 재접속했고 새 라운드 `D6B51DB0…`에서 두 번째 준비 뒤 300초 타이머가 시작됐다. |
+
+| 기록 비교 | 첫 V07 AI 입력 검증 | 사용자 직접 재현 |
+| --- | --- | --- |
+| 첫 판 서버 시계 | 90.006초 | 65.352초 |
+| 적중 | A 5타·B 5타 | A 7타·B 3타 |
+
+정상 재준비를 마친 뒤 B가 종료되면서 두 번째 라운드에 중단·0점이 기록됐다. 뷰어 PNG는 이 시점의 로그를 보여 준다. 첫 판의 성공·1점은 종료 판정과 라운드 ID가 다르며, 두 클라이언트의 결과 복제를 별도로 대조했다.
+
+**근거** · [AI 입력 검증](#v07-default-playthrough) · 로컬 `Artifacts/Validation/v06-round-admission-20261116-190801/final-02/manual-20261116-211808-199/`의 `Exports/`, `server.log`·`a.log`·`b.log`, `v07-user-playthrough-audit.json`
+
 <a id="active-tests"></a>
 ## 단계별 시험 기준 — 제출용 T1
 
@@ -1600,7 +1640,7 @@ AI는 뷰어 Excel의 162개 사건을 실행 ID·출처·바이트 위치로 �
 | V04 | 적 AI·사망·전리품 생성 | 서버의 탐지·추격·근접 공격과 피격, 적 사망 뒤 공격 중지, 겹친 마지막 타격에도 사망 확정·전리품 생성 1회 | [추격·피격 후 회복](#v04-enemy-first-combat)과 [사망·대기 공격 정리·전리품 생성](#v04-death-loot-once) 자동 통과. 팀 지급은 V05 후속. |
 | V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | [동시 열람·마지막 회복약 1개 지급](#v05-shared-chest-first) 및 [무기 장착·회복약 사용](#v05-equipment-recovery), [팀 전리품 지급·거리·중복 거절](#v05-enemy-loot-team) 통과. [사용자 버튼 실행](#v05-enemy-loot-user-result) 확인. [실제 라운드 이동 뒤 이전 상자 요청 거절](#v06-round-travel)을 확인했다. |
 | V06 | 한 판·점수·다음 라운드 | 준비·공동 탈출·사망/시간초과 실패·이탈 중단·결과/점수 1회 확정·다음 맵 도착과 초기화, 중도참가/정원 거절·연결 종료 안내 | [공동 탈출·이탈 초기화·양쪽 성공 1점](#v06-extraction-success) 통과. [사용자 직접 재현](#v06-extraction-user-result) 확인. [실패·중단·종료 경합](#v06-round-outcomes) 및 [세 사유 사용자 재현](#v06-round-outcomes-user-result) 확인. [다음 맵과 새 라운드 자동 3회](#v06-round-travel) 통과. [사용자 왕복 이동·재준비](#v06-round-travel-user-result) 확인. [입장 거절·정상 전환·종료 안내](#v06-round-admission) 자동 확인. [사용자 입장 거절·맵 이동·서버 종료 재현](#v06-round-admission-user-result) 확인. |
-| V07 | 진행 가능성·설정 | 두 플레이어의 무기 확보 경로, 획득 가능한 전리품 수량과 탈출 조건, 값/정의와 실행 상태 분리, 서버·클라이언트 패키지에 양쪽 맵 포함 | 미실행 |
+| V07 | 진행 가능성·설정 | 두 플레이어의 무기 확보 경로, 획득 가능한 전리품 수량과 탈출 조건, 값/정의와 실행 상태 분리, 서버·클라이언트 패키지에 양쪽 맵 포함 | [기본 설정 완주·다음 맵 재준비](#v07-default-playthrough) 확인. 기본값·실행 상태와 두 맵 기동을 대조했다. [사용자 직접 완주·재준비](#v07-default-playthrough-user-result) 확인. |
 | V08 | 지연/손실·진단 | T1 조건에서 V02/V03/V05/V06 핵심 반복·수렴 확인. 별도 PC/LAN은 V08-LAN으로 분리 | 미실행; V08-LAN도 미실행 |
 | V09 | 제출 재현 | 안내만으로 패키지 실행/접속/종료·재시작, 최종 빌드/설명/근거 일치·남은 결함 공개 | 미실행 |
 

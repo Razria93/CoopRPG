@@ -114,7 +114,9 @@ CoopRPG · 기록 시작 2026-11-05 · 현행 학습·개발 진도의 운영 �
 | 11/16 · V06 맵 이동 사용자 재현 | 사망 결과 표시, 양쪽 맵 도착·초기화·재준비 | 사용자가 두 창을 직접 조작하고 HUD 8장과 뷰어 근거를 남겼다. AI가 Excel 240행과 서버·클라이언트 원본을 대조했다. [수동 검증](Validation/Index.md#v06-round-travel-user-result) | 사망 뒤 `L_Movement → L_Movement_Round2 → L_Movement` 두 번 이동. 두 목적지에서 새 `RoundId`, 두 번째 준비 뒤 300초 시작, 두 번째 맵에서 상자 재사용 확인. |
 | 11/16 · V06 입장과 연결 종료 안내 | 정원 2명, 진행 중 신규 입장 거절, 기존 참가자 이동과 서버 종료 안내 | 사용자가 접속 경계와 A·B·C 검증을 요청했다. AI가 `PreLogin`·`Login` 판정, 목적지 자리 예약, 뷰포트 안내를 연결했다. [패키지 검증](Validation/Index.md#v06-round-admission) | 주 시험 18개 통과. C가 다음 맵에 먼저 요청해도 거절됐고, A·B는 들어와 재준비했다. 서버 종료 뒤 두 창에 안내가 표시됐다. V07은 후속이다. |
 | 11/16 · V06 입장과 종료 사용자 재현 | C의 두 거절, A·B의 새 맵과 재준비, 서버 종료 안내 | 사용자가 접속 시도 버튼과 A·B를 직접 조작하고 화면 4장과 뷰어 자료를 남겼다. AI가 Excel 162행과 별도 C 로그를 대조했다. [수동 검증](Validation/Index.md#v06-round-admission-user-result) | C의 정원·중도참가 거절, 맵 이동 1회·양쪽 재준비, 서버 정상 종료 뒤 A·B 안내 각 1회. |
-| 11/16 · G3 | 한 판 성공·실패·중단과 다음 맵 진입 | V06 핵심 경로 자동 재현과 사망 뒤 왕복 수동 재현 완료 | [자동 맵 이동](Validation/Index.md#v06-round-travel) · [사용자 왕복 이동](Validation/Index.md#v06-round-travel-user-result) · [접속 경계 자동](Validation/Index.md#v06-round-admission)·[수동 검증](Validation/Index.md#v06-round-admission-user-result) · V07 별도 |
+| 11/16 · V07 기본 설정 첫 완주 | 기존 패키지에서 두 명 무장→적 처치→팀 루팅→공동 탈출→다음 맵 재준비 | 사용자가 시험 명령 없는 완주를 요청했다. AI가 A·B의 실제 Windows 키·마우스 입력을 보내고 서버 원본과 두 화면을 대조했다. [실제 검증](Validation/Index.md#v07-default-playthrough) | 기본 HP 100의 적에 A·B 각 5타, 전리품 팀 지급 1회. 두 명 체류 3.012초 뒤 성공·1점 1회, 라운드 시작 후 90.006초. 다음 맵 초기 HUD와 두 번째 준비 뒤 300초 시작 확인. |
+| 11/16 · V07 사용자 직접 완주 | 무장·전투·팀 루팅·공동 탈출·다음 맵 재준비 | 사용자가 두 창을 직접 조작하고 뷰어 자료를 저장했다. AI가 Excel 315행과 세 원본 로그를 대조했다. [수동 검증](Validation/Index.md#v07-default-playthrough-user-result) | A 7타·B 3타로 적 처치, 팀 전리품 1회 지급, 3.027초 공동 체류 후 양쪽 성공·1점. 첫 판 65.352초, 두 번째 준비 뒤 새 300초 타이머 확인. |
+| 11/16 · G3 | 한 판 성공·실패·중단과 다음 맵 진입 | V06 핵심 경로 자동 재현과 사망 뒤 왕복 수동 재현 완료 | [자동 맵 이동](Validation/Index.md#v06-round-travel) · [사용자 왕복 이동](Validation/Index.md#v06-round-travel-user-result) · [접속 경계 자동](Validation/Index.md#v06-round-admission)·[수동 검증](Validation/Index.md#v06-round-admission-user-result) · [V07 기본 설정 완주](Validation/Index.md#v07-default-playthrough) |
 | 11/17 | 지연·손실 조건 검증 | 미기록 | 미기록 |
 | 11/18 | 경계 상황 수정·재검증 | 미기록 | 미기록 |
 | 11/19 | G4: 패키지·회귀 검증 | 미기록 | 미기록 |
@@ -133,7 +135,7 @@ CoopRPG · 기록 시작 2026-11-05 · 현행 학습·개발 진도의 운영 �
 |---|---|---|---|---|
 | G1 별도 서버+2클라이언트 접속·조작·재실행 | 11/10 | 11/07 완료 | 목표일 전 통과 | 11/07 · [V01 반복 검증](Validation/Index.md#v01-server-shutdown) |
 | G2 공격 정상·서버 거절·취소·재실행 | 11/13 | 11/16 핵심 경로 검증 | 11/14 대조에서 11/13까지 통과 근거 없음 | 11/16 · [고정 표적 패키지에서 거절·명시 취소·재실행 도달](Validation/Index.md#v03-attack-lifetime). 실제 충돌과 라운드를 연결한 뒤의 판정은 남음 |
-| G3 성공·실패·재시작까지 한 판 완주 | 11/16 | 11/16 핵심 경로 자동 확인 | V06 성공·실패·중단·새 라운드를 확인 | [V06 서버·클라이언트 검증](Validation/Index.md#v06-round-travel) · [접속 경계 자동 검증](Validation/Index.md#v06-round-admission) · V07 완료일 미산정 |
+| G3 성공·실패·재시작까지 한 판 완주 | 11/16 | 11/16 핵심 경로 자동 확인 | V06 성공·실패·중단·새 라운드를 확인 | [V06 서버·클라이언트 검증](Validation/Index.md#v06-round-travel) · [접속 경계 자동 검증](Validation/Index.md#v06-round-admission) · [V07 첫 완주](Validation/Index.md#v07-default-playthrough) 11/16 · [사용자 완주](Validation/Index.md#v07-default-playthrough-user-result) 확인 · 제출용 기동·설정 안내 후속 |
 | G4 패키지 실행·정한 회귀 검증 | 11/19 | 미산정 | 미기록 | 미기록 |
 
 <a id="changes"></a>

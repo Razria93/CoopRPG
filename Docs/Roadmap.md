@@ -18,7 +18,7 @@
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 11월5일 운영 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 현재 기능 결과는 [V06 입장과 연결 종료 안내 카드](#v06-round-admission-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
+- 현재 기능 결과는 [V07 기본 설정 완주 카드](#v07-default-playthrough-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -138,11 +138,18 @@
 - **연계** · [V06 입장과 연결 종료 안내](#v06-round-admission-card)에서 C의 접속과 두 참가자의 정상 전환을 대조했다.
 
 <a id="v06-round-admission-card"></a>
-### 현재 작업 · V06 입장과 연결 종료 안내 · 2026-11-16
+### 이전 작업 · V06 입장과 연결 종료 안내 · 2026-11-16
 
 - **확인** · 대기 중 정원 초과, 진행 중 신규 입장, 다음 맵 예약 중 새 입장을 서버가 각각 거절했다. 기존 A·B만 다음 맵에 도착해 재준비했다. 참가자 이탈의 기존 중단 결과와 서버 종료의 양쪽 연결 안내를 별도로 확인했다. [실행 근거](Validation/Index.md#v06-round-admission)
 - **사용자 확인** · 같은 실행에서 C의 두 거절, 사망 뒤 A·B의 새 맵 입장과 300초 재시작, 서버 정상 종료 뒤 양쪽 안내를 재현했다. [수동 검증](Validation/Index.md#v06-round-admission-user-result)
-- **다음** · V07에서 기본값·콘텐츠 경로와 기존 패키지의 완주 가능성을 점검한다. [V06·V07 시험](Validation/Index.md#active-tests)
+- **연계** · [V07 기본 설정 완주](#v07-default-playthrough-card)에서 동일 패키지의 전체 진행을 확인했다.
+
+<a id="v07-default-playthrough-card"></a>
+### 현재 작업 · V07 기본 설정 완주 · 2026-11-16
+
+- **확인** · 기존 Server·Client 패키지에서 일반 키와 마우스로 두 사람의 무장·전투·팀 루팅·공동 탈출·성공 1점·새 맵 재준비를 확인했다. [실제 검증](Validation/Index.md#v07-default-playthrough)
+- **사용자 확인** · 두 창에서 무기 장착부터 공동 탈출·성공 1점·다음 맵 재준비를 직접 확인했다. [수동 검증](Validation/Index.md#v07-default-playthrough-user-result)
+- **다음** · 기존 실행 옵션과 기본 설정의 정의 위치를 바탕으로 제출용 기동·설정 경로를 정리하고 V07 판정을 마감한다. [V07 시험 기준](Validation/Index.md#active-tests)
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬
 
