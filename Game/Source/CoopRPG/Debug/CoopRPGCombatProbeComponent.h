@@ -4,6 +4,9 @@
 #include "GameplayTagContainer.h"
 #include "CoopRPGCombatProbeComponent.generated.h"
 
+class AController;
+class AGameModeBase;
+
 // Development-only commands require -CoopCombatTest on both client and server.
 UCLASS()
 class COOPRPG_API UCoopRPGCombatProbeComponent : public UActorComponent
@@ -20,6 +23,7 @@ public:
     void ConfirmTwice();
     void PositionForEnemyLoot(bool bNear);
     void PositionForExtraction(bool bInside);
+    void PrepareRoundEnd(FName Scenario);
 
 protected:
     virtual void BeginPlay() override;
@@ -43,6 +47,13 @@ private:
 
     UFUNCTION(Server, Reliable)
     void ServerPositionForExtraction(bool bInside);
+
+    UFUNCTION(Server, Reliable)
+    void ServerPrepareRoundEnd(FName Scenario);
+
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+    void OnPeerLogout(AGameModeBase* Mode, AController* Exiting);
+#endif
 
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);
     void WriteSnapshot(const FString& Label) const;
