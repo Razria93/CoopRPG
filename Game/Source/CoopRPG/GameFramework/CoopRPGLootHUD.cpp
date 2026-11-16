@@ -2,6 +2,7 @@
 
 #include "CoopRPGExtractionZone.h"
 #include "CoopRPGGameState.h"
+#include "CoopRPGGameViewportClient.h"
 #include "CoopRPGPlayerController.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
@@ -13,6 +14,11 @@
 void ACoopRPGLootHUD::DrawHUD()
 {
     Super::DrawHUD();
+    const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
+    if (Viewport && Viewport->HasConnectionNotice())
+    {
+        return;
+    }
 
     auto* Controller = Cast<ACoopRPGPlayerController>(GetOwningPlayerController());
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();

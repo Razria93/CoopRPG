@@ -8,6 +8,7 @@ class ACoopRPGAttackTarget;
 class ACoopRPGEnemy;
 class ACoopRPGGameState;
 class ACoopRPGPlayerController;
+struct FUniqueNetIdRepl;
 
 UCLASS()
 class COOPRPG_API ACoopRPGGameMode : public AGameModeBase
@@ -26,9 +27,15 @@ protected:
     virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
+    virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId,
+        FString& ErrorMessage) override;
+    virtual APlayerController* Login(UPlayer* NewPlayer, ENetRole InRemoteRole, const FString& Portal,
+        const FString& Options, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
     virtual void Logout(AController* Exiting) override;
 
 private:
+    FString GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId);
+    bool ReserveRoundTravelSeats(const FString& Destination) const;
     bool IsRoundParticipant(const AController* Controller) const;
     void AdvanceRoundIfReady(const ACoopRPGGameState& State);
 

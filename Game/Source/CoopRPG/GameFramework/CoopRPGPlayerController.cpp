@@ -8,6 +8,7 @@
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 #include "CoopRPGGameMode.h"
 #include "CoopRPGGameState.h"
+#include "CoopRPGGameViewportClient.h"
 
 #include "AbilitySystemComponent.h"
 #include "Components/InputComponent.h"
@@ -29,6 +30,13 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundResultDisplay, Log, All);
 void ACoopRPGPlayerController::ReceivedPlayer()
 {
     Super::ReceivedPlayer();
+    if (IsLocalController() && GetNetMode() == NM_Client)
+    {
+        if (auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport()))
+        {
+            Viewport->ClearConnectionNotice();
+        }
+    }
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
     if (IsLocalController() && FParse::Param(FCommandLine::Get(), TEXT("CoopManualInput")))
     {
