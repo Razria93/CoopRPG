@@ -18,7 +18,7 @@
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 11월5일 운영 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 현재 기능 결과는 [V02·V03 현행 카드](#v03-current-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
+- 현재 기능 결과는 [V05 현행 카드](#v05-current-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -84,11 +84,17 @@
 - **당시 다음 후보:** V02의 무효 대상·중복 접촉·상태 거절과 거리 T1 잔여를 실제 공격 수명에 맞춰 정리한 뒤 V03 취소·재실행으로 진행한다. 상자·적 콘텐츠 착수와 G2 전체 통과는 아직 보류다. 7단계 완료일은 남은 구현·빌드·재검증을 반영해 다시 산정한다.
 
 <a id="v03-current-card"></a>
-### 현재 작업 · V02 경계와 V03 명시 취소 · 2026-11-16
+### 이전 작업 · V02 경계와 V03 명시 취소 · 2026-11-16
 
 - **완료 범위:** 두 Client의 사거리·무효 표적·공격자 상태 거절 및 V03의 피해 확정 전 취소·재실행을 새 독립 패키지에서 검증했다. 실제 충돌 기반 중복 접촉은 타격 기능 통합 시험에 남긴다. [실행 근거](Validation/Index.md#v03-attack-lifetime)
 - **로그 보완:** [취소 RPC 호출·수신 및 비용·피해 표시](Validation/LogViewer.md#cancel-rpc-before-after)를 갱신하고 [이전 로그와 새 패키지](Validation/Index.md#v03-telemetry-result)를 검증했다. [사용자의 새 패키지 확인](Validation/Index.md#v03-telemetry-user-result)도 기록했다.
 - **다음:** [사용자가 두 Client에서 취소와 재공격을 재현했다](Validation/Index.md#v03-user-manual-result). 공용 상자의 동시 열람과 마지막 회복약 단일 지급을 다음 게임 기능으로 연결한다. 적 피격·사망 및 라운드가 들어올 때 취소 경합과 상태 정리를 확인한다. [7단계 구현 순서](#mvp-implementation-order)
+
+<a id="v05-current-card"></a>
+### 현재 작업 · V05 공용 상자 첫 경합 · 2026-11-16
+
+- **완료:** 두 클라이언트 동시 열람, 마지막 회복약 단일 지급과 양쪽 재고 복제, 무효 요청 뒤 유효 요청을 패키지에서 확인했다. [실행 근거](Validation/Index.md#v05-shared-chest-first) · [사용자 직접 확인](Validation/Index.md#v05-shared-chest-user-result)
+- **다음:** 근접무기 지급·장착과 회복약 사용을 연결하고, 장착·소모가 기존 GAS 전투 및 상자 판정과 함께 작동하는지 확인한다. 라운드 교체·적 팀 보상 시험은 후속 통합 경계로 유지한다.
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬
 

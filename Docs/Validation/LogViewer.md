@@ -254,6 +254,26 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · [기존 수동 실행](Index.md#v03-user-manual-result) · [새 패키지 자동 검증](Index.md#v03-telemetry-result) · [새 패키지 사용자 직접 확인](Index.md#v03-telemetry-user-result)
 
+<a id="shared-chest-logs"></a>
+## 공용 상자와 회복약 로그
+
+`입력·요청`의 획득 요청을 서버의 `상자 열람 승인`, `회복약 지급` 또는 `회복약 획득 거절`과 대조한다. 서버 상세의 요청자 `PlayerId`는 소유 Pawn에서 판별한다. `복제`에서는 공용 잔량 0개가 두 출처에서 보이고, 증가한 개인 보유량은 수령자 창에서 보인다.
+
+**근거** · [2인 경합·거리 밖 거절 검증](Index.md#v05-shared-chest-first)
+
+<a id="shared-chest-log-audit"></a>
+### 공용 상자 수동 검증에서 발견한 표시 차이
+
+| 동작 | 현재 기록 | 보완 제안 |
+|---|---|---|
+| 준비 | 서버의 `LootPlayerReady`만 있다. 클라이언트 호출·소유자 준비 복제·서버의 준비 무시 사유는 미계측이다. | 클라이언트 호출과 서버 확정을 연결한다. 준비 상태 복제와 예외 분기는 필요 시 Verbose로 확인한다. |
+| 열기 | 서버 승인·거절과 소유자 `Open=1`이 있다. 클라이언트 호출·서버의 중복 열람 무시는 미계측이다. | 클라이언트의 열기 호출을 기록한다. |
+| 닫기 | 소유자 `Open=0`은 있다. 클라이언트 호출과 서버 닫기 확정·무시는 미계측이다. 이때 원문의 `Stock=0`은 열린 상자 참조가 없을 때 찍는 값이다. | 닫기 호출·서버 결과를 기록한다. 닫기 행에는 공용 재고 수치를 표시할 필요가 없다. |
+| 획득 | 클라이언트 호출·서버 지급/거절·공용 재고/개인 보유량 복제가 있다. 서버 진입과 클라이언트 미전송 조건은 개별 로그가 없다. | 호출·결과·복제를 기본 흐름으로 유지한다. 진입이나 미전송 사유를 진단할 때 Verbose 계측을 검토한다. |
+| 라운드 상태 | 서버의 라운드 생성과 Playing/Waiting 전환은 원본에 있고, 뷰어에서 `상태·기타`에 있다. 클라이언트의 라운드 상태 복제 통지는 미계측이다. | 이번 내보내기에서 빠진 서버 전환은 `카테고리 → 상태·기타`로 확인한다. 양쪽 전환 시점을 비교할 때 복제 통지를 추가한다. |
+
+**근거** · [사용자 실행 원본 대조](Index.md#v05-shared-chest-user-result) · [준비·상자 RPC](../../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [라운드 복제 설정](../../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp)
+
 <a id="logging-contract"></a>
 ## 로그 표시 규칙
 
