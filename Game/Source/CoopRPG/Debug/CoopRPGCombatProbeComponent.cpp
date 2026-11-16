@@ -91,6 +91,27 @@ namespace
             }
         }));
 
+    FAutoConsoleCommandWithWorldAndArgs VitalsCommand(TEXT("Coop.Test.Vitals"),
+        TEXT("Coop.Test.Vitals <target health> <own health>: set test HP on the server."),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World);
+                Probe && Args.Num() == 2 && Args[0].IsNumeric() && Args[1].IsNumeric())
+            {
+                Probe->SetVitals(FCString::Atof(*Args[0]), FCString::Atof(*Args[1]));
+            }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs ConfirmTwiceCommand(TEXT("Coop.Test.ConfirmTwice"),
+        TEXT("Deliver the same attack's hit confirmation twice while a test attack is pending."),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World))
+            {
+                Probe->ConfirmTwice();
+            }
+        }));
+
     FAutoConsoleCommandWithWorldAndArgs SnapshotCommand(TEXT("Coop.Test.Snapshot"),
         TEXT("Coop.Test.Snapshot <label>: log local and server HP/stamina/cooldown."),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
@@ -141,6 +162,22 @@ void UCoopRPGCombatProbeComponent::Snapshot(const FString& Label)
     }
 }
 
+void UCoopRPGCombatProbeComponent::SetVitals(float TargetHealth, float AttackerHealth)
+{
+    if (IsProbeEnabled(GetWorld()))
+    {
+        ServerSetVitals(TargetHealth, AttackerHealth);
+    }
+}
+
+void UCoopRPGCombatProbeComponent::ConfirmTwice()
+{
+    if (IsProbeEnabled(GetWorld()))
+    {
+        ServerConfirmTwice();
+    }
+}
+
 void UCoopRPGCombatProbeComponent::BeginPlay()
 {
     Super::BeginPlay();
@@ -185,6 +222,44 @@ void UCoopRPGCombatProbeComponent::ServerSnapshot_Implementation(const FString& 
     if (IsProbeEnabled(GetWorld()))
     {
         WriteSnapshot(Label.Left(48));
+    }
+}
+
+void UCoopRPGCombatProbeComponent::ServerSetVitals_Implementation(float TargetHealth, float AttackerHealth)
+{
+    if (!IsProbeEnabled(GetWorld())
+        || !FMath::IsFinite(TargetHealth) || !FMath::IsWithinInclusive(TargetHealth, 0.0f, 100.0f)
+        || !FMath::IsFinite(AttackerHealth) || !FMath::IsWithinInclusive(AttackerHealth, 0.0f, 100.0f))
+    {
+        return;
+    }
+    UAbilitySystemComponent* Source = GetSource(this);
+    ACoopRPGAttackTarget* Target = GetTarget(GetWorld());
+    if (Source && Target)
+    {
+        Source->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetHealthAttribute(), AttackerHealth);
+        Target->GetAbilitySystemComponent()->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetHealthAttribute(), TargetHealth);
+        GetOwner()->ForceNetUpdate();
+        Target->ForceNetUpdate();
+        UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestVitals Actor=%s HP=%.2f AttackerHP=%.2f"),
+            *GetNameSafe(GetOwner()), TargetHealth, AttackerHealth);
+    }
+}
+
+void UCoopRPGCombatProbeComponent::ServerConfirmTwice_Implementation()
+{
+    UAbilitySystemComponent* Source = GetSource(this);
+    if (!IsProbeEnabled(GetWorld()) || !Source)
+    {
+        return;
+    }
+    const FGameplayAbilitySpec* Spec = Source->FindAbilitySpecFromClass(UCoopRPGMeleeAbility::StaticClass());
+    auto* Melee = Spec ? Cast<UCoopRPGMeleeAbility>(Spec->GetPrimaryInstance()) : nullptr;
+    if (Melee && Melee->IsActive())
+    {
+        UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestDuplicateConfirmation Actor=%s Attempts=2"), *GetNameSafe(GetOwner()));
+        Melee->ResolveHit();
+        Melee->ResolveHit();
     }
 }
 

@@ -16,6 +16,8 @@ public:
     void Prepare(float Stamina);
     void RequestActivation();
     void Snapshot(const FString& Label);
+    void SetVitals(float TargetHealth, float AttackerHealth);
+    void ConfirmTwice();
 
 protected:
     virtual void BeginPlay() override;
@@ -27,6 +29,12 @@ private:
 
     UFUNCTION(Server, Reliable)
     void ServerSnapshot(const FString& Label);
+
+    UFUNCTION(Server, Reliable)
+    void ServerSetVitals(float TargetHealth, float AttackerHealth);
+
+    UFUNCTION(Server, Reliable)
+    void ServerConfirmTwice();
 
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);
     void WriteSnapshot(const FString& Label) const;
