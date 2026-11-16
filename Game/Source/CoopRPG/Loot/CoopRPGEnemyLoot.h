@@ -13,6 +13,10 @@ public:
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+    bool TryClaim();
+
+    static constexpr float PickupRangeCm = 250.0f;
+    bool IsClaimed() const { return bClaimed; }
     FGuid GetDropId() const { return DropId; }
 
 protected:
@@ -22,7 +26,15 @@ private:
     UFUNCTION()
     void OnRep_DropId();
 
+    UFUNCTION()
+    void OnRep_Claimed();
+
+    void ApplyClaimPresentation();
+
 private:
     UPROPERTY(ReplicatedUsing = OnRep_DropId)
     FGuid DropId;
+
+    UPROPERTY(ReplicatedUsing = OnRep_Claimed)
+    bool bClaimed = false;
 };

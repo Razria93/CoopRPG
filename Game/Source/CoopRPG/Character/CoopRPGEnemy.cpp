@@ -279,8 +279,13 @@ void ACoopRPGEnemy::SpawnDeathLoot(const FGuid& RoundId)
     FActorSpawnParameters SpawnParameters;
     SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     auto* Drop = GetWorld()->SpawnActor<ACoopRPGEnemyLoot>(ACoopRPGEnemyLoot::StaticClass(), Transform, SpawnParameters);
-    if (!IsValid(Drop) || !Drop->GetDropId().IsValid())
+    auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State || !State->RegisterEnemyLoot(Drop))
     {
+        if (IsValid(Drop))
+        {
+            Drop->Destroy();
+        }
         UE_LOG(LogCoopRPGEnemy, Error, TEXT("EnemyLootSpawnFailed Actor=%s Round=%s %s"),
             *GetName(), *RoundId.ToString(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
         return;

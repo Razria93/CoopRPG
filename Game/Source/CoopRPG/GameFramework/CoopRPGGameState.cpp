@@ -1,5 +1,7 @@
 #include "CoopRPGGameState.h"
 
+#include "CoopRPG/Debug/CoopRPGLogContext.h"
+#include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
 #include "Net/UnrealNetwork.h"
@@ -12,6 +14,8 @@ void ACoopRPGGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGGameState, SharedChest);
     DOREPLIFETIME(ACoopRPGGameState, RoundId);
     DOREPLIFETIME(ACoopRPGGameState, bRoundPlaying);
+    DOREPLIFETIME(ACoopRPGGameState, EnemyLoot);
+    DOREPLIFETIME(ACoopRPGGameState, TeamLootCount);
 }
 
 void ACoopRPGGameState::InitializeLootRound(ACoopRPGSharedChest* Chest)
@@ -35,4 +39,34 @@ void ACoopRPGGameState::SetRoundPlaying(bool bPlaying)
             *RoundId.ToString(), bRoundPlaying ? TEXT("Playing") : TEXT("Waiting"));
         ForceNetUpdate();
     }
+}
+
+bool ACoopRPGGameState::RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop)
+{
+    if (!HasAuthority() || !RoundId.IsValid() || EnemyLoot || !IsValid(Drop) || !Drop->GetDropId().IsValid())
+    {
+        return false;
+    }
+
+    EnemyLoot = Drop;
+    ForceNetUpdate();
+    return true;
+}
+
+bool ACoopRPGGameState::TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop)
+{
+    if (!HasAuthority() || !bRoundPlaying || !IsValid(Drop) || EnemyLoot != Drop || !Drop->TryClaim())
+    {
+        return false;
+    }
+
+    ++TeamLootCount;
+    ForceNetUpdate();
+    return true;
+}
+
+void ACoopRPGGameState::OnRep_TeamLootCount(int32 PreviousCount)
+{
+    UE_LOG(LogCoopRPGRound, Log, TEXT("TeamLootCountReplicated Before=%d After=%d %s"),
+        PreviousCount, TeamLootCount, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }

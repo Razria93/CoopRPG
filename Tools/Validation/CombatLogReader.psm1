@@ -217,6 +217,28 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         '^EnemyLootReplicated$' {
             $label='적 전리품 복제';$detail="ID $($fields['DropId'])";$stage='복제 관찰';break
         }
+        '^EnemyLootTakeRequested$' {
+            $label='적 전리품 획득 RPC 호출';$detail="ID $($fields['DropId'])";$stage='RPC 호출';$outcome='호출';break
+        }
+        '^EnemyLootGranted$' {
+            $label='적 전리품 팀 지급';$stage='서버 판정';$outcome='승인'
+            $detail="팀 수량 $($fields['TeamLoot'] -replace '->',' → ') · ID $($fields['DropId'])";break
+        }
+        '^EnemyLootRejected$' {
+            $label='적 전리품 획득 거절';$stage='서버 판정';$outcome='거절';$reason=[string]$fields['Reason']
+            $names=@{WrongRound='라운드 불일치';NotPlaying='라운드 대기 중';InvalidDrop='전리품 불일치';NotAlive='사망 상태';OutOfRange='거리 초과';AlreadyClaimed='이미 지급됨'}
+            $detail=if($names[$reason]){$names[$reason]}else{$reason}
+            $detail+=" · 팀 수량 $($fields['TeamLoot']) · ID $($fields['DropId'])";break
+        }
+        '^EnemyLootClaimReplicated$' {
+            $label='적 전리품 획득 상태 복제';$detail="획득됨 · ID $($fields['DropId'])";$stage='복제 관찰';break
+        }
+        '^TeamLootCountReplicated$' {
+            $label='팀 전리품 수량 복제';$detail="$($fields['Before']) → $($fields['After'])";$stage='복제 관찰';break
+        }
+        '^TestEnemyLootPosition$' {
+            $label='시험 위치 설정';$detail="$($fields['Position']) · 거리 $($fields['Distance'])cm";$stage='상태';break
+        }
         '^EnemyLootSpawnFailed$' {
             $label='적 전리품 생성 실패';$stage='서버 판정';$kind='Error';$outcome='오류';break
         }
