@@ -2,7 +2,7 @@
 
 # FileGeneration describes a log file reset, never a game world/actor generation.
 function New-CombatLogReader([string]$Path) {
-    @{Path=$Path;Offset=0L;Pending=[byte[]]@();Initialized=$false;SkipFirst=$false;Generation=0;Prefix=[byte[]]@();LastReadUtc=$null;State='Waiting';Error='';InitialSkippedBytes=0L;UnreadBytes=0L}
+    @{Path=$Path;Offset=0L;Pending=[byte[]]@();Initialized=$false;SkipFirst=$false;Generation=0;WorldSequence=0;WorldActive=$false;Prefix=[byte[]]@();LastReadUtc=$null;State='Waiting';Error='';InitialSkippedBytes=0L;UnreadBytes=0L}
 }
 
 function Read-CombatLogRecords([hashtable]$State, [int]$MaxBytes=262144) {
@@ -17,7 +17,7 @@ function Read-CombatLogRecords([hashtable]$State, [int]$MaxBytes=262144) {
             if($State.Prefix[$i] -ne $head[$i]){$prefixChanged=$true;break}
         }
         if($State.Initialized -and ($stream.Length -lt $State.Offset -or $prefixChanged)){
-            $State.Offset=0L;$State.Pending=[byte[]]@();$State.SkipFirst=$false;$State.Generation++
+            $State.Offset=0L;$State.Pending=[byte[]]@();$State.SkipFirst=$false;$State.Generation++;$State.WorldSequence=0;$State.WorldActive=$false
         }
         if(!$State.Initialized){
             $State.Offset=[Math]::Max(0L,$stream.Length-131072L)
@@ -41,7 +41,14 @@ function Read-CombatLogRecords([hashtable]$State, [int]$MaxBytes=262144) {
             if($length -gt 0 -and $data[$i-1] -eq 13){$length--}
             if($State.SkipFirst){$State.SkipFirst=$false}
             elseif($length -gt 0){
-                [pscustomobject]@{Line=[Text.Encoding]::UTF8.GetString($data,$begin,$length);ByteOffset=[long]($base+$begin);FileGeneration=$State.Generation}
+                $line=[Text.Encoding]::UTF8.GetString($data,$begin,$length)
+                if($line.Contains('LogWorld: Bringing World ') -and $line.Contains(' up for play')){
+                    $State.WorldSequence++;$State.WorldActive=$true
+                }elseif($line -match 'LogLoad: LoadMap:|LogWorld: (?:BeginTearingDown for |.*SeamlessTravel)|LogNet: Welcomed by server'){
+                    $State.WorldActive=$false
+                }
+                $world=if($State.WorldActive){$State.WorldSequence}else{0}
+                [pscustomobject]@{Line=$line;ByteOffset=[long]($base+$begin);FileGeneration=$State.Generation;WorldSequence=$world}
             }
             $begin=$i+1
         }
@@ -173,6 +180,31 @@ function ConvertTo-CombatLogEvent([string]$Line) {
             $stage='복제 관찰';break
         }
         '^RecoveryCountReplicated$' {$label='내 회복약 보유량 복제';$detail="$($fields['Count'])개";$stage='복제 관찰';break}
+        '^(EnemyDetected|EnemyChaseStarted|EnemyAttackStarted|EnemyAttackHit|EnemyAttackMissed)$' {
+            $stage='서버 판정'
+            $label=switch($eventCode){
+                'EnemyDetected' {'적 탐지'}
+                'EnemyChaseStarted' {'적 추격'}
+                'EnemyAttackStarted' {'적 공격 준비'}
+                'EnemyAttackHit' {'적 타격 확정'}
+                'EnemyAttackMissed' {'적 공격 빗나감'}
+            }
+            $detail="대상 PlayerId $($fields['TargetPlayerId'])"
+            if($eventCode -eq 'EnemyAttackHit'){
+                $outcome='승인'
+                $detail+=" · 플레이어 HP $($fields['HP'] -replace '->',' → ')"
+            }elseif($eventCode -eq 'EnemyAttackMissed'){
+                $outcome='빗나감'
+                $reason=[string]$fields['Reason']
+                $detail+=if($reason -eq 'OutOfRange'){" · 사거리 밖 · $($fields['Distance'])cm / $($fields['Range'])cm"}else{" · $reason"}
+            }else{
+                $detail+=" · 거리 $($fields['Distance'])cm"
+            }
+            break
+        }
+        '^EnemyMovementObserved$' {
+            $label='적 이동 복제';$detail="시작 위치에서 $($fields['Distance'])cm";$stage='복제 관찰';break
+        }
         '^AttackStarted$' {
             $label='공격 준비 시작';$stage='서버 판정'
             $detail="피해 확정 대기 $($fields['Windup'])초"
@@ -241,14 +273,91 @@ function ConvertTo-CombatLogEvent([string]$Line) {
     }
     $summary=$label+$(if($detail){' · '+$detail}else{''})
     if($level -in @('Warning','Error','Fatal')){$summary="[$level] $summary"}
-    [pscustomobject]@{SchemaVersion=1;UtcTime=$utc;Time=$time;SortTicks=$(if($null -ne $utc){$utc.Ticks}else{[long]::MaxValue});Category=$category;Topic=$topic;Level=$level;EventCode=$eventCode;Stage=$stage;Outcome=$outcome;ReasonCode=$reason;Kind=$kind;Label=$label;Detail=$detail;Summary=$summary;Actor=$actor;Target=[string]$fields['Target'];RequestId=$null;Relationship='관계 미계측';Fields=$fields;Raw=$Line;Text="[$time] $summary"}
+    [pscustomobject]@{SchemaVersion=1;UtcTime=$utc;Time=$time;SortTicks=$(if($null -ne $utc){$utc.Ticks}else{[long]::MaxValue});Category=$category;Topic=$topic;Level=$level;EventCode=$eventCode;Stage=$stage;Outcome=$outcome;ReasonCode=$reason;Kind=$kind;HealthSubject='';Label=$label;Detail=$detail;Summary=$summary;Actor=$actor;Target=[string]$fields['Target'];RequestId=$null;Relationship='관계 미계측';Fields=$fields;Raw=$Line;Text="[$time] $summary"}
 }
 
 function Add-CombatEventContext($Event,[string]$RunId,[string]$SourceId,[string]$SourceLabel,[string]$Path,$Record,[long]$CollectionOrder){
     $Event.Relationship='관계 미계측'
-    $properties=@{RunId=$RunId;SourceId=$SourceId;SourceLabel=$SourceLabel;SourcePath=$Path;FileGeneration=$Record.FileGeneration;ByteOffset=$Record.ByteOffset;CollectionOrder=$CollectionOrder;EventId=('{0}/{1}/file{2}/{3}' -f $RunId,$SourceId,$Record.FileGeneration,$Record.ByteOffset)}
+    $world=if($Record.PSObject.Properties['WorldSequence']){[int]$Record.WorldSequence}else{0}
+    $properties=@{WorldSequence=$world;RunId=$RunId;SourceId=$SourceId;SourceLabel=$SourceLabel;SourcePath=$Path;FileGeneration=$Record.FileGeneration;ByteOffset=$Record.ByteOffset;CollectionOrder=$CollectionOrder;EventId=('{0}/{1}/file{2}/{3}' -f $RunId,$SourceId,$Record.FileGeneration,$Record.ByteOffset)}
     foreach($key in $properties.Keys){$Event | Add-Member -NotePropertyName $key -NotePropertyValue $properties[$key]}
     return $Event
+}
+
+function Get-CombatHealthSubjectType($Event) {
+    $type=[string]$Event.Fields['SubjectType']
+    if($type){return $type}
+    switch -Regex ($Event.Actor) {
+        '^CoopRPGCharacter(?:_\d+)?$' {return 'Player'}
+        '^CoopRPGEnemy(?:_\d+)?$' {return 'Enemy'}
+        '^CoopRPGAttackTarget(?:_\d+)?$' {return 'TrainingTarget'}
+        default {return 'Unknown'}
+    }
+}
+
+function Get-CombatHealthPlayerId($Event) {
+    $id=[string]$Event.Fields['SubjectPlayerId']
+    if($id -match '^[1-9]\d*$'){return $id}
+    if($Event.Fields['LocalRole'] -eq 'AutonomousProxy'){
+        $id=[string]$Event.Fields['LocalPlayerId']
+        if($id -match '^[1-9]\d*$'){return $id}
+    }
+    return ''
+}
+
+function Get-CombatActorEvidenceKey($Event) {
+    if($Event.WorldSequence -gt 0 -and $Event.Actor -and $Event.Fields['NetMode'] -eq 'Client'){
+        return '{0}/{1}/{2}/{3}/{4}' -f $Event.RunId,$Event.SourceId,$Event.FileGeneration,$Event.WorldSequence,$Event.Actor
+    }
+    return ''
+}
+
+function Update-CombatHealthLabels($Events,[hashtable]$ClientByPlayerId,[hashtable]$SourceLabelById) {
+    # Read evidence from all retained rows before the display filter is applied.
+    $byActor=@{}
+    $health=New-Object Collections.Generic.List[object]
+    foreach($event in $Events){
+        $id=''
+        if($event.EventCode -eq 'HealthReplicated'){
+            $health.Add($event)
+            if((Get-CombatHealthSubjectType $event) -eq 'Player'){$id=Get-CombatHealthPlayerId $event}
+        }elseif($event.EventCode -eq 'MeleeWeaponReplicated'){
+            $id=[string]$event.Fields['EquippedPlayerId']
+        }
+        if($id -notmatch '^[1-9]\d*$'){continue}
+        $key=Get-CombatActorEvidenceKey $event
+        if(!$key){continue}
+        if(!$byActor.ContainsKey($key)){$byActor[$key]=$id}
+        elseif($byActor[$key] -ne $id){$byActor[$key]=$null}
+    }
+    foreach($event in $health){
+        $playerId=''
+        $playerType=Get-CombatHealthSubjectType $event
+        $subject=switch($playerType){
+            'Player' {
+                $playerId=Get-CombatHealthPlayerId $event
+                if(!$playerId){
+                    $key=Get-CombatActorEvidenceKey $event
+                    if($key){$playerId=$byActor[$key]}
+                }
+                if(!$playerId){'플레이어 (ID 미확인)';break}
+                $source=$ClientByPlayerId[$playerId]
+                if($source -and $SourceLabelById[$source] -match '^클라이언트 ([1-9]\d*)$'){
+                    "플레이어 $($Matches[1]) ($playerId)"
+                }else{
+                    "플레이어 (ID $playerId)"
+                }
+            }
+            'Enemy' {'적'}
+            'TrainingTarget' {'고정 표적'}
+            default {'대상 미확인'}
+        }
+        $event.HealthSubject=$subject
+        $event.Detail="$subject · $($event.Fields['Before']) → $($event.Fields['After'])"
+        $event.Summary="$($event.Label) · $($event.Detail)"
+        if($event.Level -in @('Warning','Error','Fatal')){$event.Summary="[$($event.Level)] $($event.Summary)"}
+        $event.Text="[$($event.Time)] $($event.Summary)"
+    }
 }
 
 function Select-CombatEvents($Events,[string]$SourceId='',[string]$Outcome='전체',[string]$Search='',[switch]$CollectionOrder,[string[]]$Topics){
@@ -267,4 +376,4 @@ function Select-CombatEvents($Events,[string]$SourceId='',[string]$Outcome='전�
     else{$selected | Sort-Object SortTicks,SourceId,FileGeneration,ByteOffset,CollectionOrder}
 }
 
-Export-ModuleMember -Function New-CombatLogReader,Read-CombatLogRecords,Read-CombatLogLines,ConvertTo-CombatLogEvent,Add-CombatEventContext,Select-CombatEvents
+Export-ModuleMember -Function New-CombatLogReader,Read-CombatLogRecords,Read-CombatLogLines,ConvertTo-CombatLogEvent,Add-CombatEventContext,Update-CombatHealthLabels,Select-CombatEvents

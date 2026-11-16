@@ -1,8 +1,12 @@
 #include "CoopRPGCombatAttributes.h"
 
+#include "CoopRPG/Character/CoopRPGCharacter.h"
+#include "CoopRPG/Character/CoopRPGEnemy.h"
+#include "CoopRPG/Combat/CoopRPGAttackTarget.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 
 #include "GameFramework/Actor.h"
+#include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGCombatAttributes, Log, All);
@@ -36,9 +40,24 @@ void UCoopRPGCombatAttributes::OnRep_Health(const FGameplayAttributeData& Previo
 {
     GAMEPLAYATTRIBUTE_REPNOTIFY(UCoopRPGCombatAttributes, Health, PreviousHealth);
     const AActor* Owner = GetOwningActor();
-    UE_LOG(LogCoopRPGCombatAttributes, Log, TEXT("HealthReplicated Actor=%s Before=%.2f After=%.2f %s"),
+    const auto* Player = Cast<ACoopRPGCharacter>(Owner);
+    const APlayerState* State = Player ? Player->GetPlayerState() : nullptr;
+    const FString SubjectId = State && State->GetPlayerId() > 0
+        ? FString::Printf(TEXT(" SubjectPlayerId=%d"), State->GetPlayerId())
+        : FString();
+
+    const TCHAR* SubjectType = Player ? TEXT("Player") : TEXT("Unknown");
+    if (Owner && Owner->IsA<ACoopRPGEnemy>())
+    {
+        SubjectType = TEXT("Enemy");
+    }
+    else if (Owner && Owner->IsA<ACoopRPGAttackTarget>())
+    {
+        SubjectType = TEXT("TrainingTarget");
+    }
+    UE_LOG(LogCoopRPGCombatAttributes, Log, TEXT("HealthReplicated Actor=%s Before=%.2f After=%.2f %s SubjectType=%s%s"),
         *GetNameSafe(Owner), PreviousHealth.GetCurrentValue(), GetHealth(),
-        *CoopRPG::Debug::DescribeLogContext(Owner, ANSI_TO_TCHAR(__FUNCTION__)));
+        *CoopRPG::Debug::DescribeLogContext(Owner, ANSI_TO_TCHAR(__FUNCTION__)), SubjectType, *SubjectId);
 }
 
 void UCoopRPGCombatAttributes::OnRep_Stamina(const FGameplayAttributeData& PreviousStamina)
