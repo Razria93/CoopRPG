@@ -5,9 +5,11 @@
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
+#include "CoopRPG/GameFramework/CoopRPGGameMode.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
@@ -234,11 +236,13 @@ void UCoopRPGCombatProbeComponent::ServerSetVitals_Implementation(float TargetHe
         return;
     }
     UAbilitySystemComponent* Source = GetSource(this);
-    ACoopRPGAttackTarget* Target = GetTarget(GetWorld());
-    if (Source && Target)
+    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+    AActor* Target = Mode ? Mode->GetMeleeTarget() : GetTarget(GetWorld());
+    UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target, false);
+    if (Source && TargetASC)
     {
         Source->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetHealthAttribute(), AttackerHealth);
-        Target->GetAbilitySystemComponent()->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetHealthAttribute(), TargetHealth);
+        TargetASC->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetHealthAttribute(), TargetHealth);
         GetOwner()->ForceNetUpdate();
         Target->ForceNetUpdate();
         UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestVitals Actor=%s HP=%.2f AttackerHP=%.2f"),
