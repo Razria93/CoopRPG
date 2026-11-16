@@ -236,6 +236,25 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         '^TeamLootCountReplicated$' {
             $label='팀 전리품 수량 복제';$detail="$($fields['Before']) → $($fields['After'])";$stage='복제 관찰';break
         }
+        '^ExtractionStarted$' {
+            $label='공동 탈출 진행 시작';$detail='두 플레이어 연속 체류 3초';$stage='서버 판정';break
+        }
+        '^ExtractionReset$' {
+            $label='공동 탈출 진행 초기화';$detail="경과 $($fields['Elapsed'])초 · 진행 0";$stage='서버 판정';break
+        }
+        '^ExtractionResult$' {
+            $label='공동 탈출 성공 확정';$detail="팀 점수 $($fields['Score'])점";$stage='서버 판정';$outcome='승인';break
+        }
+        '^ExtractionProgressReplicated$' {
+            $label=if($fields['Phase'] -eq 'Reset'){'탈출 진행 초기화 복제'}else{'탈출 진행 시작 복제'}
+            $stage='복제 관찰';break
+        }
+        '^ExtractionResultReplicated$' {
+            $label='공동 탈출 성공 복제';$detail="팀 점수 $($fields['Score'])점";$stage='복제 관찰';break
+        }
+        '^TestExtractionPosition$' {
+            $label='시험 위치 설정';$detail=if($fields['Inside'] -eq '1'){'탈출 구역 안'}else{'탈출 구역 밖'};$stage='상태';break
+        }
         '^TestEnemyLootPosition$' {
             $label='시험 위치 설정';$detail="$($fields['Position']) · 거리 $($fields['Distance'])cm";$stage='상태';break
         }

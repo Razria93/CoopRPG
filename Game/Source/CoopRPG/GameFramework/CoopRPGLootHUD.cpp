@@ -1,5 +1,6 @@
 #include "CoopRPGLootHUD.h"
 
+#include "CoopRPGExtractionZone.h"
 #include "CoopRPGGameState.h"
 #include "CoopRPGPlayerController.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
@@ -29,7 +30,10 @@ void ACoopRPGLootHUD::DrawHUD()
     const bool bShowStock = bPlaying && Chest;
     const int32 RecoveryCount = Controller->GetRecoveryCount();
 
-    DrawRect(FLinearColor(0.02f, 0.04f, 0.08f, 0.90f), Pad, Pad, 306.0f, bShowStock ? 162.0f : 126.0f);
+    const ACoopRPGExtractionZone* Zone = State->GetExtractionZone();
+    const bool bShowExtraction = bPlaying && IsValid(Zone) && State->GetTeamLootCount() > 0;
+    const float PanelHeight = bShowStock ? (bShowExtraction ? 182.0f : 162.0f) : 126.0f;
+    DrawRect(FLinearColor(0.02f, 0.04f, 0.08f, 0.90f), Pad, Pad, 306.0f, PanelHeight);
     DrawText(TEXT("SHARED CHEST"), Accent, TextX, Pad + 8.0f, nullptr, 1.15f);
     if (Character)
     {
@@ -42,11 +46,33 @@ void ACoopRPGLootHUD::DrawHUD()
     DrawText(FString::Printf(TEXT("Team loot: %d"), State->GetTeamLootCount()),
         FLinearColor::White, TextX, Pad + 71.0f);
 
+    if (State->HasRoundResult())
+    {
+        DrawText(FString::Printf(TEXT("Extraction successful | Team score: %d"), State->GetTeamScore()),
+            Accent, TextX, Pad + 98.0f);
+        return;
+    }
+
     if (!bPlaying)
     {
         DrawText(Controller->IsRoundReady() ? TEXT("Waiting for the other player") : TEXT("R  Ready"),
             Accent, TextX, Pad + 98.0f);
         return;
+    }
+
+    if (bShowExtraction)
+    {
+        const FString Status = State->IsExtractionInProgress()
+            ? FString::Printf(TEXT("Extracting: %.1f s"), State->GetExtractionRemainingSeconds())
+            : TEXT("Both players to the extraction zone");
+        DrawText(Status, Accent, TextX, Pad + (bShowStock ? 156.0f : 98.0f));
+
+        const FVector ZoneScreen = Project(Zone->GetActorLocation() + FVector(0, 0, 20.0f));
+        if (ZoneScreen.Z > 0.0f && ZoneScreen.X >= 0.0f && ZoneScreen.X < Canvas->ClipX - 60.0f
+            && ZoneScreen.Y >= 0.0f && ZoneScreen.Y < Canvas->ClipY)
+        {
+            DrawText(TEXT("Extraction"), Accent, ZoneScreen.X, ZoneScreen.Y);
+        }
     }
 
     if (bShowStock)
@@ -61,6 +87,11 @@ void ACoopRPGLootHUD::DrawHUD()
             FLinearColor::White, TextX, Pad + 116.0f);
         DrawText(Weapons == 0 && Medicines == 0 ? TEXT("Chest empty   |   Q  Close") : TEXT("Q  Close"),
             Accent, TextX, Pad + 136.0f);
+        return;
+    }
+
+    if (bShowExtraction)
+    {
         return;
     }
 

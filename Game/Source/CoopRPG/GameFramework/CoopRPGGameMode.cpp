@@ -4,6 +4,7 @@
 #include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
+#include "CoopRPGExtractionZone.h"
 #include "CoopRPGGameState.h"
 #include "CoopRPGLootHUD.h"
 #include "CoopRPGPlayerController.h"
@@ -13,6 +14,8 @@
 
 ACoopRPGGameMode::ACoopRPGGameMode()
 {
+    PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.TickGroup = TG_PostPhysics;
     DefaultPawnClass = ACoopRPGCharacter::StaticClass();
     PlayerControllerClass = ACoopRPGPlayerController::StaticClass();
     GameStateClass = ACoopRPGGameState::StaticClass();
@@ -63,8 +66,10 @@ void ACoopRPGGameMode::BeginPlay()
     Super::BeginPlay();
     if (GetWorld()->GetMapName().EndsWith(TEXT("L_Movement")))
     {
+        ACoopRPGExtractionZone* Zone = nullptr;
         if (bEnemyCombat)
         {
+            Zone = GetWorld()->SpawnActor<ACoopRPGExtractionZone>(FVector(620.0f, 350.0f, 6.0f), FRotator::ZeroRotator);
             Enemy = GetWorld()->SpawnActor<ACoopRPGEnemy>(FVector(750.0f, -95.0f, 90.0f), FRotator::ZeroRotator);
         }
         else
@@ -74,9 +79,38 @@ void ACoopRPGGameMode::BeginPlay()
         if (auto* State = GetGameState<ACoopRPGGameState>())
         {
             auto* Chest = GetWorld()->SpawnActor<ACoopRPGSharedChest>(FVector(300.0f, -95.0f, 28.0f), FRotator::ZeroRotator);
-            State->InitializeLootRound(Chest);
+            State->InitializeLootRound(Chest, Zone);
         }
     }
+}
+
+void ACoopRPGGameMode::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+
+    auto* State = GetGameState<ACoopRPGGameState>();
+    const ACoopRPGExtractionZone* Zone = State ? State->GetExtractionZone() : nullptr;
+    if (!IsValid(Zone) || !State->IsRoundPlaying() || State->GetTeamLootCount() < 1)
+    {
+        return;
+    }
+
+    int32 PlayersInside = 0;
+    int32 Players = 0;
+    for (auto It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        const auto* Player = Cast<ACoopRPGPlayerController>(It->Get());
+        if (Player)
+        {
+            ++Players;
+            const auto* Pawn = Cast<ACoopRPGCharacter>(Player->GetPawn());
+            if (Pawn && Pawn->GetHealth() > 0.0f && Zone->ContainsPawn(*Pawn))
+            {
+                ++PlayersInside;
+            }
+        }
+    }
+    State->UpdateExtraction(Players == 2 && PlayersInside == 2);
 }
 
 void ACoopRPGGameMode::Logout(AController* Exiting)
