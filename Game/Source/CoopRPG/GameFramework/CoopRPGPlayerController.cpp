@@ -107,6 +107,8 @@ void ACoopRPGPlayerController::ReadyForRound()
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     if (State && State->GetRoundId().IsValid())
     {
+        UE_LOG(LogCoopRPGRoundReady, Log, TEXT("LootReadyRequested Round=%s %s"),
+            *State->GetRoundId().ToString(), *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         ServerReadyForRound(State->GetRoundId());
     }
 }
@@ -116,6 +118,9 @@ void ACoopRPGPlayerController::OpenSharedChest()
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     if (State && State->GetSharedChest())
     {
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestViewRequested Action=Open Chest=%s Round=%s %s"),
+            *GetNameSafe(State->GetSharedChest()), *State->GetRoundId().ToString(),
+            *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         ServerSetChestOpen(State->GetSharedChest(), State->GetRoundId(), true);
     }
 }
@@ -125,6 +130,9 @@ void ACoopRPGPlayerController::CloseSharedChest()
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     if (State && OpenedChest)
     {
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestViewRequested Action=Close Chest=%s Round=%s %s"),
+            *GetNameSafe(OpenedChest), *State->GetRoundId().ToString(),
+            *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         ServerSetChestOpen(OpenedChest, State->GetRoundId(), false);
     }
 }
@@ -195,11 +203,26 @@ void ACoopRPGPlayerController::ServerSetChestOpen_Implementation(ACoopRPGSharedC
     if (!bOpen)
     {
         const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-        if (OpenedChest && OpenedChest == Chest && State && State->GetRoundId() == RoundId)
+        if (!State || State->GetRoundId() != RoundId)
         {
-            OpenedChest = nullptr;
-            ForceNetUpdate();
+            LogChestRejection(TEXT("Close"), TEXT("WrongRound"), Chest, RoundId);
+            return;
         }
+        if (!OpenedChest)
+        {
+            LogChestRejection(TEXT("Close"), TEXT("NotOpen"), Chest, RoundId);
+            return;
+        }
+        if (OpenedChest != Chest)
+        {
+            LogChestRejection(TEXT("Close"), TEXT("InvalidChest"), Chest, RoundId);
+            return;
+        }
+
+        OpenedChest = nullptr;
+        ForceNetUpdate();
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestClosed Chest=%s Round=%s %s"), *GetNameSafe(Chest),
+            *RoundId.ToString(), *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         return;
     }
 
@@ -268,8 +291,9 @@ void ACoopRPGPlayerController::LogChestRejection(const TCHAR* Action, const TCHA
 
 void ACoopRPGPlayerController::OnRep_OpenedChest()
 {
-    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestViewReplicated Chest=%s Open=%d Stock=%d %s"),
-        *GetNameSafe(OpenedChest), OpenedChest ? 1 : 0, OpenedChest ? OpenedChest->GetRecoveryStock() : 0,
+    const FString StockField = OpenedChest ? FString::Printf(TEXT(" Stock=%d"), OpenedChest->GetRecoveryStock()) : FString();
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestViewReplicated Chest=%s Open=%d%s %s"),
+        *GetNameSafe(OpenedChest), OpenedChest ? 1 : 0, *StockField,
         *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 

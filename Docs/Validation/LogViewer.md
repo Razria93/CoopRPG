@@ -262,7 +262,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 **근거** · [2인 경합·거리 밖 거절 검증](Index.md#v05-shared-chest-first)
 
 <a id="shared-chest-log-audit"></a>
-### 공용 상자 수동 검증에서 발견한 표시 차이
+### 공용 상자 수동 검증 당시의 표시 차이
 
 | 동작 | 현재 기록 | 보완 제안 |
 |---|---|---|
@@ -273,6 +273,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 | 라운드 상태 | 서버의 라운드 생성과 Playing/Waiting 전환은 원본에 있고, 뷰어에서 `상태·기타`에 있다. 클라이언트의 라운드 상태 복제 통지는 미계측이다. | 이번 내보내기에서 빠진 서버 전환은 `카테고리 → 상태·기타`로 확인한다. 양쪽 전환 시점을 비교할 때 복제 통지를 추가한다. |
 
 **근거** · [사용자 실행 원본 대조](Index.md#v05-shared-chest-user-result) · [준비·상자 RPC](../../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [라운드 복제 설정](../../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp)
+
+<a id="shared-chest-lifecycle"></a>
+### 준비·열기·닫기 계측 보완
+
+- **준비:** `입력·요청`의 `준비 RPC 호출`을 서버의 `플레이어 준비 완료`와 비교한다. 라운드의 Playing/Waiting 전환은 `상태·기타`에서 찾는다.
+- **열기:** `상자 열기 RPC 호출`, 서버의 `상자 열람 승인/거절`, 소유자 탭의 `내 상자 열람`을 비교한다.
+- **닫기:** `상자 닫기 RPC 호출` 뒤 서버가 `상자 닫기 확정` 또는 `상자 닫기 무시/거절`을 남긴다. 자신의 복제 줄 `내 상자 닫기`와 공용 잔량을 읽는 `공용 상자 재고 복제`는 각 상태를 따로 보여준다.
+
+**근거** · [새 패키지와 이전 원본 로그의 대조](Index.md#v05-chest-lifecycle-logs) · [새 화면 사용자 확인](Index.md#v05-chest-lifecycle-user-result)
 
 <a id="logging-contract"></a>
 ## 로그 표시 규칙

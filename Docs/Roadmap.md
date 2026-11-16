@@ -94,6 +94,7 @@
 ### 현재 작업 · V05 공용 상자 첫 경합 · 2026-11-16
 
 - **완료:** 두 클라이언트 동시 열람, 마지막 회복약 단일 지급과 양쪽 재고 복제, 무효 요청 뒤 유효 요청을 패키지에서 확인했다. [실행 근거](Validation/Index.md#v05-shared-chest-first) · [사용자 직접 확인](Validation/Index.md#v05-shared-chest-user-result)
+- **로그 보완:** 준비·열기·닫기 RPC 호출 및 서버 닫기 결과를 기록하고 [독립 패키지 두 클라이언트](Validation/Index.md#v05-chest-lifecycle-logs)에서 검증했다. [사용자 직접 확인](Validation/Index.md#v05-chest-lifecycle-user-result)도 기록했다.
 - **다음:** 근접무기 지급·장착과 회복약 사용을 연결하고, 장착·소모가 기존 GAS 전투 및 상자 판정과 함께 작동하는지 확인한다. 라운드 교체·적 팀 보상 시험은 후속 통합 경계로 유지한다.
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬

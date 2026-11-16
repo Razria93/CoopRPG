@@ -1184,6 +1184,40 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · 로컬 `Artifacts/Validation/v05-shared-chest-20261116-115211/manual-20261116-124405-187/`의 `server.log`·`a.log`·`b.log` 및 `Exports/` · [로그 표시 검토](LogViewer.md#shared-chest-log-audit)
 
+<a id="v05-chest-lifecycle-logs"></a>
+### V05 준비·열기·닫기 RPC 계측 검증 · 2026-11-16
+
+공용 상자 구현·시험·사용자 검증을 로컬 커밋으로 보존한 뒤 `3635070`에서 로그를 보완했다. 같은 PC의 새 Win64 Development Server 1개와 Client 2개에 `R`·`E`·`Q`·`F`의 정상 키 입력을 전달했다. 날짜가 붙은 [사용자 수동 기록](#v05-shared-chest-user-result)은 당시 패키지에서 관찰한 결과다.
+
+| 확인 | 실제 결과 |
+|---|---|
+| 준비와 열기 | 두 클라이언트의 `LootReadyRequested`를 서버 `LootPlayerReady`, `ChestViewRequested Action=Open`을 서버 열람 승인과 각 소유자의 `Open=1`에 대조했다. 두 플레이어의 PlayerId와 Round ID가 일치했다. |
+| 닫기 | 각 소유자의 `ChestViewRequested Action=Close`부터 서버 `ChestClosed` 2건과 두 `Open=0` 복제를 확인했다. 닫기 복제 원문은 공용 재고 필드를 쓰지 않는다. |
+| 중복 닫기 | Client A의 수신 경로에 400ms를 설정하고 닫힘 복제 전에 실제 Q 입력을 다시 보냈다. 서버는 정상 닫기를 한 번 처리한 뒤 이미 닫힌 요청 1건을 `NotOpen`으로 기록했다. |
+| 재고 및 회귀 | 열기·닫기 동안 재고·소지량을 소비하지 않았다. 다시 연 뒤 획득 요청 두 건에 최초 유효 요청만 지급하고 상대는 소진으로 거절했다. 양쪽 상자 재고는 0, 수령자 소지량은 1이었다. |
+
+실행 판정 13개와 뷰어 파싱 54개가 통과했다. 기존 수동 원본의 `Open=0 Stock=0`과 새 원본의 `Open=0` 모두 뷰어에서 `내 상자 닫기`로 읽혔다. 서버·클라이언트 증분 빌드는 28.64초·34.76초, Stage는 16.03초·38.97초였다. 변경 없는 Cook을 재사용했다.
+
+원본·판정 JSON과 뷰어 기준으로 해석한 사건은 로컬 `Artifacts/Validation/v05-chest-lifecycle-20261116-125620/lifecycle-01/`에 있다. 실행 스크립트는 같은 실행 루트의 `lifecycle-check.py`다. 사용자 확인에는 [기존 상자 재현 순서](#v05-shared-chest-first)를 따르고 런처의 `-PackageRoot`에 `C:/CoopRPG/Artifacts/Validation/v05-chest-lifecycle-20261116-125620/Stage`를 사용한다.
+
+**근거** · [준비·열기·닫기 구현](../../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [로그 표시와 분류](LogViewer.md#shared-chest-lifecycle)
+
+<a id="v05-chest-lifecycle-user-result"></a>
+#### 사용자 직접 확인 · 준비·열기·닫기 RPC
+
+사용자가 새 패키지의 두 창을 조작해 2026-11-16 13:26:40(KST) PNG·JSON과 13:26:41 Excel을 저장했다. 실행 ID는 `manual-20261116-132401-880`이다. 모든 카테고리를 켠 공통 행 비교 화면이며, 캡처 메타데이터에는 61개 사건이 기록됐다.
+
+| 항목 | 서버와 두 클라이언트 원본 대조 |
+|---|---|
+| 준비 | Client A(PlayerId 256)·B(PlayerId 257)의 `LootReadyRequested` 각각 1건과 서버 준비 완료 각각 1건을 확인했다. 서버는 두 번째 준비를 처리한 뒤 13:25:15.043에 Playing으로 전환했다. |
+| 열기 | A·B 각각 열기 RPC 호출 1건, 서버의 같은 상자 열람 승인 1건, 소유자의 `Open=1 Stock=1` 1건을 확인했다. |
+| 닫기 | A·B 각각 닫기 RPC 호출 1건, 같은 서버 상자의 닫기 확정 1건, 소유자의 `Open=0` 1건을 확인했다. B는 13:26:28.426 → .451 → .458, A는 13:26:31.229 → .258 → .295였다. 닫기 복제 행에는 재고 필드가 없다. |
+| 회복약 | 중간에 B가 회복약을 요청해 한 번 지급받았다. B에만 소지량 1이 복제됐고 두 창 모두 공용 재고 0을 받았다. |
+
+중복 닫기 무시는 위 [자동 검증](#v05-chest-lifecycle-logs)의 확인 범위다.
+
+**근거** · 로컬 `Artifacts/Validation/v05-chest-lifecycle-20261116-125620/manual-20261116-132401-880/`의 두 클라이언트와 서버 원본 및 `Exports/` · [로그 표시 안내](LogViewer.md#shared-chest-lifecycle)
+
 <a id="단계별-시험-기준--첫-기술-범위-채택-나머지-제안"></a>
 <a id="active-tests"></a>
 ## 단계별 시험 기준 — 제출용 T1
