@@ -141,6 +141,17 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 **근거** · [서버의 표시 확인과 전환](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [표시 확인 RPC와 상자 요청 검사](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [패키지 시험](Validation/Index.md#v06-round-travel) · [Epic 멀티플레이 맵 이동](https://dev.epicgames.com/documentation/unreal-engine/travelling-in-multiplayer-in-unreal-engine?lang=en-US)
 
+<a id="round-admission-design"></a>
+### 전용 서버 입장 판정과 맵 이동 중 두 자리
+
+서버 `GameMode`는 `PreLogin`에서 진행 상태와 2명 정원을 검사하고, `Login`에서 같은 판정을 다시 실행한다. 검사 사이에 다른 클라이언트가 자리를 채우거나 라운드가 시작될 수 있다. 신규 입장은 Playing과 Result에서 거절한다. Waiting에서는 정원과 맵 전환 예약을 검사한다. 결과 확정과 참가자 이탈의 우선순위는 기존 `GameState`가 처리한다.
+
+비심리스 이동 때 `GameInstance`의 서브시스템이 기존 참가자의 연결 ID 두 개를 목적지에 30초간 예약한다. 새 월드는 실제 입장에 성공한 ID의 예약만 해제한다. 이 프로젝트의 `NULL` 연결 ID는 패키지 시험에서 프로세스의 연속성을 비교하는 데 사용했다. 계정 인증과 중단된 라운드 복구는 MVP 범위 밖이다.
+
+클라이언트의 게임 뷰포트는 네트워크 실패 이벤트에서 서버의 입장 거절 사유를 받거나 연결 손실·타임아웃을 감지한다. 안내는 월드 전환 후에도 유지되고 정상 연결이 성립하면 지워진다. 남은 참가자의 `중단·0점`은 별도로 서버가 확정한 라운드 결과다.
+
+**근거** · [서버 입장 판정](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [자리 예약 수명](../Game/Source/CoopRPG/GameFramework/CoopRPGRoundTravelSeats.cpp) · [클라이언트 안내](../Game/Source/CoopRPG/GameFramework/CoopRPGGameViewportClient.cpp) · [패키지 검증](Validation/Index.md#v06-round-admission) · [Epic PreLogin](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Engine/AGameModeBase/PreLogin) · [Epic 네트워크 실패 이벤트](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Engine/UEngine/FOnNetworkFailure)
+
 ### 빌드에서 제외하는 코드와 실행 중 권한
 
 소스 저장소 공개 범위, 실행 파일에 포함되는 코드, 네트워크로 보내는 상태는 각각 관리한다. 클라이언트 배포물에는 컴파일된 코드와 콘텐츠가 들어가므로, 실행 파일과 수신 데이터는 분석될 수 있다고 가정한다. 서버 전용 로직의 빌드 제외, 비밀 키를 서버 환경에서만 관리하는 일, 숨겨야 할 상태를 복제 대상에서 제외하는 일은 각각 다른 노출을 줄인다. 게임 결과의 무결성은 서버가 요청을 검증하고 상태 변경을 통제하는 구조에 달려 있다.

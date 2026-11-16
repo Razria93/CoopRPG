@@ -335,6 +335,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · [패키지 시험](Index.md#v06-round-travel) · [뷰어 파서](../../Tools/Validation/CombatLogReader.psm1)
 
+<a id="round-admission-logs"></a>
+### 입장 거절과 연결 종료 안내 로그
+
+서버의 `서버 입장 거절` 행에서 `Reason`과 `Stage`를 확인한다. `RoundFull`은 대기 중 정원 초과, `RoundInProgress`는 라운드 진행 중, `RoundTravelReserved`는 기존 참가자를 기다리는 새 맵에서의 거절이다. 새 맵에 기존 참가자가 들어올 때 서버의 남은 예약이 1석·0석으로 줄어든다.
+
+클라이언트 로그에서 `클라이언트 연결 안내 수신`과 `클라이언트 연결 안내 표시`는 각각 오류 수신과 화면 그리기를 뜻한다. `접속·초기화` 필터로 확인할 수 있다. 참가자 이탈을 알리는 남은 창의 라운드 중단과 서버가 닫힐 때 양쪽 창에 표시하는 연결 종료는 출처와 필드가 다르다.
+
+**근거** · [전용 패키지 검증과 화면](Index.md#v06-round-admission)
+
 <a id="health-subject-labels"></a>
 ### 체력 복제 행의 소유자
 
