@@ -76,6 +76,15 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 **근거** · [CoopRPG 게임 규칙 M1](Project.md#game-rules) · [캐릭터의 ASC 생성과 초기화](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [Epic ASC 배치 설명](https://dev.epicgames.com/documentation/unreal-engine/gameplay-ability-system-component-and-gameplay-attributes-in-unreal-engine?lang=en-US) · [Epic Lyra의 PlayerState 구성](https://dev.epicgames.com/documentation/unreal-engine/abilities-in-lyra-in-unreal-engine?lang=en-US#alyraplayerstate)
 
+<a id="enemy-combat-first"></a>
+### 서버의 적 추격과 피해 처리
+
+서버는 `L_Movement?EnemyCombat`에서 ASC를 가진 적 캐릭터 한 마리를 생성한다. 게임 모드가 선택한 적 또는 고정 표적의 ASC를 기존 공격 GA가 사용한다. V04의 적은 Playing 상태에서 주변 360cm 안의 살아 있는 플레이어 한 명을 탐지한다. 평평한 검증 맵에서는 `CharacterMovement`로 목표 방향을 따라가고 위치는 기존 캐릭터 이동 복제 경로로 전달한다.
+
+서버는 135cm 안에서 0.9초 공격을 준비한 뒤 대상의 생존과 거리를 다시 확인한다. 조건이 맞으면 기존 즉시 피해 GE를 대상 ASC에 적용한다. 라운드가 멈추거나 적 자신의 HP가 0이면 추격과 대기 공격을 정리한다. 피격과 회복으로 바뀐 HP는 양쪽에, 회복약 수량은 소유자에게 복제된다.
+
+**근거** · [적 캐릭터](../Game/Source/CoopRPG/Character/CoopRPGEnemy.cpp) · [게임 모드의 표적 선택](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [패키지 검증](Validation/Index.md#v04-enemy-first-combat)
+
 <a id="상자-상호작용-설계-예시"></a>
 
 <a id="shared-chest-implementation"></a>

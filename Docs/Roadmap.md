@@ -18,7 +18,7 @@
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 11월5일 운영 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 현재 기능 결과는 [V05 현행 카드](#v05-current-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
+- 현재 기능 결과는 [V04 현행 카드](#v04-current-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -90,14 +90,22 @@
 - **로그 보완:** [취소 RPC 호출·수신 및 비용·피해 표시](Validation/LogViewer.md#cancel-rpc-before-after)를 갱신하고 [이전 로그와 새 패키지](Validation/Index.md#v03-telemetry-result)를 검증했다. [사용자의 새 패키지 확인](Validation/Index.md#v03-telemetry-user-result)도 기록했다.
 - **다음:** [사용자가 두 Client에서 취소와 재공격을 재현했다](Validation/Index.md#v03-user-manual-result). 공용 상자의 동시 열람과 마지막 회복약 단일 지급을 다음 게임 기능으로 연결한다. 적 피격·사망 및 라운드가 들어올 때 취소 경합과 상태 정리를 확인한다. [7단계 구현 순서](#mvp-implementation-order)
 
+<a id="v04-current-card"></a>
+### 현재 작업 · V04 적 전투 · 2026-11-16
+
+- **확인:** 같은 맵의 전용 서버와 두 클라이언트에서 적 탐지·추격·이동 복제, 사거리 이탈 무피해, 실제 피격과 회복약 소모, 장착 플레이어의 반격을 확인했다. [자동 시험](Validation/Index.md#v04-enemy-first-combat)
+- **사용자 확인:** 사거리 밖 무피해와 실제 피격 뒤 HP `60→90`·회복약 `1→0`을 재현했다. [수동 검증](Validation/Index.md#v04-enemy-combat-user-result)
+- **표시 보완:** 체력 복제 행의 소유자를 표시하고 새 패키지의 두 클라이언트에서 실제 PlayerId를 확인했다. [Before/After와 자동 검증](Validation/Index.md#v04-health-subject-attribution) · [사용자 양쪽 표시 확인](Validation/Index.md#v04-health-subject-user-result)
+- **다음:** 서버에서 적 사망을 한 번 확정하고 대기 중인 공격을 정리한다. 두 사람의 마지막 타격이 겹쳐도 전리품 생성이 한 번인지 확인한 뒤 팀 지급으로 연결한다.
+
 <a id="v05-current-card"></a>
-### 현재 작업 · V05 공용 상자·장착·회복 · 2026-11-16
+### 이전 작업 · V05 공용 상자·장착·회복 · 2026-11-16
 
 - **완료:** 두 클라이언트 동시 열람, 마지막 회복약 단일 지급과 양쪽 재고 복제, 무효 요청 뒤 유효 요청을 패키지에서 확인했다. [실행 근거](Validation/Index.md#v05-shared-chest-first) · [사용자 직접 확인](Validation/Index.md#v05-shared-chest-user-result)
 - **로그 보완:** 준비·열기·닫기 RPC 호출 및 서버 닫기 결과를 기록하고 [독립 패키지 두 클라이언트](Validation/Index.md#v05-chest-lifecycle-logs)에서 검증했다. [사용자 직접 확인](Validation/Index.md#v05-chest-lifecycle-user-result)도 기록했다.
 - **완료:** 전용 서버와 두 클라이언트에서 각자 무기 지급·장착, 미장착 공격 거절, 장착 후 적중, 회복약 사용·소모와 최대 HP·소진 거절을 확인했다. [자동 실행 근거](Validation/Index.md#v05-equipment-recovery)
 - **사용자 확인:** 각자 무기 1개·장착 후 적중과 회복약 HP `70→100`·소지량 `1→0`을 수동 재현했다. [수동 실행 근거](Validation/Index.md#v05-equipment-recovery-user-result)
-- **다음:** V04에서 고정 표적을 서버 권한의 적 전투로 연결한다. 탐지·추격·근접 공격으로 실제 부상과 회복을 확인한 뒤, 사망 1회 확정과 팀 전리품 생성을 연결한다. 라운드 교체·재전달은 후속 통합 시험이다.
+- **연계:** [V04 적 전투](#v04-current-card)에 장착과 회복약을 연결했다. 라운드 교체·재전달은 후속 통합 시험이다.
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬
 

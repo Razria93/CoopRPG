@@ -291,6 +291,22 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · [원본 실행과 재현 순서](Index.md#v05-equipment-recovery) · [로그 분류](../../Tools/Validation/CombatLogReader.psm1)
 
+<a id="enemy-combat-logs"></a>
+### 적 탐지·추격·타격 로그
+
+서버 판정에서 `적 탐지`, `적 추격`, `적 공격 준비`, `적 타격 확정` 또는 `적 공격 빗나감`을 찾는다. 행의 PlayerId는 적이 선택한 피해 대상이다. 클라이언트에는 `적 이동 복제`와 `체력 복제`가 표시된다. 이동 사건은 시작 위치에서 수평으로 40cm 이상 달라진 이동 복제를 처음 관찰했을 때 한 번 남긴다. `회복약 사용 승인`과 소유자만 받는 보유량을 함께 대조한다.
+
+**근거** · [V04 실행 근거](Index.md#v04-enemy-first-combat) · [로그 표시 규칙](../../Tools/Validation/CombatLogReader.psm1)
+
+<a id="health-subject-labels"></a>
+### 체력 복제 행의 소유자
+
+패널의 출처는 복제를 관찰한 프로세스다. `체력 복제 · 플레이어 1 (256) · 100 → 90`의 플레이어·ID는 HP가 바뀐 Pawn의 소유자다. 상세의 `체력 소유자`, Actor, LocalRole을 함께 읽을 수 있다. 플레이어 번호는 해당 실행에서 확인한 PlayerId와 클라이언트의 대응을 사용한다. 적과 고정 표적은 이름으로 표시한다.
+
+새 원문은 `SubjectType`과 확인 가능한 플레이어의 `SubjectPlayerId`를 기록한다. 이전 원문은 자기 Pawn의 명시적 ID 또는 같은 출처·월드의 Actor와 장착 로그처럼 명시적인 ID 근거를 사용한다. 원문에서 플레이어 ID를 확인할 수 없으면 `플레이어 (ID 미확인)`으로 표시한다.
+
+**근거** · [같은 로그의 Before/After와 새 패키지 검증](Index.md#v04-health-subject-attribution) · [OnRep 소유자 계측](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp) · [표시 및 근거 확인](../../Tools/Validation/CombatLogReader.psm1)
+
 <a id="logging-contract"></a>
 ## 로그 표시 규칙
 
