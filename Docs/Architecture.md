@@ -114,6 +114,15 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 **근거** · [요청과 서버 검증](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [라운드 등록·팀 지급](../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp) · [획득 상태 복제](../Game/Source/CoopRPG/Loot/CoopRPGEnemyLoot.cpp) · [V05 실행 검증](Validation/Index.md#v05-enemy-loot-team)
 
+<a id="joint-extraction-design"></a>
+### 공동 탈출의 서버 판정과 결과 복제
+
+`GameMode`는 적 전투 모드의 `L_Movement`에 탈출 구역을 스폰한다. 서버는 매 판정 시점에 Playing 여부, 팀 전리품 1개, 두 컨트롤러의 살아 있는 Pawn 중심이 모두 구역 안에 있는지를 검사한다. `GameState`는 조건이 맞기 시작한 시점에 서버 시각으로 3초 기한을 기록하고 조건이 끊기면 초기화한다.
+
+기한까지 조건이 유지되면 `GameState`는 `Result`와 팀 점수 1을 확정하고 진행 기한을 닫는다. 준비 상태 갱신과 이후 판정은 이미 확정된 결과를 다시 열 수 없다. 클라이언트 HUD는 복제된 기한을 서버 시각과 비교해 남은 시간을 표시하고, 복제된 최종 상태에서 성공과 점수를 읽는다.
+
+**근거** · [구역과 서버 검사](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [기한·점수 복제](../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp) · [패키지 검증](Validation/Index.md#v06-extraction-success)
+
 ### 빌드에서 제외하는 코드와 실행 중 권한
 
 소스 저장소 공개 범위, 실행 파일에 포함되는 코드, 네트워크로 보내는 상태는 각각 관리한다. 클라이언트 배포물에는 컴파일된 코드와 콘텐츠가 들어가므로, 실행 파일과 수신 데이터는 분석될 수 있다고 가정한다. 서버 전용 로직의 빌드 제외, 비밀 키를 서버 환경에서만 관리하는 일, 숨겨야 할 상태를 복제 대상에서 제외하는 일은 각각 다른 노출을 줄인다. 게임 결과의 무결성은 서버가 요청을 검증하고 상태 변경을 통제하는 구조에 달려 있다.

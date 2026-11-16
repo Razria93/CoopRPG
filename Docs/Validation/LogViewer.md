@@ -314,6 +314,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · [자동·버튼 검증 안내](Index.md#v05-enemy-loot-team) · [뷰어 파서](../../Tools/Validation/CombatLogReader.psm1)
 
+<a id="joint-extraction-logs"></a>
+### 공동 탈출 결과 로그
+
+서버 패널에서 `공동 탈출 진행 시작`과 `공동 탈출 진행 초기화`의 경과 시간을 읽는다. 두 클라이언트의 `탈출 진행 초기화 복제`는 각 클라이언트가 초기화를 받았다는 뜻이다. 재진입 뒤 서버의 `공동 탈출 성공 확정 · 팀 점수 1점` 1행과 양쪽의 `공동 탈출 성공 복제 · 팀 점수 1점`을 같은 라운드 ID로 대조한다.
+
+**근거** · [공동 탈출 패키지 시험과 HUD](Index.md#v06-extraction-success)
+
 <a id="health-subject-labels"></a>
 ### 체력 복제 행의 소유자
 

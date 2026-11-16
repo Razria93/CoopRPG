@@ -18,7 +18,7 @@
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 11월5일 운영 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 현재 기능 결과는 [V05 팀 전리품 카드](#v05-team-loot-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
+- 현재 기능 결과는 [V06 공동 탈출 카드](#v06-extraction-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -109,12 +109,19 @@
 - **연계:** [V04 적 전투](#v04-current-card)에 장착과 회복약을 연결했다. 라운드 교체·재전달은 후속 통합 시험이다.
 
 <a id="v05-team-loot-card"></a>
-### 현재 작업 · V05 적 전리품 팀 지급 · 2026-11-16
+### 이전 작업 · V05 적 전리품 팀 지급 · 2026-11-16
 
 - **확인:** 전용 서버가 같은 드롭을 요청한 두 클라이언트 중 먼저 처리한 유효 요청에서 팀 수량을 1로 올렸다. 거리 거절과 같은 전리품 재요청은 수량을 바꾸지 않았고 양쪽이 팀 수량 1을 받았다. [자동 결과와 버튼](Validation/Index.md#v05-enemy-loot-team)
 - **사용자 확인:** 버튼으로 경합을 실행하고 뷰어 근거를 저장했다. Excel·원본 로그에서 서버 지급 1회와 양쪽 수량 1을 확인했다. [사용자 재현](Validation/Index.md#v05-enemy-loot-user-result)
 - **남은 확인:** 새 라운드로 넘어갈 때 전리품·팀 수량 초기화와 이전 라운드 요청 거절은 V06 연계 시험으로 확인한다.
-- **다음:** 팀 수량을 공동 탈출 조건에 연결한다. 두 사람이 생존한 채 탈출 구역을 유지하면 서버가 성공·점수를 한 번 확정하고 두 클라이언트에 전달하는 것부터 시험한다. [구현 순서](#mvp-implementation-order) · [게임 규칙](Project.md#game-rules)
+- **연계:** 팀 전리품 수량을 [V06 공동 탈출](#v06-extraction-card)에 연결했다.
+
+<a id="v06-extraction-card"></a>
+### 현재 작업 · V06 공동 탈출 성공과 점수 · 2026-11-16
+
+- **확인:** 전용 서버와 독립 클라이언트 2개에서 이탈 시 진행 초기화, 재진입 뒤 연속 3초 체류, 성공·1점 확정 1회와 양쪽 표시를 확인했다. [실행 결과](Validation/Index.md#v06-extraction-success)
+- **사용자 확인:** 두 창을 직접 조작해 이탈·재진입과 양쪽 성공·1점을 확인했다. 원본 로그에서 이탈 초기화 2회와 서버 성공 확정 1회를 대조했다. [수동 검증](Validation/Index.md#v06-extraction-user-result)
+- **다음:** Playing 중 사망·시간초과·접속 종료에 실패 또는 중단을 확정하고 같은 판정 회차에서 발생한 사건의 우선순위를 검증한다. 이후 다음 맵 도착과 상태 초기화·이전 라운드 요청 거절을 연결한다. [게임 규칙](Project.md#game-rules)
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬
 
