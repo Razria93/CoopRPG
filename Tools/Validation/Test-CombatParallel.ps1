@@ -54,7 +54,7 @@ $timer.Add_Tick({
             0 {
                 if($script:store.Count -lt 300 -or @($sources.Values | Where-Object {$_.Reader.UnreadBytes -gt 0}).Count){return}
                 Check-UI 'default time order and single view' ($order.SelectedIndex -eq 0 -and $viewChoice.SelectedIndex -eq 0)
-                Check-UI 'all existing result types selectable including observation' ($outcome.Items.Contains('관찰') -and $outcome.Items.Contains('제출') -and $outcome.Items.Contains('미제출') -and $outcome.Items.Contains('소비'))
+                Check-UI 'all existing result types selectable including observation' ($outcome.Items.Contains('관찰') -and $outcome.Items.Contains('수신') -and $outcome.Items.Contains('제출') -and $outcome.Items.Contains('미제출') -and $outcome.Items.Contains('소비'))
                 $centred=$true;foreach($g in $script:groups){foreach($c in $g.Tag.Items){if([Math]::Abs(($c.Top+$c.Height/2.0)-$g.Height/2.0) -gt 1.1){$centred=$false}}}
                 Check-UI 'toolbar items vertically centred' $centred
                 Check-UI 'toolbar groups carry separators' (@($script:groups | Where-Object {$_.Tag.Line.Width -ne 1 -or $_.Tag.Line.Height -lt 10}).Count -eq 0)
@@ -103,7 +103,7 @@ $timer.Add_Tick({
                 Check-UI 'aligned list detail boundary is shared' (@($script:activePanes | Where-Object {$_.Split.SplitterDistance -ne 300}).Count -eq 0)
                 Choose-FirstEvent $script:activePanes[0] 'AttackApproved';Choose-FirstEvent $script:activePanes[1] 'AttackInput'
                 $script:qaServer=$script:activePanes[0].SelectedId;$script:qaClient=$script:activePanes[1].SelectedId
-                Check-UI 'each pane retains its own selected detail' ($script:activePanes[0].Detail.Text.Contains('서버 승인') -and $script:activePanes[1].Detail.Text.Contains('공격 입력 감지'))
+                Check-UI 'each pane retains its own selected detail' ($script:activePanes[0].Detail.Text.Contains('타격 확정 · 표적 HP') -and $script:activePanes[1].Detail.Text.Contains('공격 입력 감지'))
                 $script:qaOldCount=$script:collection
                 [IO.File]::AppendAllText("$logRoot/a.log",'[2026.11.14-00.00.00:000][1]LogCoopRPGQa: ParallelLateEvent Value=1'+[Environment]::NewLine,[Text.UTF8Encoding]::new($false))
                 $script:qaPhase=1

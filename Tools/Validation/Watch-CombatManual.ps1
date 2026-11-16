@@ -107,7 +107,7 @@ function Align-Toolbars {
 }
 $filters=New-Bar;$options=New-Bar
 $search=New-Object Windows.Forms.TextBox;$search.Width=200
-$outcome=New-Combo @('전체','관찰','승인','거절','호출','제출','미제출','소비','오류·경고','미분류') 115
+$outcome=New-Combo @('전체','관찰','승인','거절','취소','빗나감','호출','수신','제출','미제출','소비','오류·경고','미분류') 115
 $order=New-Combo @('시각순','수집순') 115
 $order.AccessibleName='정렬'
 $orderTooltip=New-Object Windows.Forms.ToolTip
@@ -224,21 +224,21 @@ function Show-PaneDetail($Pane){
     $utc = if ($e.UtcTime) { $e.UtcTime.ToString('o') } else { '미기록' }
     $stage = if ($e.Stage -eq '복제 관찰') { '복제 적용' } else { $e.Stage }
     $showOutcome = $e.Stage -ne '복제 관찰' -or $e.Outcome -ne '관찰'
-    $summary = $e.Summary
-    if ($e.EventCode -eq 'AttackApproved' -and $e.Fields['HP'] -and $e.Fields['Stamina']) {
-        $health = $e.Fields['HP'] -replace '->', ' → '
-        $stamina = $e.Fields['Stamina'] -replace '->', ' → '
-        $summary = "서버 승인 · 표적 HP $health · 공격자 스태미나 $stamina"
-        if ($e.Level -in @('Warning','Error','Fatal')) { $summary = "[$($e.Level)] $summary" }
-    }
+    $hasRequester = $e.SourceId -eq 'server' -and ($e.Stage -eq '서버 판정' -or $e.Fields.ContainsKey('RequesterPlayerId'))
 
     $Pane.Detail.Lines = [string[]]@(
         "[$($e.SourceLabel) · $($e.Time) · 행 $($row.Ordinal)]"
-        $summary
+        $e.Summary
+        if ($e.EventCode -eq 'AttackStarted' -and $e.Fields['Stamina'] -and $e.Fields['Windup']) {
+            "피해 확정 대기 $($e.Fields['Windup'])초"
+        }
+        if ($e.EventCode -eq 'AttackApproved' -and $e.Fields['Stamina']) {
+            "이전 형식의 Commit 비용 요약 · 공격자 스태미나 $($e.Fields['Stamina'] -replace '->', ' → ')"
+        }
         if ($showOutcome) { "단계: $stage    결과: $($e.Outcome)" } else { "단계: $stage" }
-        if (($e.SourceId -eq 'server' -and $e.Stage -eq '서버 판정') -or $e.Actor) {
+        if ($hasRequester -or $e.Actor) {
             ''
-            if ($e.SourceId -eq 'server' -and $e.Stage -eq '서버 판정') { "요청자: $(Get-RequesterLabel $e)" }
+            if ($hasRequester) { "요청자: $(Get-RequesterLabel $e)" }
             if ($e.Actor) {
                 "행위자: $($e.Actor)"
                 $role = if ($e.Fields.ContainsKey('Actor') -or $e.Fields.ContainsKey('Attacker')) { $e.Fields['LocalRole'] }

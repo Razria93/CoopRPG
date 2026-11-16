@@ -55,4 +55,18 @@ namespace CoopRPG::Debug
         }
         return Context;
     }
+
+    FString DescribePlayerRequestContext(const AActor* Actor, const TCHAR* Function)
+    {
+        FString Context = DescribeLogContext(Actor, Function);
+        const auto* Pawn = Cast<APawn>(Actor);
+        if (Pawn && Pawn->HasAuthority() && Pawn->GetNetConnection())
+        {
+            if (const APlayerState* PlayerState = Pawn->GetPlayerState(); PlayerState && PlayerState->GetPlayerId() > 0)
+            {
+                Context += FString::Printf(TEXT(" RequesterPlayerId=%d"), PlayerState->GetPlayerId());
+            }
+        }
+        return Context;
+    }
 }

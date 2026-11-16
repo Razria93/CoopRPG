@@ -14,6 +14,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
+#include "InputCoreTypes.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGInput, Log, All);
@@ -94,6 +95,7 @@ void ACoopRPGCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
     {
         Input->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACoopRPGCharacter::Move);
         Input->BindAction(AttackAction, ETriggerEvent::Started, this, &ACoopRPGCharacter::Attack);
+        PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ACoopRPGCharacter::CancelAttack);
     }
 }
 
@@ -113,4 +115,34 @@ void ACoopRPGCharacter::Attack()
     UE_LOG(LogCoopRPGInput, Verbose, TEXT("AttackDispatch Actor=%s Submitted=%d %s"),
         *GetNameSafe(this), bSubmitted ? 1 : 0,
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGCharacter::CancelAttack()
+{
+    if (GetNetMode() == NM_Client)
+    {
+        UE_LOG(LogCoopRPGInput, Verbose, TEXT("CancelRPCCalled Actor=%s %s"),
+            *GetNameSafe(this), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    }
+    ServerCancelAttack();
+}
+
+void ACoopRPGCharacter::ServerCancelAttack_Implementation()
+{
+    if (GetNetConnection())
+    {
+        UE_LOG(LogCoopRPGInput, Verbose, TEXT("CancelRPCReceived Actor=%s %s"),
+            *GetNameSafe(this), *CoopRPG::Debug::DescribePlayerRequestContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    }
+
+    if (const FGameplayAbilitySpec* Spec = AbilitySystem->FindAbilitySpecFromClass(UCoopRPGMeleeAbility::StaticClass());
+        Spec && Spec->IsActive())
+    {
+        AbilitySystem->CancelAbilityHandle(Spec->Handle);
+    }
+    else
+    {
+        UE_LOG(LogCoopRPGInput, Verbose, TEXT("CancelIgnored Actor=%s Reason=NoActiveAttack %s"),
+            *GetNameSafe(this), *CoopRPG::Debug::DescribePlayerRequestContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    }
 }

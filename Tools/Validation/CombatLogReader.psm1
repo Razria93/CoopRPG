@@ -96,7 +96,7 @@ function ConvertTo-CombatLogEvent([string]$Line) {
             $label=if($eventCode -eq 'AttackBlocked'){'클라 차단'}else{'서버 거절'}
             $stage=if($eventCode -eq 'AttackBlocked'){'로컬 검사'}else{'서버 판정'};$outcome='거절';$kind='Reject'
             $reason=[string]$fields['Reason']
-            $names=@{Cost='비용 부족';Cooldown='쿨다운 중';OutOfRange='사거리 밖';InvalidTarget='유효하지 않은 표적';CommitFailed='커밋 실패 · 세부 원인 미확인'}
+            $names=@{Cost='비용 부족';Cooldown='쿨다운 중';OutOfRange='사거리 밖';InvalidTarget='유효하지 않은 표적';AttackerDead='공격자 HP 0';CommitFailed='커밋 실패 · 세부 원인 미확인'}
             $detail=if($names.ContainsKey($reason)){$names[$reason]}elseif($reason){$reason}else{'사유 미기록'}
             if($reason){$detail+=" ($reason)"}
             if($fields.ContainsKey('Distance')){$detail+=" · 거리 $($fields['Distance'])cm"}
@@ -105,7 +105,25 @@ function ConvertTo-CombatLogEvent([string]$Line) {
             if($fields.ContainsKey('Remaining')){$detail+=" · 남은 시간 $($fields['Remaining'])s"}
             break
         }
-        '^AttackApproved$' {$label='서버 승인';$detail="HP $($fields['HP']) · Stamina $($fields['Stamina'])";$kind='Approve';$stage='서버 판정';$outcome='승인';break}
+        '^CancelRPCCalled$' {$label='취소 RPC 호출';$stage='RPC 호출';$outcome='호출';break}
+        '^CancelRPCReceived$' {$label='취소 RPC 수신';$stage='RPC 수신';$outcome='수신';break}
+        '^AttackStarted$' {
+            $label='공격 준비 시작';$stage='서버 판정'
+            $detail="피해 확정 대기 $($fields['Windup'])초"
+            if($fields['Stamina']){
+                $label='비용 확정'
+                $detail="스태미나 $($fields['Stamina'] -replace '->',' → ')"
+            }
+            break
+        }
+        '^AttackCancelled$' {$label='서버 취소 승인';$detail='피해 0 · 적용한 비용·쿨다운 유지';$stage='서버 판정';$outcome='취소';break}
+        '^AttackMissed$' {$label='피해 확정 실패';$reason=[string]$fields['Reason'];$detail="피해 0 · 비용·쿨다운 유지 · $reason";$stage='서버 판정';$outcome='빗나감';break}
+        '^CancelIgnored$' {$label='취소 요청 무시';$detail='진행 중인 단타 없음';$stage='서버 판정';break}
+        '^AttackApproved$' {
+            $label='타격 확정';$kind='Approve';$stage='서버 판정';$outcome='승인'
+            if($fields['HP']){$detail="표적 HP $($fields['HP'] -replace '->',' → ')"}
+            break
+        }
         '^(Health|Stamina)Replicated$' {$label=if($eventCode -eq 'HealthReplicated'){'체력 복제'}else{'스태미나 복제'};$detail="$($fields['Before']) → $($fields['After'])";$kind='Replicate';$stage='복제 관찰';break}
         '^CombatSnapshot$' {$label=if($fields['Label'] -eq 'Prepared'){'초기화 완료'}else{'상태 확인 '+$fields['Label']};$detail="HP=$($fields['HP']) · Stamina=$($fields['Stamina']) · Cooldown=$($fields['Cooldown'])";if($fields.ContainsKey('Remaining')){$detail+=" · 남은 시간 $($fields['Remaining'])s"};$kind='Snapshot';break}
         '^CooldownChanged$' {$label=if($fields['Count'] -eq '0'){'쿨다운 만료'}else{'쿨다운 시작'};$detail='Count='+$fields['Count'];$kind='Cooldown';break}
@@ -146,6 +164,7 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         '입력' { '입력·요청' }
         '요청' { '입력·요청' }
         'RPC 호출' { '입력·요청' }
+        'RPC 수신' { '입력·요청' }
         '함수 반환' { '입력·요청' }
         '로컬 검사' { '입력·요청' }
         '서버 판정' { '서버 판정' }
