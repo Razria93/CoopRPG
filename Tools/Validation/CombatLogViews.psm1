@@ -21,4 +21,36 @@ function Find-CombatRowIndex($Rows,[string]$EventId,[switch]$IncludePlaceholder)
     return -1
 }
 
-Export-ModuleMember -Function ConvertTo-CombatPaneRows,Find-CombatRowIndex
+function Get-CombatRelatedPlayerLabel($Event,[hashtable]$ClientByPlayerId,[hashtable]$SourceLabelById) {
+    foreach($field in @('RequesterPlayerId','SubjectPlayerId','EquippedPlayerId','TargetPlayerId','LocalPlayerId')){
+        if($field -eq 'LocalPlayerId' -and $Event.SourceId -eq 'server'){continue}
+        $playerId=[string]$Event.Fields[$field]
+        if($playerId -notmatch '^[1-9]\d*$'){continue}
+        $sourceId=$ClientByPlayerId[$playerId]
+        if($sourceId -and $SourceLabelById[$sourceId]){return ($SourceLabelById[$sourceId] -replace '^클라이언트 ', '클라 ')}
+        return "ID $playerId"
+    }
+    return '—'
+}
+
+function Get-CombatTargetLabel($Event) {
+    $chest=[string]$Event.Fields['Chest']
+    if($Event.EventCode -in @('ChestStockReplicated','WeaponStockReplicated')){$chest=[string]$Event.Actor}
+    if($chest -and $chest -ne 'None'){
+        if($chest -match '^CoopRPGSharedChest(?:_\d+)?$'){return '공용 상자'}
+        return $chest
+    }
+
+    if($Event.Fields['DropId'] -match '^[0-9a-f]{32}$' -and $Event.Fields['DropId'] -notmatch '^0+$'){return '적 전리품'}
+    $target=[string]$Event.Target
+    if($Event.EventCode -in @('HealthReplicated','StaminaReplicated','MeleeWeaponReplicated')){$target=[string]$Event.Actor}
+    switch -Regex ($target) {
+        '^CoopRPGEnemy(?:_\d+)?$' {return '적'}
+        '^CoopRPGAttackTarget(?:_\d+)?$' {return '훈련 표적'}
+        '^CoopRPGCharacter(?:_\d+)?$' {return '플레이어 Pawn'}
+        '^(None)?$' {return '—'}
+        default {return $target}
+    }
+}
+
+Export-ModuleMember -Function ConvertTo-CombatPaneRows,Find-CombatRowIndex,Get-CombatRelatedPlayerLabel,Get-CombatTargetLabel
