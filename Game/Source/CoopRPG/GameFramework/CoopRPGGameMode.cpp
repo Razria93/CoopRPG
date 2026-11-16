@@ -2,12 +2,14 @@
 
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
+#include "CoopRPGPlayerController.h"
 
 #include "Engine/World.h"
 
 ACoopRPGGameMode::ACoopRPGGameMode()
 {
     DefaultPawnClass = ACoopRPGCharacter::StaticClass();
+    PlayerControllerClass = ACoopRPGPlayerController::StaticClass();
 }
 
 ACoopRPGAttackTarget* ACoopRPGGameMode::GetAttackTarget() const

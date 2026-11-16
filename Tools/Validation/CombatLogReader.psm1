@@ -1,0 +1,185 @@
+﻿Set-StrictMode -Version Latest
+
+# FileGeneration describes a log file reset, never a game world/actor generation.
+function New-CombatLogReader([string]$Path) {
+    @{Path=$Path;Offset=0L;Pending=[byte[]]@();Initialized=$false;SkipFirst=$false;Generation=0;Prefix=[byte[]]@();LastReadUtc=$null;State='Waiting';Error='';InitialSkippedBytes=0L;UnreadBytes=0L}
+}
+
+function Read-CombatLogRecords([hashtable]$State, [int]$MaxBytes=262144) {
+    if(!(Test-Path -LiteralPath $State.Path -PathType Leaf)){$State.State='Waiting';return}
+    $stream=$null
+    try {
+        $stream=[IO.File]::Open($State.Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+        $head=New-Object byte[] ([int][Math]::Min(64L,$stream.Length))
+        if($head.Length){[void]$stream.Read($head,0,$head.Length)}
+        $prefixChanged=$false
+        for($i=0;$i -lt [Math]::Min($State.Prefix.Length,$head.Length);$i++){
+            if($State.Prefix[$i] -ne $head[$i]){$prefixChanged=$true;break}
+        }
+        if($State.Initialized -and ($stream.Length -lt $State.Offset -or $prefixChanged)){
+            $State.Offset=0L;$State.Pending=[byte[]]@();$State.SkipFirst=$false;$State.Generation++
+        }
+        if(!$State.Initialized){
+            $State.Offset=[Math]::Max(0L,$stream.Length-131072L)
+            $State.InitialSkippedBytes=$State.Offset;$State.SkipFirst=$State.Offset -gt 0;$State.Initialized=$true
+        }
+        $State.Prefix=$head;$State.State='Ready';$State.Error=''
+        $State.UnreadBytes=[Math]::Max(0L,$stream.Length-$State.Offset)
+        $count=[int][Math]::Min([Math]::Max(1,$MaxBytes),$State.UnreadBytes)
+        if($count -eq 0){return}
+        [void]$stream.Seek($State.Offset,[IO.SeekOrigin]::Begin)
+        $bytes=New-Object byte[] $count;$read=$stream.Read($bytes,0,$count)
+        $base=$State.Offset-$State.Pending.Length
+        $data=New-Object byte[] ($State.Pending.Length+$read)
+        [Array]::Copy($State.Pending,0,$data,0,$State.Pending.Length)
+        [Array]::Copy($bytes,0,$data,$State.Pending.Length,$read)
+        $State.Offset+=$read;$State.UnreadBytes=[Math]::Max(0L,$stream.Length-$State.Offset);$State.LastReadUtc=[DateTime]::UtcNow
+        $begin=0
+        for($i=0;$i -lt $data.Length;$i++){
+            if($data[$i] -ne 10){continue}
+            $length=$i-$begin
+            if($length -gt 0 -and $data[$i-1] -eq 13){$length--}
+            if($State.SkipFirst){$State.SkipFirst=$false}
+            elseif($length -gt 0){
+                [pscustomobject]@{Line=[Text.Encoding]::UTF8.GetString($data,$begin,$length);ByteOffset=[long]($base+$begin);FileGeneration=$State.Generation}
+            }
+            $begin=$i+1
+        }
+        $State.Pending=New-Object byte[] ($data.Length-$begin)
+        [Array]::Copy($data,$begin,$State.Pending,0,$State.Pending.Length)
+    } catch {$State.State='Error';$State.Error=$_.Exception.Message;throw}
+    finally {if($null -ne $stream){$stream.Dispose()}}
+}
+
+function Read-CombatLogLines([hashtable]$State) {
+    foreach($record in @(Read-CombatLogRecords $State)){[string]$record.Line}
+}
+
+function ConvertTo-CombatLogEvent([string]$Line) {
+    $utc=$null;$time='시각 미기록'
+    if($Line -match '^\[(?<time>\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}:\d{3})\]'){
+        $parsed=[DateTime]::MinValue
+        if([DateTime]::TryParseExact($Matches.time,'yyyy.MM.dd-HH.mm.ss:fff',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$parsed)){
+            $utc=[DateTime]::SpecifyKind($parsed,[DateTimeKind]::Utc);$time=$utc.ToLocalTime().ToString('HH:mm:ss.fff')
+        }
+    }
+    $category='';$level='Log';$message=$Line
+    if($Line -match '(?<category>Log\w+):\s*(?:(?<level>VeryVerbose|Verbose|Display|Warning|Error|Fatal):\s*)?(?<message>.*)$'){
+        $category=$Matches.category;$message=$Matches.message
+        if($Matches['level']){$level=$Matches['level']}
+    }
+    $fields=@{}
+    foreach($m in [regex]::Matches($message,'(?<key>\w+)=(?<value>[^\s]+)')){$fields[$m.Groups['key'].Value]=$m.Groups['value'].Value}
+    $eventCode=($message -split '\s+',2)[0]
+    $kind='Info';$label='';$detail='';$stage='상태';$outcome='관찰';$reason='';$known=$true
+    switch -Regex ($eventCode) {
+        '^ManualFocusClickConsumed$' {$label='포커스 클릭';$detail='공격 요청 없음 · 다음 클릭부터 공격';$kind='Focus';$stage='입력';$outcome='소비';break}
+        '^ManualInputFlushed$' {
+            $label='창 전환 키 초기화'; $kind='Focus'; $stage='창 전환'
+            if ($fields.ContainsKey('HeldWBefore') -and $fields.ContainsKey('W')) {
+                $detail="W $($fields['HeldWBefore']) → $($fields['W'])"
+            }
+            break
+        }
+        '^ManualInputEnabled$' {$label='수동 검증 입력 설정 완료';$stage='초기화';$detail='커서 표시 · 마우스 잠금 해제';break}
+        '^AttackInput$' {$label='공격 입력 감지';$kind='Input';$stage='입력';break}
+        '^AttackDispatch$' {
+            $stage='함수 반환'; $kind='Input'
+            switch ($fields['Submitted']) {
+                '1' { $label='GAS 활성화 함수 반환 · true'; $outcome='제출' }
+                '0' { $label='GAS 활성화 함수 반환 · false'; $outcome='미제출' }
+                default { $label='GAS 활성화 함수 반환 · 값 미확인'; $outcome='미분류' }
+            }
+            break
+        }
+        '^(AttackBlocked|AttackRejected)$' {
+            $label=if($eventCode -eq 'AttackBlocked'){'클라 차단'}else{'서버 거절'}
+            $stage=if($eventCode -eq 'AttackBlocked'){'로컬 검사'}else{'서버 판정'};$outcome='거절';$kind='Reject'
+            $reason=[string]$fields['Reason']
+            $names=@{Cost='비용 부족';Cooldown='쿨다운 중';OutOfRange='사거리 밖';InvalidTarget='유효하지 않은 표적';CommitFailed='커밋 실패 · 세부 원인 미확인'}
+            $detail=if($names.ContainsKey($reason)){$names[$reason]}elseif($reason){$reason}else{'사유 미기록'}
+            if($reason){$detail+=" ($reason)"}
+            if($fields.ContainsKey('Distance')){$detail+=" · 거리 $($fields['Distance'])cm"}
+            if($fields.ContainsKey('Range')){$detail+=" / 허용 $($fields['Range'])cm"}
+            if($fields.ContainsKey('Stamina')){$detail+=" · Stamina=$($fields['Stamina'])"}
+            if($fields.ContainsKey('Remaining')){$detail+=" · 남은 시간 $($fields['Remaining'])s"}
+            break
+        }
+        '^AttackApproved$' {$label='서버 승인';$detail="HP $($fields['HP']) · Stamina $($fields['Stamina'])";$kind='Approve';$stage='서버 판정';$outcome='승인';break}
+        '^(Health|Stamina)Replicated$' {$label=if($eventCode -eq 'HealthReplicated'){'체력 복제'}else{'스태미나 복제'};$detail="$($fields['Before']) → $($fields['After'])";$kind='Replicate';$stage='복제 관찰';break}
+        '^CombatSnapshot$' {$label=if($fields['Label'] -eq 'Prepared'){'초기화 완료'}else{'상태 확인 '+$fields['Label']};$detail="HP=$($fields['HP']) · Stamina=$($fields['Stamina']) · Cooldown=$($fields['Cooldown'])";if($fields.ContainsKey('Remaining')){$detail+=" · 남은 시간 $($fields['Remaining'])s"};$kind='Snapshot';break}
+        '^CooldownChanged$' {$label=if($fields['Count'] -eq '0'){'쿨다운 만료'}else{'쿨다운 시작'};$detail='Count='+$fields['Count'];$kind='Cooldown';break}
+        '^TestActivationRequest$' {$label='서버 시험 요청';$detail='클라이언트 사전 검사만 생략';$kind='Input';$stage='요청';break}
+        '^TestPrepareRejected$' {$label='초기화 거절';$detail='개발용 서버 옵션/입력값 확인';$kind='Reject';$outcome='거절';$stage='서버 판정';break}
+        '^MovementSnapshot$' {$label='이동 상태';$detail=$message.Substring($eventCode.Length).Trim();$kind='Snapshot';break}
+        default {$known=$false}
+    }
+    if(!$known){
+        if($Line -match 'Cmd: (?<command>Coop\.Test\..*)'){$label='콘솔 명령 입력';$detail=$Matches.command;$eventCode='ConsoleCommand';$kind='Input';$stage='입력'}
+        elseif($Line -match 'Command not recognized'){$label='알 수 없는 명령';$detail=$message;$eventCode='UnknownCommand';$kind='Reject';$outcome='거절'}
+        elseif($Line -match 'Fatal error:|Ensure condition failed:' -or $level -in @('Error','Fatal')){$label='실행 오류';$detail=$message;$eventCode='RuntimeError';$kind='Error';$outcome='오류'}
+        elseif($level -eq 'Warning'){$label='실행 경고';$detail=$message;$eventCode='RuntimeWarning';$kind='Warning';$outcome='경고'}
+        elseif ($category -eq 'LogAbilitySystem' -and $message -match '^::CallServerTryActivateAbility\s+(?<handle>-?\d+)\s+(?<pressed>[01])\s+(?<prediction>\S.*)$') {
+            # The engine logs this at helper entry, before batching or the RPC invocation.
+            $fields['SpecHandle']=$Matches.handle
+            $fields['InputPressed']=$Matches.pressed
+            $fields['PredictionKey']=$Matches.prediction
+            $eventCode='GasServerRpcCall'; $label='GAS 서버 RPC 호출'; $stage='RPC 호출'; $outcome='호출'
+        }
+        elseif ($category -eq 'LogNet' -and $message -match '^(Login request:|Welcomed by server\b|Join request:|Join succeeded:)') {
+            $stage = '접속'
+            switch -Regex ($message) {
+                '^Login request:' { $label='로그인 요청 수신'; $eventCode='LoginRequestReceived'; break }
+                '^Welcomed by server\b' { $label='서버 Welcome 수신'; $eventCode='WelcomeReceived'; break }
+                '^Join request:' { $label='입장 요청 수신'; $eventCode='JoinRequestReceived'; break }
+                '^Join succeeded:' { $label='서버 입장 처리 완료'; $eventCode='JoinSucceeded'; break }
+            }
+        }
+        elseif($Line -match 'LogExit: Exiting\.|Engine exit requested'){$label='종료 요청';$detail='종료 로그 관찰 · 실제 프로세스 상태는 별도 표시';$eventCode='ExitObserved'}
+        elseif($category -like 'LogCoopRPG*'){$label='미분류 · '+$eventCode;$detail=$message;$kind='Unknown';$outcome='미분류'}
+        else{return}
+    }
+    $actor=if($fields.ContainsKey('Attacker')){$fields['Attacker']}elseif($fields.ContainsKey('Actor')){$fields['Actor']}elseif($fields.ContainsKey('Pawn')){$fields['Pawn']}else{''}
+    $topic = switch ($stage) {
+        '접속' { '접속·초기화' }
+        '초기화' { '접속·초기화' }
+        '입력' { '입력·요청' }
+        '요청' { '입력·요청' }
+        'RPC 호출' { '입력·요청' }
+        '함수 반환' { '입력·요청' }
+        '로컬 검사' { '입력·요청' }
+        '서버 판정' { '서버 판정' }
+        '복제 관찰' { '복제' }
+        default {
+            if ($kind -in @('Error','Warning')) { '오류·경고' } else { '상태·기타' }
+        }
+    }
+    $summary=$label+$(if($detail){' · '+$detail}else{''})
+    if($level -in @('Warning','Error','Fatal')){$summary="[$level] $summary"}
+    [pscustomobject]@{SchemaVersion=1;UtcTime=$utc;Time=$time;SortTicks=$(if($null -ne $utc){$utc.Ticks}else{[long]::MaxValue});Category=$category;Topic=$topic;Level=$level;EventCode=$eventCode;Stage=$stage;Outcome=$outcome;ReasonCode=$reason;Kind=$kind;Label=$label;Detail=$detail;Summary=$summary;Actor=$actor;Target=[string]$fields['Target'];RequestId=$null;Relationship='관계 미계측';Fields=$fields;Raw=$Line;Text="[$time] $summary"}
+}
+
+function Add-CombatEventContext($Event,[string]$RunId,[string]$SourceId,[string]$SourceLabel,[string]$Path,$Record,[long]$CollectionOrder){
+    $Event.Relationship='관계 미계측'
+    $properties=@{RunId=$RunId;SourceId=$SourceId;SourceLabel=$SourceLabel;SourcePath=$Path;FileGeneration=$Record.FileGeneration;ByteOffset=$Record.ByteOffset;CollectionOrder=$CollectionOrder;EventId=('{0}/{1}/file{2}/{3}' -f $RunId,$SourceId,$Record.FileGeneration,$Record.ByteOffset)}
+    foreach($key in $properties.Keys){$Event | Add-Member -NotePropertyName $key -NotePropertyValue $properties[$key]}
+    return $Event
+}
+
+function Select-CombatEvents($Events,[string]$SourceId='',[string]$Outcome='전체',[string]$Search='',[switch]$CollectionOrder,[string[]]$Topics){
+    $selected=@(foreach($e in $Events){
+        if($SourceId -and $e.SourceId -ne $SourceId){continue}
+        if ($PSBoundParameters.ContainsKey('Topics') -and $e.Topic -notin $Topics) {
+            $includeSeverity = '오류·경고' -in $Topics -and ($e.Outcome -in @('오류','경고') -or $e.Level -in @('Warning','Error','Fatal'))
+            if (!$includeSeverity) { continue }
+        }
+        if($Outcome -eq '오류·경고'){if($e.Outcome -notin @('오류','경고') -and $e.Level -notin @('Warning','Error','Fatal')){continue}}
+        elseif($Outcome -ne '전체' -and $e.Outcome -ne $Outcome){continue}
+        if($Search -and ($e.Raw+' '+$e.Summary+' '+$e.SourceLabel+' '+$e.EventId).IndexOf($Search,[StringComparison]::OrdinalIgnoreCase) -lt 0){continue}
+        $e
+    })
+    if($CollectionOrder){$selected | Sort-Object CollectionOrder}
+    else{$selected | Sort-Object SortTicks,SourceId,FileGeneration,ByteOffset,CollectionOrder}
+}
+
+Export-ModuleMember -Function New-CombatLogReader,Read-CombatLogRecords,Read-CombatLogLines,ConvertTo-CombatLogEvent,Add-CombatEventContext,Select-CombatEvents

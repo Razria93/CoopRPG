@@ -56,7 +56,8 @@ ACoopRPGCharacter::ACoopRPGCharacter()
 
     AbilitySystem = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystem"));
     AbilitySystem->SetIsReplicated(true);
-    AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+    // Owning client receives cooldown effects; observers receive their tags/cues.
+    AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
     CombatAttributes = CreateDefaultSubobject<UCoopRPGCombatAttributes>(TEXT("CombatAttributes"));
 }
 
@@ -104,5 +105,8 @@ void ACoopRPGCharacter::Attack()
 {
     UE_LOG(LogCoopRPGInput, Verbose, TEXT("AttackInput Actor=%s %s"),
         *GetNameSafe(this), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
-    AbilitySystem->TryActivateAbilityByClass(UCoopRPGMeleeAbility::StaticClass());
+    const bool bSubmitted = AbilitySystem->TryActivateAbilityByClass(UCoopRPGMeleeAbility::StaticClass());
+    UE_LOG(LogCoopRPGInput, Verbose, TEXT("AttackDispatch Actor=%s Submitted=%d %s"),
+        *GetNameSafe(this), bSubmitted ? 1 : 0,
+        *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
