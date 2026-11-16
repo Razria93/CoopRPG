@@ -35,6 +35,7 @@ protected:
     virtual void RestartPlayer(AController* NewPlayer) override;
 
 private:
+    void PublishReadySlots(ACoopRPGGameState& State) const;
     FString GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId);
     bool ReserveRoundTravelSeats(const FString& Destination) const;
     bool IsRoundParticipant(const AController* Controller) const;

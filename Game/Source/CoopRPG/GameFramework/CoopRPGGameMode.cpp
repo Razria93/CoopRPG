@@ -66,7 +66,13 @@ AActor* ACoopRPGGameMode::GetMeleeTarget() const
 void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
 {
     auto* State = GetGameState<ACoopRPGGameState>();
-    if (!State || State->HasRoundResult() || (bEnemyCombat && State->IsRoundPlaying()))
+    if (!State)
+    {
+        return;
+    }
+
+    PublishReadySlots(*State);
+    if (State->HasRoundResult() || (bEnemyCombat && State->IsRoundPlaying()))
     {
         return;
     }
@@ -260,6 +266,10 @@ void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
             if (PlayerSlots[Index].Get() == NewPlayer)
             {
                 Character->SetDisplaySlot(Index + 1);
+                if (auto* State = GetGameState<ACoopRPGGameState>())
+                {
+                    PublishReadySlots(*State);
+                }
                 break;
             }
         }
@@ -283,6 +293,20 @@ void ACoopRPGGameMode::Logout(AController* Exiting)
     }
     Super::Logout(Exiting);
     UpdateLootRoundPhase(Exiting);
+}
+
+void ACoopRPGGameMode::PublishReadySlots(ACoopRPGGameState& State) const
+{
+    const auto GetStatus = [](const APlayerController* Controller)
+    {
+        const auto* Player = Cast<ACoopRPGPlayerController>(Controller);
+        if (!Player || !Player->GetPawn())
+        {
+            return ECoopRPGReadyStatus::Disconnected;
+        }
+        return Player->IsRoundReady() ? ECoopRPGReadyStatus::Ready : ECoopRPGReadyStatus::Waiting;
+    };
+    State.SetReadySlots({GetStatus(PlayerSlots[0].Get()), GetStatus(PlayerSlots[1].Get())});
 }
 
 FString ACoopRPGGameMode::GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId)

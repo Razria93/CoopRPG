@@ -5,6 +5,9 @@
 #include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGLootHUD.generated.h"
 
+class ACoopRPGGameState;
+class ACoopRPGPlayerController;
+
 UCLASS()
 class COOPRPG_API ACoopRPGLootHUD : public AHUD
 {
@@ -29,6 +32,10 @@ private:
     void DrawGameplayFeedback();
     void DrawWorldLabel(const FVector& Location, const FString& Text, const FLinearColor& Color,
         FVector2D Offset = FVector2D::ZeroVector, int32 ItemRow = INDEX_NONE);
+
+    void DrawRoundWaiting(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, int32 Stage);
+    void DrawRoundResult(const ACoopRPGGameState& State, ACoopRPGPlayerController& Controller, int32 Stage);
+    void DrawExtractionStatus(const ACoopRPGGameState& State, float HintY);
 
     TArray<FFeedbackEntry> FeedbackEntries;
 };

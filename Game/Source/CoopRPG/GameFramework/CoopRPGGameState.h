@@ -49,6 +49,26 @@ struct FCoopRPGRoundStatus
     int32 TeamScore = 0;
 };
 
+UENUM()
+enum class ECoopRPGReadyStatus : uint8
+{
+    Disconnected,
+    Waiting,
+    Ready
+};
+
+USTRUCT()
+struct FCoopRPGReadySlots
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    ECoopRPGReadyStatus PlayerOne = ECoopRPGReadyStatus::Disconnected;
+
+    UPROPERTY()
+    ECoopRPGReadyStatus PlayerTwo = ECoopRPGReadyStatus::Disconnected;
+};
+
 UCLASS()
 class COOPRPG_API ACoopRPGGameState : public AGameStateBase
 {
@@ -62,6 +82,7 @@ public:
 
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
+    void SetReadySlots(const FCoopRPGReadySlots& Slots);
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);
     void EvaluateRound(bool bDisconnected, bool bDeath, bool bBothInside);
@@ -78,6 +99,7 @@ public:
     int32 GetTeamScore() const { return RoundStatus.TeamScore; }
     ACoopRPGEnemyLoot* GetEnemyLoot() const { return EnemyLoot.Get(); }
     int32 GetTeamLootCount() const { return TeamLootCount; }
+    const FCoopRPGReadySlots& GetReadySlots() const { return ReadySlots; }
 
 private:
     friend class UCoopRPGCombatProbeComponent;
@@ -90,6 +112,9 @@ private:
     UFUNCTION()
     void OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousStatus);
 
+    UFUNCTION()
+    void OnRep_ReadySlots();
+
 private:
     UPROPERTY(Replicated)
     TObjectPtr<ACoopRPGSharedChest> SharedChest;
@@ -99,6 +124,9 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_RoundStatus)
     FCoopRPGRoundStatus RoundStatus;
+
+    UPROPERTY(ReplicatedUsing = OnRep_ReadySlots)
+    FCoopRPGReadySlots ReadySlots;
 
     UPROPERTY(Replicated)
     TObjectPtr<ACoopRPGExtractionZone> ExtractionZone;
