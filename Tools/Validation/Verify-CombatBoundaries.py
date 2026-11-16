@@ -34,8 +34,9 @@ if not meta['serverProbeEnabled']:
     (root/'disabled-result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
     print(json.dumps({k:v for k,v in result.items() if k!='results'},ensure_ascii=False))
     sys.exit(bool(failures))
-approvals=events('server',r'AttackApproved Attacker=(?P<actor>\S+) Target=(?P<target>\S+) Distance=(?P<distance>[\d.]+) Range=250.00 HP=(?P<before>[\d.]+)->(?P<after>[\d.]+) Stamina=(?P<costbefore>[\d.]+)->(?P<costafter>[\d.]+)')
+approvals=events('server',r'AttackApproved Attacker=(?P<actor>\S+) Target=(?P<target>\S+) Distance=(?P<distance>[\d.]+) Range=250.00 HP=(?P<before>[\d.]+)->(?P<after>[\d.]+)(?: Stamina=(?P<costbefore>[\d.]+)->(?P<costafter>[\d.]+))?')
 rejections=events('server',r'AttackRejected Attacker=(?P<actor>\S+) Reason=(?P<reason>\S+)')
+attack_starts=events('server',r'AttackStarted Attacker=(?P<actor>\S+) Target=\S+ Windup=[\d.]+(?: Stamina=(?P<costbefore>[\d.]+)->(?P<costafter>[\d.]+))?')
 rolemap={};delays=[]
 expected={'CostBefore':(100,9,0),'CostAfter':(100,9,0),'Boundary':(90,0,0),'CooldownDuring':(90,90,1),'CooldownExpired':(90,90,0),'Reuse':(80,80,1),'NormalThree':(70,70,0),'Independent':(60,80,0)}
 for role in ['a','b']:
@@ -58,7 +59,7 @@ for role in ['a','b']:
         check(role+' no cost-stage approval',not any(cost_before[0]['index']<e['index']<cost_after[0]['index'] for e in approvals))
     own=[a for a in approvals if a['actor']==actor]
     check(role+' eight approvals',len(own)==8,len(own))
-    check(role+' costs only on approval',all(float(a['costbefore'])-float(a['costafter'])==10 and float(a['before'])-float(a['after'])==10 and float(a['distance'])<=250 for a in own))
+    check(role+' ten damage per valid hit',all(float(a['before'])-float(a['after'])==10 and float(a['distance'])<=250 for a in own))
     check(role+' ten input presses',len(events(role,'AttackInput Actor='))==10)
     dispatch=events(role,r'AttackDispatch Actor=\S+ Submitted=(?P<submitted>[01])')
     check(role+' eight dispatches and two local blocks',sum(d['submitted']=='1' for d in dispatch)==8 and sum(d['submitted']=='0' for d in dispatch)==2)
@@ -68,9 +69,19 @@ for role in ['a','b']:
     check(role+' twenty outgoing GAS requests',len(events(role,r'::CallServerTryActivateAbility '))==20)
     stamina=events(role,r'StaminaReplicated Actor=(?P<actor>\S+) Before=(?P<before>[\d.]+) After=(?P<after>[\d.]+)')
     check(role+' stamina replication owner only',all(e['actor']==owner for e in stamina if e['before']!=e['after']))
-    for a in own:
-        match=[e for e in stamina if e['before']==a['costbefore'] and e['after']==a['costafter'] and 0<=e['time']-a['time']<=3]
-        check(f'{role} cost replicated at {a["index"]}',bool(match))
+    # This scenario has no cancels or misses; match ordered events per Pawn.
+    # Older logs carry the cost fields on the hit event.
+    committed = [event for event in attack_starts if event['actor'] == actor] if attack_starts else own
+    check(role+' each approved hit has one commit',len(committed)==len(own))
+    previous_hit = -1
+    for began, a in zip(committed, own):
+        check(f'{role} commit in activation window for hit {a["index"]}',previous_hit<began['index']<=a['index'])
+        previous_hit = a['index']
+        cost = began if began['costbefore'] is not None else a
+        before, after = cost['costbefore'], cost['costafter']
+        check(f'{role} cost ten at {began["index"]}', before is not None and after is not None and float(before)-float(after)==10)
+        match=[e for e in stamina if e['before']==before and e['after']==after and 0<=e['time']-began['time']<=3]
+        check(f'{role} cost replicated at {began["index"]}',bool(match))
     health=events(role,r'HealthReplicated Actor=(?P<actor>\S+) Before=(?P<before>[\d.]+) After=(?P<after>[\d.]+)')
     for a in approvals:
         match=[e for e in health if e['before']==a['before'] and e['after']==a['after'] and 0<=e['time']-a['time']<=3]
