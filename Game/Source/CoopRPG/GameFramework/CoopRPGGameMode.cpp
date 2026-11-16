@@ -10,7 +10,22 @@
 #include "CoopRPGPlayerController.h"
 
 #include "Engine/World.h"
+#include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundTravel, Log, All);
+
+namespace
+{
+    constexpr TCHAR FirstMapPackage[] = TEXT("/Game/Maps/L_Movement");
+    constexpr TCHAR SecondMapPackage[] = TEXT("/Game/Maps/L_Movement_Round2");
+    constexpr double ResultDisplaySeconds = 3.0;
+
+    FString GetNextRoundMap(const FString& CurrentMap)
+    {
+        return CurrentMap.EndsWith(TEXT("L_Movement_Round2")) ? FirstMapPackage : SecondMapPackage;
+    }
+}
 
 ACoopRPGGameMode::ACoopRPGGameMode()
 {
@@ -68,6 +83,32 @@ void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
     State->SetRoundPlaying(bAllReady);
 }
 
+void ACoopRPGGameMode::AcknowledgeRoundResult(ACoopRPGPlayerController* Player, FGuid RoundId)
+{
+    const auto* State = GetGameState<ACoopRPGGameState>();
+    if (!bEnemyCombat || !State || !State->HasRoundResult() || State->GetRoundId() != RoundId
+        || bParticipantDisconnected || bTravelAttempted || !IsRoundParticipant(Player))
+    {
+        return;
+    }
+
+    const int32 PreviousCount = ResultAcknowledgements.Num();
+    ResultAcknowledgements.AddUnique(Player);
+    const int32 Count = ResultAcknowledgements.Num();
+    if (Count == PreviousCount)
+    {
+        return;
+    }
+
+    const APlayerState* PlayerState = Player->GetPlayerState<APlayerState>();
+    UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("RoundResultAcknowledged Round=%s PlayerId=%d Count=%d"),
+        *RoundId.ToString(), PlayerState ? PlayerState->GetPlayerId() : INDEX_NONE, Count);
+    if (Count == 2)
+    {
+        NextTravelTime = State->GetServerWorldTimeSeconds() + ResultDisplaySeconds;
+    }
+}
+
 void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
     Super::InitGame(MapName, Options, ErrorMessage);
@@ -77,7 +118,8 @@ void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, 
 void ACoopRPGGameMode::BeginPlay()
 {
     Super::BeginPlay();
-    if (GetWorld()->GetMapName().EndsWith(TEXT("L_Movement")))
+    const FString MapName = UGameplayStatics::GetCurrentLevelName(this);
+    if (MapName == TEXT("L_Movement") || MapName == TEXT("L_Movement_Round2"))
     {
         ACoopRPGExtractionZone* Zone = nullptr;
         if (bEnemyCombat)
@@ -102,7 +144,16 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
     Super::Tick(DeltaSeconds);
 
     auto* State = GetGameState<ACoopRPGGameState>();
-    if (!bEnemyCombat || !State || !State->IsRoundPlaying())
+    if (!bEnemyCombat || !State)
+    {
+        return;
+    }
+    if (State->HasRoundResult())
+    {
+        AdvanceRoundIfReady(*State);
+        return;
+    }
+    if (!State->IsRoundPlaying())
     {
         return;
     }
@@ -133,11 +184,39 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
 void ACoopRPGGameMode::Logout(AController* Exiting)
 {
     const auto* State = GetGameState<ACoopRPGGameState>();
-    if (bEnemyCombat && State && State->IsRoundPlaying()
-        && RoundPlayers.ContainsByPredicate([Exiting](const auto& Player) { return Player.Get() == Exiting; }))
+    if (bEnemyCombat && State && (State->IsRoundPlaying() || State->HasRoundResult())
+        && IsRoundParticipant(Exiting))
     {
         bParticipantDisconnected = true;
     }
     Super::Logout(Exiting);
     UpdateLootRoundPhase(Exiting);
+}
+
+bool ACoopRPGGameMode::IsRoundParticipant(const AController* Controller) const
+{
+    return Controller && RoundPlayers.ContainsByPredicate(
+        [Controller](const auto& Player) { return Player.Get() == Controller; });
+}
+
+void ACoopRPGGameMode::AdvanceRoundIfReady(const ACoopRPGGameState& State)
+{
+    if (bTravelAttempted || bParticipantDisconnected || NextTravelTime <= 0.0
+        || State.GetRoundEndReason() == ECoopRPGRoundEndReason::Disconnected
+        || State.GetServerWorldTimeSeconds() < NextTravelTime
+        || RoundPlayers.ContainsByPredicate([](const auto& Player) { return !Player.IsValid(); }))
+    {
+        return;
+    }
+
+    bTravelAttempted = true;
+    const FString Destination = GetNextRoundMap(UGameplayStatics::GetCurrentLevelName(this));
+    const FString URL = Destination + TEXT("?EnemyCombat?NoSeamlessTravel");
+    UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("RoundTravelStarted Round=%s TargetMap=%s"),
+        *State.GetRoundId().ToString(), *Destination);
+    if (!GetWorld()->ServerTravel(URL, true))
+    {
+        UE_LOG(LogCoopRPGRoundTravel, Error, TEXT("RoundTravelFailed Round=%s TargetMap=%s"),
+            *State.GetRoundId().ToString(), *Destination);
+    }
 }

@@ -6,6 +6,7 @@
 
 class ACoopRPGAttackTarget;
 class ACoopRPGEnemy;
+class ACoopRPGGameState;
 class ACoopRPGPlayerController;
 
 UCLASS()
@@ -19,12 +20,17 @@ public:
     ACoopRPGAttackTarget* GetAttackTarget() const;
     AActor* GetMeleeTarget() const;
     void UpdateLootRoundPhase(const AController* Leaving = nullptr);
+    void AcknowledgeRoundResult(ACoopRPGPlayerController* Player, FGuid RoundId);
 
 protected:
     virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
     virtual void Logout(AController* Exiting) override;
+
+private:
+    bool IsRoundParticipant(const AController* Controller) const;
+    void AdvanceRoundIfReady(const ACoopRPGGameState& State);
 
 private:
     UPROPERTY()
@@ -34,6 +40,9 @@ private:
     TObjectPtr<ACoopRPGEnemy> Enemy;
 
     TArray<TWeakObjectPtr<ACoopRPGPlayerController>> RoundPlayers;
+    TArray<TWeakObjectPtr<ACoopRPGPlayerController>> ResultAcknowledgements;
+    double NextTravelTime = 0.0;
+    bool bTravelAttempted = false;
     bool bParticipantDisconnected = false;
     bool bEnemyCombat = false;
 };

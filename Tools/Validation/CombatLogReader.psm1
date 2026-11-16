@@ -236,6 +236,16 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         '^TeamLootCountReplicated$' {
             $label='팀 전리품 수량 복제';$detail="$($fields['Before']) → $($fields['After'])";$stage='복제 관찰';break
         }
+        '^RoundResultDisplayed$' {$label='라운드 결과 HUD 표시';$detail="라운드 $($fields['Round'])";break}
+        '^RoundResultAcknowledged$' {
+            $label='결과 표시 확인 수신';$detail="PlayerId $($fields['PlayerId']) · $($fields['Count'])/2";$stage='RPC 수신';$outcome='수신';break
+        }
+        '^RoundTravelStarted$' {
+            $label='다음 맵 이동 시작';$detail=[string]$fields['TargetMap'];$stage='서버 판정';break
+        }
+        '^RoundTravelFailed$' {
+            $label='다음 맵 이동 요청 실패';$detail=[string]$fields['TargetMap'];$stage='서버 판정';$outcome='오류';break
+        }
         '^RoundClockStarted$' {$label='라운드 타이머 시작';$detail="$($fields['Duration'])초";break}
         '^RoundResult(Replicated)?$' {
             $reason=[string]$fields['Reason']
