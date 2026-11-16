@@ -18,6 +18,7 @@ public:
     void Snapshot(const FString& Label);
     void SetVitals(float TargetHealth, float AttackerHealth);
     void ConfirmTwice();
+    void PositionForEnemyLoot(bool bNear);
 
 protected:
     virtual void BeginPlay() override;
@@ -35,6 +36,9 @@ private:
 
     UFUNCTION(Server, Reliable)
     void ServerConfirmTwice();
+
+    UFUNCTION(Server, Reliable)
+    void ServerPositionForEnemyLoot(bool bNear);
 
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);
     void WriteSnapshot(const FString& Label) const;
