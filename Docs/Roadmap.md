@@ -1,6 +1,6 @@
 # 진행 계획과 현재 상태
 
-갱신: 2026-11-15. 작업 상태·남은 확인/선택/검증 사항·결정의 원본. 목적·규칙은 [Project](Project.md), 실제 시험 결과는 [Validation](Validation/Index.md)에 둔다.
+갱신: 2026-11-16. 작업 상태·남은 확인/선택/검증 사항·결정의 원본. 목적·규칙은 [Project](Project.md), 실제 시험 결과는 [Validation](Validation/Index.md)에 둔다.
 
 ## 문서 사용 기준
 
@@ -18,7 +18,7 @@
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 11월5일 운영 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 현재 기능 결과는 [V02 비용·쿨다운 카드](#v02-cost-cooldown-card)와 실제 시험을 따른다. 독립 패키지 검증은 통과했으며 사용자 수동 재현·Editor 갱신과 V02/V03 잔여가 남았다. 커밋은 보류다. 사용자가 정한 7단계 목표와 상자·전리품 변경은 [구현 순서](#mvp-implementation-order)에서 확인한다.
+- 현재 기능 결과는 [V02·V03 현행 카드](#v03-current-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -64,12 +64,12 @@
 - **V02 착수 조건 충족** · 엔진 의존 작업을 포함한 `CoopRPGEditor` 빌드가 59분 50초에 완료됐다. 같은 조건의 재실행에서 추가 작업 0개를 확인했고, 탐색기 더블클릭으로 새 DLL이 로드된 Editor에서 `L_Movement`를 열었다. [빌드와 기동 검증](Validation/Environment.md#editor-build-with-engine-dependencies)
 - **V02 첫 단타 통과** · 독립 패키지의 전용 서버와 두 클라이언트에서 요청자별 사거리 거절·승인과 HP·비용 복제를 확인했다. [시험 결과](Validation/Index.md#v02-basic-attack)
 - **V02 공격 입력 통합 통과** · 이동과 공격 키를 `IMC_Player`에 모았다. 전용 서버와 클라이언트 2개에서 각 Pawn 이동, 클릭당 GAS 요청 1회, 사거리 거절·승인을 재확인했다. [11/15 패키지 확인](Validation/Index.md#v02-attack-input-regression)
-- **V02 비용·쿨다운 결과** · [독립 패키지 시험](Validation/Index.md#v02-cost-cooldown)을 통과했다. Editor는 사용자 선택으로 재빌드를 보류했고, 직접 재현과 다음 범위는 [현행 카드](#v02-cost-cooldown-card)를 따른다. 아래 운영 보완 카드의 실행 대기 설명은 당시 이력이다.
+- **V02 비용·쿨다운 결과** · [독립 패키지 시험](Validation/Index.md#v02-cost-cooldown)을 통과했다. Editor는 사용자 선택으로 재빌드를 보류했고, 직접 재현과 다음 범위는 [V02·V03 현행 카드](#v03-current-card)를 따른다. 아래 운영 보완 카드의 실행 대기 설명은 당시 이력이다.
 
 <a id="work-planning-card-20261115"></a>
 
 <a id="v02-cost-cooldown-card"></a>
-### 현재 작업 · V02 비용·쿨다운 · 2026-11-15
+### 이전 작업 · V02 비용·쿨다운 · 2026-11-15
 
 - **채택:** 사용자가 2초 시험 쿨다운과 비용 부족·서버 거절 검증을 요청했다. Editor 엔진 의존 갱신 범위·45~90분 추정을 안내한 뒤, 사용자는 독립 패키지 우선·Editor 재빌드 보류를 선택했다.
 - **결과:** 비용9/10 경계, 요청자별 비용·쿨다운 서버 거절5회, 로컬 차단, 만료 후 재사용·플레이어 독립성·정상3회와 기존 이동·입력·거리 회귀 통과. [실제 결과와 실패 보존](Validation/Index.md#v02-cost-cooldown).
@@ -81,7 +81,14 @@
 - **검증 자료 저장:** 사용자 요청으로 PNG 창 캡처·상태 JSON, 현재 필터/출처의 XLSX 내보내기를 추가했다. 출처 중복·회색 빈칸 제외와 표시 멈춤의 시점 구분을 검증했다. [결과](Validation/Index.md#v02-viewer-export)·[사용법](Validation/LogViewer.md#export). 게임 구현·사람 확인 상태는 바뀌지 않았다.
 - **로그 요청자·Actor 역할 확인:** 새 전용 Server·Client 패키지의 교대 공격 4건에서 서버 PlayerId와 클라이언트 표시가 일치했다. 자기 Pawn·표적의 LocalRole과 기존 로그 재생도 확인했다. 개별 요청 ID는 설계 상태다. [실행 근거](Validation/Index.md#v02-viewer-player-attribution)
 - **남은 확인:** 사용자 [직접 재현](Validation/Index.md#v02-cost-cooldown-manual), 새 Editor/PIE 빌드·시험. 두 항목은 독립 패키지 통과와 구분한다. 기존 미커밋 운영 변경을 보존했으며 커밋은 하지 않았다.
-- **다음:** V02의 무효 대상·중복 접촉·상태 거절과 거리 T1 잔여를 실제 공격 수명에 맞춰 정리한 뒤 V03 취소·재실행으로 진행한다. 상자·적 콘텐츠 착수와 G2 전체 통과는 아직 보류다. 7단계 완료일은 남은 구현·빌드·재검증을 반영해 다시 산정한다.
+- **당시 다음 후보:** V02의 무효 대상·중복 접촉·상태 거절과 거리 T1 잔여를 실제 공격 수명에 맞춰 정리한 뒤 V03 취소·재실행으로 진행한다. 상자·적 콘텐츠 착수와 G2 전체 통과는 아직 보류다. 7단계 완료일은 남은 구현·빌드·재검증을 반영해 다시 산정한다.
+
+<a id="v03-current-card"></a>
+### 현재 작업 · V02 경계와 V03 명시 취소 · 2026-11-16
+
+- **완료 범위:** 두 Client의 사거리·무효 표적·공격자 상태 거절 및 V03의 피해 확정 전 취소·재실행을 새 독립 패키지에서 검증했다. 실제 충돌 기반 중복 접촉은 타격 기능 통합 시험에 남긴다. [실행 근거](Validation/Index.md#v03-attack-lifetime)
+- **로그 보완:** [취소 RPC 호출·수신 및 비용·피해 표시](Validation/LogViewer.md#cancel-rpc-before-after)를 갱신하고 [이전 로그와 새 패키지](Validation/Index.md#v03-telemetry-result)를 검증했다. [사용자의 새 패키지 확인](Validation/Index.md#v03-telemetry-user-result)도 기록했다.
+- **다음:** [사용자가 두 Client에서 취소와 재공격을 재현했다](Validation/Index.md#v03-user-manual-result). 공용 상자의 동시 열람과 마지막 회복약 단일 지급을 다음 게임 기능으로 연결한다. 적 피격·사망 및 라운드가 들어올 때 취소 경합과 상태 정리를 확인한다. [7단계 구현 순서](#mvp-implementation-order)
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬
 

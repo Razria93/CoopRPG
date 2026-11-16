@@ -2,9 +2,9 @@
 
 CoopRPG · 2026-11-15 · UE 5.8.4 · V02 학습·구현 기록
 
-**왼쪽 클릭 한 번을 서버가 승인하면, 공격자의 스태미나 10과 고정 표적의 체력 10이 각각 감소한다.** 이 문서는 입력부터 서버 판정·효과 적용·속성 복제까지를 실제 코드에 연결해 설명한다. Unreal의 Actor·Component와 C++ 함수 호출에 익숙하고, GAS와 CoopRPG는 처음 접하는 독자를 대상으로 한다.
+**서버가 공격을 Commit하면 스태미나 10이 줄고, 타격을 확정하면 표적 체력이 10 줄어든다.** 이 문서는 입력부터 서버 판정·효과 적용·속성 복제까지를 실제 코드에 연결해 설명한다. Unreal의 Actor·Component와 C++ 함수 호출에 익숙하고, GAS와 CoopRPG는 처음 접하는 독자를 대상으로 한다.
 
-현재 대상은 `L_Movement`의 **고정 표적 단타**다. 서버는 자신이 보유한 표적과 좌표로 공격을 판단한다. 클라이언트가 피해량이나 표적의 최종 체력을 지정하는 별도 RPC는 만들지 않았다. 현재는 비용 부족과 2초 쿨다운의 거절·재사용까지 포함한다. 무기 충돌·장착·피격 취소와 완성된 전투 시스템은 후속 범위다.
+현재 대상은 `L_Movement`의 **고정 표적 단타**다. 서버는 자신이 보유한 표적과 좌표로 공격을 판단한다. 클라이언트가 피해량이나 표적의 최종 체력을 지정하는 별도 RPC는 만들지 않았다. V02의 비용·쿨다운과 즉시 단타 흐름을 먼저 설명한다. 현재 코드의 명시 취소와 준비 구간은 아래 V03 절을 함께 참고한다.
 
 - **ASC · Ability System Component** — 능력을 등록하고 활성화 요청·GE 적용·속성 변경 통지를 연결한다. 공격자와 표적이 각각 갖는다.
 - **GA · Gameplay Ability** — 공격의 검사 → 비용 확정 → 피해 적용 → 종료 순서를 정의한다. 본체는 서버에서 실행한다.
@@ -23,7 +23,8 @@ CoopRPG · 2026-11-15 · UE 5.8.4 · V02 학습·구현 기록
 4. [GE 정의·Modifier·Spec 적용](#effect-definition)
 5. [AttributeSet의 매크로와 복제](#attribute-replication)
 6. [실제 검증 범위와 로그 읽기](#verification-scope)
-7. [코드 읽는 순서와 근거](#engine-source)
+7. [V03의 준비·피해 확정·취소](#attack-cancellation)
+8. [코드 읽는 순서와 근거](#engine-source)
 
 <a id="attack-flow"></a>
 ## 1. 한 번의 클릭은 어디를 거치는가
@@ -387,13 +388,20 @@ Aggregator는 속성의 기준값과 Modifier를 평가하는 GAS 내부 계산 
 
 **근거** · [수동 실행과 로그 필터](../Validation/Index.md#v02-manual-attack-log) · [로그 문맥 구현](../../Game/Source/CoopRPG/Debug/CoopRPGLogContext.cpp)
 
-### 6-3. 다음 검증에서 분리할 경계
+### 6-3. 경계 검증을 분리하는 이유
 
 비용 부족과 쿨다운은 로컬 차단·실제 서버 거절을 나눠 확인했다. 개발용 `Coop.Test.Request`는 소유 클라이언트에서 기존 GAS 활성화 RPC를 보내며 서버 검사를 끄지 않는다. 표적 사망이 비용 시험을 가리지 않도록 `Coop.Test.Prepare`로 표적을 살린 채 자원만9로 만든다. 두 명이 동시에 초기화하면 공용 표적 결과가 섞이므로 시험 준비를 순서대로 한다. [직접 재현 순서](../Validation/Index.md#v02-cost-cooldown-manual)를 따른다.
 
-무효 표적·중복 접촉·상태 거절의 잔여 시험, 피격 취소·재실행, 지연·손실과 별도 PC 접속은 남아 있다. **이번 비용·쿨다운 통과와 V02/G2 전체 통과는 구분한다.**
+V03에서는 피해 확정 전 명시 취소와 재공격을 검증했다. 실제 물리 접촉 중복, 피격 자동 취소와 라운드 연계는 별도 확인 단계다.
 
 **근거** · [다음 작업](../Roadmap.md#next-work) · [V02 등 단계별 통과 기준](../Validation/Index.md#active-tests) · [계획한 반복·네트워크 조건](../Validation/Index.md#test-conditions)
+
+<a id="attack-cancellation"></a>
+## 7. V03의 준비·피해 확정·취소
+
+서버의 `CommitAbility`가 비용과 쿨다운을 적용한 뒤 0.65초를 기다린다. `ResolveHit`는 해당 공격의 대기 상태를 소비하고 표적·생존·사거리를 다시 검사한다. 조건이 유지될 때 표적 ASC에 피해 GE를 적용한다. 오른쪽 클릭으로 접수한 취소는 활성 단타의 `CancelAbilityHandle`을 거쳐 `EndAbility`에서 타이머와 표적 참조를 정리한다. 취소가 피해 확정 전에 수락되면 피해가 없으며 이미 적용한 비용과 쿨다운은 유지한다.
+
+**근거** · [서버 취소와 피해 확정 검증](../Validation/Index.md#v03-attack-lifetime) · [현재 단타 코드](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp)
 
 <a id="engine-source"></a>
 ## 근거 및 더 읽기

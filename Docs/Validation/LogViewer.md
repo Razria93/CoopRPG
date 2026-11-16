@@ -96,7 +96,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File "C:/CoopRPG/Tools/V
 | 최신 따라가기 / 최신으로 | 과거 행을 클릭·스크롤하면 따라가기를 해제. `최신으로`는 일시정지를 해제하고 마지막 행으로 이동 |
 | 하단 상태 | 프로세스 실행/종료와 파일 대기/읽기 실패를 따로 표시. 마지막 사건 시각과 생략·대기 건수를 확인 |
 
-`공격 흐름`은 `공격 입력 감지`, `GAS 서버 RPC 호출`, `GAS 활성화 함수 반환`, `서버 승인/거절`, `체력 복제`를 모아 보여준다. `결과 → 호출`로 엔진의 호출 행만 볼 수 있다. 서버 판정과 함수 반환은 각 프로세스가 기록한 시각에 표시되며, 함수 반환 행이 서버 판정 뒤에 나올 수 있다. 로컬 차단은 클라이언트에서 확인하고, 개별 요청 관계는 상세에서 미계측으로 표시한다.
+`공격 흐름`은 `공격 입력 감지`, `GAS 서버 RPC 호출`, `GAS 활성화 함수 반환`, `비용 확정`, `취소 RPC 호출/수신`, `타격 확정`, `서버 거절`, `서버 취소 승인`, `피해 확정 실패`, `스태미나/체력 복제`를 모아 보여준다. `결과 → 취소` 또는 `빗나감`으로 좁힐 수 있다. [V03 수동 재현](Index.md#v03-attack-lifetime)을 참고한다. `결과 → 호출`은 GAS 활성화·취소 RPC 호출을, `결과 → 수신`은 서버 취소 RPC 수신을 보여준다. 수동 런처는 클라이언트와 서버에서 `LogCoopRPGInput Verbose`를 활성화한다. 서버 판정과 함수 반환은 각 프로세스가 기록한 시각에 표시되며, 함수 반환 행이 서버 판정 뒤에 나올 수 있다. 로컬 차단은 클라이언트에서 확인하고, 개별 요청 관계는 상세에서 미계측으로 표시한다.
 
 색은 결과 열의 보조 표식이다. 승인은 초록, 거절은 주황, 오류는 붉은색, 경고는 노랑이며 항상 글자와 함께 표시한다. 사건 종류가 이미 알려져 있어도 원문의 Warning/Error/Fatal 수준을 요약 앞에 표시하고 색·오류 필터에 우선 반영한다. `포커스 클릭`은 창 전환 보호로 소비된 입력이다. 고장이나 서버 거절로 표시하지 않는다. `CommitFailed`는 원문에 추가 사유가 없으면 세부 원인 미확인으로 남긴다.
 
@@ -238,6 +238,21 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 ```
 
 **근거** · [교대 입력과 상세창 검증](Index.md#v02-viewer-player-attribution) · [서버 요청자 계측](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [Actor 역할 계측](../../Game/Source/CoopRPG/Debug/CoopRPGLogContext.cpp)
+
+<a id="cancel-rpc-before-after"></a>
+## V03 취소 RPC와 비용·피해 Before / After
+
+사용자는 두 클라이언트에서 취소와 적중을 재현하고, 취소 요청의 출처와 비용·피해 처리 시점이 보이도록 제안했다. AI는 호출·수신 계측, 화면과 판정 스크립트를 갱신했다.
+
+| 관찰 지점 | Before · 사용자 수동 패키지 | After · 새 패키지 |
+|---|---|---|
+| 취소 | 서버 취소 승인 행이 있었고 호출·수신은 미계측이었다. | `취소 RPC 호출` → `취소 RPC 수신` → `서버 취소 승인` 또는 `취소 요청 무시`. 서버 수신·판정 상세에 요청자 `PlayerId`를 표시한다. |
+| 비용 | 스태미나는 소유자에게 먼저 복제됐고 서버에서는 적중 행에 함께 요약됐다. | `비용 확정` 행에 Commit 전후 공격자 스태미나를 표시하고 피해 확정 대기 시간은 상세에 둔다. 취소 뒤에도 비용과 쿨다운은 유지된다. |
+| 피해 | 서버 승인 행에 표적 HP와 공격자 스태미나가 함께 보였다. | `타격 확정`은 표적 HP를 요약한다. 클라이언트는 스태미나·체력 복제 행으로 각각 확인한다. |
+
+원본 세 로그와 사용자의 PNG·JSON·XLSX를 로컬 `Artifacts/Validation/v03-combat-telemetry-20261116-110853/before/manual-20261116-105444-048/`에 보존하고 SHA-256을 남겼다. `replay-legacy-02/`는 같은 로그를 새 뷰어로 다시 재생한 화면이다. 타격 상세에 이전 형식의 Commit 비용과 원문을 보인다. `replay-after-final/`은 새 패키지 자동 실행이다. 각 폴더의 `replay-result.json`에 선택 구간과 PNG·JSON·XLSX 경로를 기록했다.
+
+**근거** · [기존 수동 실행](Index.md#v03-user-manual-result) · [새 패키지 자동 검증](Index.md#v03-telemetry-result) · [새 패키지 사용자 직접 확인](Index.md#v03-telemetry-user-result)
 
 <a id="logging-contract"></a>
 ## 로그 표시 규칙

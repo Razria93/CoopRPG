@@ -891,6 +891,76 @@ UE 소스 엔진 `C:/UE/5.8.4`와 SDK `10.0.26100.0`으로 Win64 Development Ser
 
 **근거** · [상단 조작 방법](LogViewer.md#reading) · [직전 라벨과 그룹 검증](#v02-viewer-toolbar)
 
+<a id="v03-attack-lifetime"></a>
+### V02 거절 경계와 V03 공격 수명 · 2026-11-16
+
+기준 HEAD `9a7f8cd`의 깨끗한 작업 트리에서 시작했다. 이전 사거리 거절과 HP 0 표적 거절 기록을 보존하고, 공격의 피해 확정 시점을 새로 분리한 독립 패키지에서 같은 조건을 재검증했다. `L_Movement`의 전용 서버 1개와 Win64 Development Client 2개, 같은 PC의 루프백 환경이다. 이번 동작의 0.65초 준비와 오른쪽 취소 키는 구현 시험값이다.
+
+| 시험 | 실제 서버 처리와 상태 |
+|---|---|
+| Commit 전 거절 | 두 PlayerId(257, 256)가 각각 사거리 밖·HP 0 표적·HP 0 공격자로 5회씩 요청했다. 총 30건이 `OutOfRange`, `InvalidTarget`, `AttackerDead`로 거절됐다. 거절 구간에서 HP·스태미나 변경과 쿨다운 발동이 없었다. |
+| 피해 확정 전 취소 | 각 요청자가 5번씩 발동한 뒤 오른쪽 클릭으로 취소했다. 승인된 취소 10건 모두 피해 0이었다. 비용 10과 활성 쿨다운은 유지됐으며 만료 뒤 두 요청자가 다시 공격해 한 번씩 적중했다. 피해 확정 뒤 취소 입력은 무시됐다. |
+| 피해 확정 중복·재확인 | 개발 시험 명령으로 같은 공격의 피해 확정 콜백을 2번 요청하는 시험을 요청자별 5회 수행했다. 매회 비용과 피해가 한 번만 적용됐다. 준비 중 표적 HP가 0으로 바뀐 시험에서는 서버가 추가 피해를 적용하지 않고 비용과 쿨다운을 유지했다. |
+| 복제와 회귀 | 양쪽 클라이언트에서 정상 피해 12건을 확인했다. 공격 수명 판정 293개와 비용·쿨다운 회귀 133개가 통과했다. 회귀 판정은 Commit 로그를 기준으로 비용 복제를 대조했다. 로그 뷰어의 데이터·병렬 UI 검사도 각각 48개를 통과했다. |
+
+첫 Server 빌드는 `UEnhancedInputComponent::BindKey`가 삭제된 오버로드여서 중단됐다. `UInputComponent`의 키 바인딩으로 변경한 뒤 기존 엔진 산출물을 재사용해 Server·Client를 빌드했다. 패키징에서 기존 Cook을 재사용했다. 실행 원본과 판정 JSON은 로컬 `Artifacts/Validation/v03-attack-lifetime-20261116-101728/` 아래 `lifetime-01/`·`regression-lifetime/`에 있다. 빌드와 Stage 시간은 `build-02/`·`package/`의 JSON을 따른다.
+
+**확인 범위** · 중복 피해는 같은 공격의 피해 확정 콜백을 재전달한 결과다. 충돌 기반 실제 중복 접촉·피격 자동 취소·라운드 종료는 각각의 기능 통합 때 시험한다. 사용자 직접 조작은 [수동 결과](#v03-user-manual-result)로 확인한다. 지연·손실·LAN은 이후 확인한다. 취소 RPC는 서버 수신 시점의 활성 단타를 대상으로 한다. 여러 공격에 걸쳐 지연된 취소가 도착하는 상황은 요청 단위 추적이 필요한 별도 시험이다.
+
+#### 사용자 직접 재현
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Validation/Start-CombatManual.ps1" -PackageRoot "C:/CoopRPG/Artifacts/Validation/v03-combat-telemetry-20261116-110853/Stage" -AlwaysOnTop
+```
+
+1. 표적에서 250cm 안으로 접근한다. 창 포커스용 첫 왼쪽 클릭을 마친 뒤 표적 근처에서 공격하고 바로 오른쪽 클릭한다.
+2. 요청한 클라이언트의 `취소 RPC 호출`과 서버의 같은 요청자 `취소 RPC 수신`·`서버 취소 승인`을 확인한다. 표적 HP가 그대로인지, 소유 클라이언트의 스태미나가 감소하고 쿨다운이 발생했는지 본다.
+3. 약 2초 뒤 같은 Pawn으로 공격하고 타격을 기다린다. 서버의 `AttackApproved`와 양쪽 클라이언트의 `HealthReplicated`에 나타난 동일 HP 감소를 확인한다. 다른 클라이언트에서도 같은 순서를 반복할 수 있다.
+
+**근거** · [공격 수명과 정리](../Architecture.md#gas-basic-attack) · [패키지 실행 하네스](../../Tools/Validation/Run-CombatLifetime.ps1) · [판정 스크립트](../../Tools/Validation/Verify-CombatLifetime.py)
+
+<a id="v03-user-manual-result"></a>
+#### 사용자 수동 검증 결과 · 2026-11-16
+
+사용자가 독립 Server·Client 2개에서 직접 조작하고 뷰어의 PNG·JSON·XLSX를 저장했다. 실행 ID는 `manual-20261116-105444-048`이다. AI가 같은 폴더의 원본 `server.log`·`a.log`·`b.log`를 비교했다.
+
+- Client A(PlayerId 256)는 피해 전 취소 3건과 적중 3건, Client B(PlayerId 257)는 취소 6건과 적중 4건이었다. 취소 9건의 서버 원문은 모두 `Damage=0 Committed=1`이고, 양쪽은 적중 7건의 표적 HP 변화(100→30)를 받았다. 스태미나 복제는 A에서 자기 공격 6건, B에서 자기 공격 10건이다.
+- 첫 A의 공격에서 소유자 스태미나는 10:55:48.063에 100→90으로 복제됐다. 서버는 10:55:48.291에 취소를 승인했고 표적 HP는 유지됐다. A의 다음 공격에서 스태미나 90→80 복제는 10:56:07.727, 서버 타격 확정은 10:56:08.348, 양쪽 표적 체력 100→90 복제는 10:56:08.391과 10:56:08.403이었다. 시각은 KST이며 요청 추적 ID는 미계측이다.
+- 이 수동 기록에서 피해 확정 뒤 취소 무시(`CancelIgnored`)는 관찰되지 않았다. 기존 자동 시험은 해당 경로를 통과했다. 취소 RPC는 구현되어 있고 기존 로그에는 클라이언트 호출과 서버 수신의 별도 행이 없다. 사용자가 비용과 피해의 시점·대상을 분리해서 표시할 것을 제안했다.
+
+**근거** · 로컬 `Artifacts/Validation/v03-attack-lifetime-20261116-101728/manual-20261116-105444-048/`의 세 원본 로그와 `Exports/` · [취소 RPC 구현](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [Commit과 타격 구현](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp)
+
+<a id="v03-telemetry-result"></a>
+#### 취소 RPC와 비용·피해 계측 검증 · 2026-11-16
+
+Win64 Development 서버·클라이언트를 같은 PC에서 별도 프로세스로 실행하고 기존 하네스로 입력을 주입했다. 원본 Cook을 재사용했다. 증분 빌드는 Server 42.99초·Client 41.88초, Stage는 Server 16.03초·Client 38.59초였다.
+
+| 시험 | 결과 |
+|---|---|
+| 공격 수명과 새 계측 | 두 요청자의 호출·수신을 대조하고 피해 확정 전 취소 5회씩, 만료 후 적중·늦은 취소 무시를 각각 1회 확인했다. Commit 행에는 스태미나, 타격 행에는 표적 HP가 찍혔다. 양쪽의 표적 HP 복제를 포함해 354개 판정을 통과했다. |
+| 비용·쿨다운과 이전 로그 | 새 패키지 149개 판정 통과. 이전 공격 수명 293개와 이전 비용·쿨다운 149개도 갱신한 판정기로 통과했다. |
+| 뷰어 | 파싱 51개·병렬 UI 48개·내보내기 25개 통과. 기존 수동 로그 14행과 새 패키지 로그 31행을 사례 구간으로 선택해 각각 PNG·JSON·XLSX로 저장했다. |
+
+로컬 `Artifacts/Validation/v03-combat-telemetry-20261116-110853/`의 `lifetime-new/`, `boundary-new/`, `legacy-verifier/`, `replay-legacy-02/`와 `replay-after-final/`에 실행 근거가 있다. 요청자와 시험 구간으로 기록을 대조했다. 개별 요청 ID와 패킷은 미계측이다. [새 패키지의 사용자 직접 재현](#v03-telemetry-user-result)을 함께 확인한다.
+
+**근거** · [Before / After](LogViewer.md#cancel-rpc-before-after) · [공격 수명 판정](../../Tools/Validation/Verify-CombatLifetime.py) · [비용·쿨다운 판정](../../Tools/Validation/Verify-CombatBoundaries.py)
+
+<a id="v03-telemetry-user-result"></a>
+#### 사용자 직접 확인 · 취소 RPC와 비용·피해 표시
+
+사용자가 새 패키지의 두 클라이언트를 조작하고 2026-11-16 11:26:58과 11:32:38(KST)에 PNG·JSON·XLSX를 저장했다. 실행 ID는 `manual-20261116-112404-560`이다. 마지막 PNG 저장 시각까지의 원본 세 로그를 대조했다.
+
+| 플레이어 | 취소 RPC 호출·수신 | 피해 전 취소 | 활성 공격이 없는 상태의 취소 무시 | 타격 |
+|---|---:|---:|---:|---:|
+| Client A · PlayerId 256 | 2 / 2 | 1 | 1 | 1 |
+| Client B · PlayerId 257 | 11 / 11 | 9 | 2 | 1 |
+
+취소 승인 10건은 `Damage=0 Committed=1`이었고, 비용 차감과 소유자 스태미나 복제는 A 2건·B 10건이었다. 두 번의 타격에서 두 클라이언트 모두 같은 표적 HP 변화(100→90→80)를 받았다. 취소 무시는 세 건 모두 `NoActiveAttack`으로 기록됐다. 서버 수신과 결과는 PlayerId·시각·플레이어별 사건 순으로 대조했다.
+
+A의 첫 공격에서 클라이언트 활성화 반환과 서버 비용 확정은 11:24:58.068에 기록됐다. 서버가 처리한 취소는 그 뒤인 11:24:58.468이었다. 다음 공격에서는 서버 비용 확정 11:25:01.349, 클라이언트 함수 반환 11:25:01.359, 타격 확정 11:25:02.005 순으로 기록됐다. 시각순 동률은 뷰어가 출처 ID로 정렬한다.
+
+**근거** · 로컬 `Artifacts/Validation/v03-combat-telemetry-20261116-110853/manual-20261116-112404-560/`의 `server.log`·`a.log`·`b.log`와 `Exports/` · [표시 비교](LogViewer.md#cancel-rpc-before-after)
+
 <a id="v02-cost-cooldown-manual"></a>
 ### 비용·쿨다운 직접 재현 · 독립 패키지
 
@@ -1070,8 +1140,8 @@ Git 제외 로컬 근거는 `Artifacts/Validation/work-planning-20261115-final/`
 | ID | 대상 | 현행 확인 결과 | 현재 결과 |
 |---|---|---|---|
 | V01 | 독립 실행·소유권 | 에디터 없이 Server1/클라이언트2 접속/이동, 자기 Pawn 조작, 서버 종료 감지·전체 재실행 | [자동 검증 통과](#v01-server-shutdown) · 새 프로세스 3회 접속·양방향 이동·서버 선종료 감지·정상 종료. [수동 1회](#v01-manual-result)에서 사용자가 이동 복제를 관찰했고 양쪽 연결 종료 로그를 확인함 |
-| V02 | GAS 단타·권한 | 정상/실제 서버 거절, 비용·쿨다운·대상·거리 검사, 공격당 중복 피해 없음, 양측 최종값 일치 | [두 클라이언트의 승인·거리 거절](#v02-basic-attack) · [공격 입력 통합 회귀](#v02-attack-input-regression) · [비용·쿨다운과 정상 반복](#v02-cost-cooldown) · V02 부분 통과, 무효 대상·중복 접촉·상태와 거리 T1 잔여 |
-| V03 | 능력 수명 | 거절/명시 취소 후 재실행·자기 임시 상태 정리. 통합 후 사망/Result/재시작과 취소 경합 | 미실행 |
+| V02 | GAS 단타·권한 | 정상/실제 서버 거절, 비용·쿨다운·대상·거리 검사, 공격당 중복 피해 없음, 양측 최종값 일치 | [두 클라이언트의 승인·거리 거절](#v02-basic-attack) · [공격 입력 통합 회귀](#v02-attack-input-regression) · [비용·쿨다운과 정상 반복](#v02-cost-cooldown) · [거리·HP 0·상태 및 피해 확정 재전달](#v03-attack-lifetime) · 실제 충돌 기반 중복 접촉은 통합 후 확인 |
+| V03 | 능력 수명 | 거절/명시 취소 후 재실행·자기 임시 상태 정리. 통합 후 사망/Result/재시작과 취소 경합 | [명시 취소·타이머 정리·재실행](#v03-attack-lifetime) 자동 시험 통과 · 피격·라운드 상태 연계는 미실행 |
 | V04 | 적 AI·사망·전리품 생성 | 서버의 탐지·추격·근접 공격과 피격, 적 사망 뒤 공격 중지, 겹친 마지막 타격에도 사망 확정·전리품 생성 1회 | 미실행 |
 | V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | 미실행 |
 | V06 | 한 판·점수·다음 라운드 | 준비·공동 탈출·사망/시간초과 실패·이탈 중단·결과/점수 1회 확정·다음 맵 도착과 초기화, 중도참가/정원 거절·연결 종료 안내 | 미실행 |

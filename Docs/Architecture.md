@@ -50,13 +50,17 @@ PIE 단일 플레이의 근거는 [이동 검증](Validation/Index.md#l00-moveme
 
 <a id="gas-basic-attack"></a>
 
-### 고정 표적 단타 구현
+### 고정 표적 단타와 서버 취소
 
 1. 소유 클라이언트에서 `IMC_Player`의 왼쪽 클릭이 Boolean 액션 `IA_Attack`을 시작한다. 캐릭터는 이동과 같은 에셋 참조 방식으로 액션을 읽고 `Started`를 `Attack`에 바인딩한다. 처음 누를 때 `ACoopRPGCharacter::Attack`이 Pawn의 ASC에 단타 실행을 요청한다. 서버가 Pawn 시작 시 `ServerOnly` Ability를 부여한다. Pawn을 기준으로 Owner와 Avatar를 초기화하고 컨트롤러가 바뀌면 ActorInfo를 갱신한다.
-2. 서버 게임 모드가 `L_Movement`에 고정 표적 하나를 생성한다. `UCoopRPGMeleeAbility::ActivateAbility`는 서버의 표적 유효성·HP와 공격자에서 표적까지의 수평 거리를 검사한다. 거리 250 cm를 초과하면 Commit 전에 종료한다.
-3. GAS가 비용·쿨다운을 활성화 전에 검사하고 `CommitAbility`에서 다시 확인한다. 승인 시 공격자에 2초 쿨다운 GE와 스태미나10 비용을 적용하고 서버가 표적에 순간 피해 Effect를 한 번 적용한다. 표적 HP는 10 줄고 두 클라이언트에 복제된다. 공격자 스태미나 변경은 소유 클라이언트에 복제된다.
+2. 서버 게임 모드가 `L_Movement`에 고정 표적 하나를 생성한다. `UCoopRPGMeleeAbility::ActivateAbility`는 서버의 표적 유효성·HP와 공격자에서 표적까지의 수평 거리를 검사한다. 공격자 HP가 0이거나 표적이 유효하지 않거나 거리가 250 cm를 초과하면 Commit 전에 종료한다.
+3. GAS가 비용·쿨다운을 활성화 전에 검사하고 `CommitAbility`에서 다시 확인한다. Commit 성공 시 공격자에 2초 쿨다운 GE와 스태미나 10 비용을 적용하고 서버에서 0.65초 동안 피해 확정을 기다린다. 확정 시 공격자·표적의 상태와 사거리를 다시 검사한 뒤 표적에 순간 피해 GE를 한 번 적용한다. 표적의 HP는 두 클라이언트에, 공격자의 스태미나는 소유 클라이언트에 복제된다.
 
-250 cm, 스태미나 100·비용 10, HP 100·피해 10은 첫 실행을 위한 시험값이다. 현재 공격은 즉시 종료한다. 쿨다운은 사용자 채택 시험값2초이며 GA 실행이 즉시 끝나도 GE는 남아 재사용을 제한한다. 무기 장착·조준·충돌 기반 타격·피해 확정 전 취소는 이후 작업 범위다.
+4. 오른쪽 클릭은 소유 Pawn으로 서버 취소 RPC를 보낸다. 서버는 해당 Pawn의 활성 단타를 취소한다. `EndAbility`가 예약 타이머와 표적 참조를 정리한다. 이미 적용한 비용·쿨다운은 유지된다. 피해 확정 뒤 들어온 요청에는 활성 단타가 없다.
+
+0.65초는 취소를 관찰하기 위한 시험값이다. 기존 사거리 250cm·비용 10·피해 10과 사용자 채택 쿨다운 2초를 사용한다. 같은 공격에서 피해 확정을 두 번 요청해도 대기 상태는 한 번만 소비된다. 실제 충돌 기반 타격, 피격 자동 취소, 장착과 라운드 연계는 각 기능의 검증 단계에서 다룬다.
+
+**근거** · [공격 수명과 취소 시험](Validation/Index.md#v03-attack-lifetime)
 
 플레이어 ASC는 Mixed 복제를 사용한다. 소유자는 활성 GE를 받아 자신의 쿨다운을 확인하고, 관찰자는 태그·Cue 정보를 받는다. 고정 표적 ASC는 Minimal을 유지한다. 실제 첫 시험에서 Minimal의 소유자 쿨다운 정보 누락을 확인해 바꾼 선택이며 서버 판정·캐릭터 ASC 배치·속성의 소유자 복제 조건을 변경하지 않는다. 개발용 초기화와 직접 요청은 별도 `CombatProbe` 컴포넌트와 명시 실행 옵션에 제한한다. [실패와 재검증](Validation/Index.md#v02-cost-cooldown) · [Epic 복제 모드](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Plugins/GameplayAbilities/EGameplayEffectReplicationMode)
 
