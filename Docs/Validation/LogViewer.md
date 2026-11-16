@@ -283,6 +283,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · [새 패키지와 이전 원본 로그의 대조](Index.md#v05-chest-lifecycle-logs) · [새 화면 사용자 확인](Index.md#v05-chest-lifecycle-user-result)
 
+<a id="equipment-recovery-logs"></a>
+### 근접무기와 회복약 사용 계측
+
+- `입력·요청`에서 `근접무기 획득 RPC 호출`과 `회복약 사용 RPC 호출`을 찾는다. `서버 판정`은 `근접무기 지급·장착`, `회복약 사용 승인`과 재고 전이를 표시한다. 거절은 무기 미장착·중복 장착·최대 HP·회복약 없음으로 구분한다.
+- `복제`의 `근접무기 장착 복제`는 장착한 Pawn의 PlayerId와 상세의 역할을 보여준다. `체력 복제`는 양쪽에서, `내 회복약 보유량 복제`는 소유자에서 확인한다.
+
+**근거** · [원본 실행과 재현 순서](Index.md#v05-equipment-recovery) · [로그 분류](../../Tools/Validation/CombatLogReader.psm1)
+
 <a id="logging-contract"></a>
 ## 로그 표시 규칙
 

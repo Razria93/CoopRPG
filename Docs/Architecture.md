@@ -88,6 +88,12 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 **근거** · [상자 재고](../Game/Source/CoopRPG/Loot/CoopRPGSharedChest.cpp) · [입력·서버 판정·소유자 복제](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [2인 패키지 시험](Validation/Index.md#v05-shared-chest-first)
 
+상자에는 같은 근접무기 두 개가 있다. 서버가 첫 유효 획득에서 재고를 한 개 줄이고 요청자 Pawn을 장착 상태로 바꾼다. 두 사람의 HUD와 무기 외형은 복제 상태를 읽는다. 이미 장착한 Pawn의 재요청은 재고를 차감하기 전에 거절한다. 공격 GA는 미장착 요청을 서버에서 비용·쿨다운 커밋 전에 거절한다.
+
+개인 회복약은 소유 `PlayerController`의 서버 RPC로 사용한다. 서버는 재고·라운드·생존·현재 HP를 검사하고, 자기 Pawn의 ASC에 즉시 회복 GE `+30`을 적용한다. HP 상한 100은 `AttributeSet`의 기본값 변경에서 적용하며, HP가 실제로 오른 경우에만 회복약 한 개를 차감한다. HP는 관찰 클라이언트에, 개인 회복약 수량은 컨트롤러 소유자에게 복제한다.
+
+**근거** · [장착 복제](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [서버 권한·거절](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [회복 GE](../Game/Source/CoopRPG/AbilitySystem/Effects/CoopRPGRecoveryEffect.cpp) · [2인 패키지 시험](Validation/Index.md#v05-equipment-recovery)
+
 아래 적 전리품 동작은 이후 구현 설계다.
 
 적의 생존→사망 전환은 서버에서 한 번 확정한다. 그 전환에서 생성한 전리품은 공용 상자와 같은 서버 검증·소진 처리 흐름을 사용한다. 획득을 확정하면 팀 전리품 수량을 올려 양쪽 클라이언트에 복제한다. 시험에서는 사망, 전리품 생성, 팀 지급이 각각 한 번인지 확인한다.

@@ -91,11 +91,13 @@
 - **다음:** [사용자가 두 Client에서 취소와 재공격을 재현했다](Validation/Index.md#v03-user-manual-result). 공용 상자의 동시 열람과 마지막 회복약 단일 지급을 다음 게임 기능으로 연결한다. 적 피격·사망 및 라운드가 들어올 때 취소 경합과 상태 정리를 확인한다. [7단계 구현 순서](#mvp-implementation-order)
 
 <a id="v05-current-card"></a>
-### 현재 작업 · V05 공용 상자 첫 경합 · 2026-11-16
+### 현재 작업 · V05 공용 상자·장착·회복 · 2026-11-16
 
 - **완료:** 두 클라이언트 동시 열람, 마지막 회복약 단일 지급과 양쪽 재고 복제, 무효 요청 뒤 유효 요청을 패키지에서 확인했다. [실행 근거](Validation/Index.md#v05-shared-chest-first) · [사용자 직접 확인](Validation/Index.md#v05-shared-chest-user-result)
 - **로그 보완:** 준비·열기·닫기 RPC 호출 및 서버 닫기 결과를 기록하고 [독립 패키지 두 클라이언트](Validation/Index.md#v05-chest-lifecycle-logs)에서 검증했다. [사용자 직접 확인](Validation/Index.md#v05-chest-lifecycle-user-result)도 기록했다.
-- **다음:** 근접무기 지급·장착과 회복약 사용을 연결하고, 장착·소모가 기존 GAS 전투 및 상자 판정과 함께 작동하는지 확인한다. 라운드 교체·적 팀 보상 시험은 후속 통합 경계로 유지한다.
+- **완료:** 전용 서버와 두 클라이언트에서 각자 무기 지급·장착, 미장착 공격 거절, 장착 후 적중, 회복약 사용·소모와 최대 HP·소진 거절을 확인했다. [자동 실행 근거](Validation/Index.md#v05-equipment-recovery)
+- **사용자 확인:** 각자 무기 1개·장착 후 적중과 회복약 HP `70→100`·소지량 `1→0`을 수동 재현했다. [수동 실행 근거](Validation/Index.md#v05-equipment-recovery-user-result)
+- **다음:** V04에서 고정 표적을 서버 권한의 적 전투로 연결한다. 탐지·추격·근접 공격으로 실제 부상과 회복을 확인한 뒤, 사망 1회 확정과 팀 전리품 생성을 연결한다. 라운드 교체·재전달은 후속 통합 시험이다.
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬
 

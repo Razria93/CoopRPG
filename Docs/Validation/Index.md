@@ -1218,6 +1218,62 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · 로컬 `Artifacts/Validation/v05-chest-lifecycle-20261116-125620/manual-20261116-132401-880/`의 두 클라이언트와 서버 원본 및 `Exports/` · [로그 표시 안내](LogViewer.md#shared-chest-lifecycle)
 
+<a id="v05-equipment-recovery"></a>
+## V05 근접무기 장착과 회복약 사용 · 2026-11-16
+
+같은 PC의 독립 Win64 Development 전용 서버 1개와 클라이언트 2개에서 `L_Movement`를 실행했다. 정상 키 입력으로 준비·열기·획득·공격·사용을 수행했다. 플레이어 부상만 `Coop.Test.Vitals`로 설정했다. 시험 중 A의 `PlayerId`는 257, B는 256이었다.
+
+| 확인 항목 | 실제 결과 |
+|---|---|
+| 미장착 공격 | A·B 모두 `Unarmed`로 서버에서 거절됐다. 스태미나는 100, 쿨다운은 0이었다. 비용 확정과 표적 피해는 기록되지 않았다. |
+| 무기 지급·장착 | 같은 상자에서 A에 `2→1`, B에 `1→0`으로 한 개씩 지급했다. A가 다시 요청하자 `AlreadyEquipped`로 거절했다. 양쪽에서 재고 0과 두 Pawn의 장착을 관찰했다. 자기 Pawn은 `AutonomousProxy`, 상대 Pawn은 `SimulatedProxy`로 기록됐다. |
+| 장착 후 공격 | A와 B가 각각 한 번 타격했다. 서버 표적 HP가 `100→90→80`으로 바뀌었고 두 클라이언트가 두 변화를 관찰했다. |
+| 최대 HP | 회복약을 받은 A가 최대 HP에서 사용을 시도했다. 서버가 `FullHealth`로 거절했고 1개를 유지했다. |
+| 회복과 소모 | A의 HP `80→100`, 보유량 `1→0`을 서버가 확정했다. A·B가 HP 변화를 받았고 A만 소지량 변화를 받았다. 시험 회복량 `+30`은 최대 HP 100에서 제한됐다. |
+| 소진 | 다시 HP 60을 설정한 A와 회복약이 없는 B의 요청은 `NoRecovery`로 거절됐다. 추가 회복은 없었다. |
+
+12개 자동 판정을 통과했다. 세 프로세스는 종료 코드 0을 남겼다. 근접무기 외형은 임시 큐브 메시이며 타격 검증은 고정 표적과 기존 250cm 거리 판정을 사용했다. Windows 루프백 실행 결과로, 사용자의 GUI 조작과 적 공격에 의한 실전 부상은 이번 실행 범위 밖이다.
+
+빌드는 SDK `10.0.26100.0`과 `-NoEngineChanges`를 사용했다. Server 41.03초, Client 40.00초에 성공했다. 처음 UAT의 `-skipcook -stage`는 Zen 재연결 중 `UnrealPak`이 `-1073741819`로 종료됐다. 이전 패키지와 현재 콘텐츠·설정 해시가 일치하는지 확인하고, 기존 컨테이너와 새 실행 파일을 별도 `restaged/Stage`에 스테이징했다. 원본과 복사본의 컨테이너 해시 및 새 바이너리 해시를 대조했다.
+
+**근거** · [실행 스크립트](../../Tools/Validation/Run-EquipmentRecovery.py) · [구조 설명](../Architecture.md#shared-chest-implementation) · 로컬 `Artifacts/Validation/v05-equipment-healing-20261116-134904/equipment-01/`의 원본 로그·`result.json`·`processes.json`, `build-01/`·`package/`·`restaged/stage-hashes.json`
+
+### 기존 전투·상자 동작 재검증
+
+동일한 전용 서버·클라이언트 패키지에서 V02 비용·쿨다운 149개와 V03 취소·거리·타격 수명 354개 판정을 통과했다. 두 시험은 `-EquipFromChest`로 각 Pawn을 장착한 뒤 기존 전투 시나리오를 시작했다. 별도 상자 시험의 동시 요청에서 한 명만 지급받았다. 지급과 소진 거절을 기록한 서버 시각의 차이는 3ms였다. 로그 뷰어 56개 판정과 이번 실행의 새 사건 31행 분류를 확인했다.
+
+**근거** · [비용·쿨다운 실행](../../Tools/Validation/Run-CombatBoundaries.ps1) · [능력 수명 실행](../../Tools/Validation/Run-CombatLifetime.ps1) · [상자 경합 실행](../../Tools/Validation/Run-SharedChest.py) · 로컬 `restaged/boundaries-01/boundary-result.json`·`restaged/lifetime-01/lifetime-result.json`·`restaged/contention-regression-01/result.json`·`equipment-01/viewer-events.json`
+
+### 직접 확인하는 순서
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Validation/Start-CombatManual.ps1" -PackageRoot "C:/CoopRPG/Artifacts/Validation/v05-equipment-healing-20261116-134904/restaged/Stage" -AlwaysOnTop
+```
+
+1. 두 창에서 `R`로 준비한다. 표적 방향으로 이동해 누가 먼저 `G`를 누르기 전에, 두 창에서 공격을 시도하고 서버의 `무기 미장착`을 확인한다. 창에 포커스를 주기 위한 첫 클릭 뒤 공격한다.
+2. 양쪽에서 상자 주변의 `E`로 열고 각각 `G`로 획득한다. 장착 상태와 공용 무기 재고 0을 확인한다. 돌아가며 한 번씩 공격해 서버의 `타격 확정`과 양쪽 `체력 복제`를 대조한다.
+3. 한 창에서 `F`로 회복약을 받고 최대 HP에서 `H`를 누른다. 서버의 `최대 HP`와 HUD의 보유량 1을 확인한다. 타격 두 번이 끝난 상태에서 해당 창의 개발 콘솔에 `Coop.Test.Vitals 80 80`을 실행한다.
+4. 해당 창에서 `H`를 다시 눌러 HP `80→100`과 보유량 `1→0`을 확인한다. 한 번 더 눌러 서버 `회복약 없음`을 확인한다. 두 탭의 `체력 복제`와 소유자 탭의 `내 회복약 보유량 복제`를 구분해 본다.
+
+**근거** · [수동 런처](../../Tools/Validation/Start-CombatManual.ps1) · [뷰어 사건과 필터](LogViewer.md#equipment-recovery-logs)
+
+<a id="v05-equipment-recovery-user-result"></a>
+### 사용자 수동 검증 · 시작 HP 70
+
+사용자가 전용 서버와 두 클라이언트의 새 수동 환경에서 양쪽을 조작하고 뷰어에서 PNG·상태 JSON·Excel을 저장했다. 실행 ID는 `manual-20261116-142321-854`다. AI가 시작 HP를 70으로 설정했고, 서버 `TestVitals`와 양쪽 `HealthReplicated`에서 확인했다. 이번 실행에서 클라이언트 1(A)의 `PlayerId`는 256, 클라이언트 2(B)는 257이다.
+
+| 확인 항목 | 원본 로그로 확인한 결과 |
+|---|---|
+| 무기 1개씩 지급·장착 | 서버가 B에 14:24:17.908에 `2→1`, A에 14:25:23.512에 `1→0`으로 지급했다. 양쪽에서 공용 재고 0과 자기 Pawn `AutonomousProxy`·상대 Pawn `SimulatedProxy` 장착 복제를 확인했다. |
+| 회복약 지급·사용 | B가 회복약을 한 번 지급받았다. 14:24:20.943 서버가 B의 HP `70→100`, 소지량 `1→0`을 확정했다. A와 B 모두 B의 HP 변화를 받았고, 보유량 변화는 B에만 기록됐다. |
+| 두 플레이어의 장착 후 공격 | B가 7회, A가 3회 적중했다. 같은 고정 표적의 HP가 `100→0`으로 줄었고 양쪽 클라이언트에서 10단계 복제를 관찰했다. 0이 된 뒤 A의 공격 두 건은 서버에서 `InvalidTarget`으로 거절됐다. |
+
+PNG는 14:25:41에 저장한 3분할 화면으로, 표적의 마지막 HP `10→0` 복제와 후속 `InvalidTarget`을 보여준다. 14:25:42·14:25:48에 내보낸 Excel에는 각각 300·307행의 사건이 있다. 두 파일 모두 위 항목을 대조한 주요 사건 52행의 원문이 서버·클라이언트 로그와 일치했다. 시각은 KST다.
+
+미장착(`Unarmed`), 최대 HP(`FullHealth`), 소진 뒤 사용(`NoRecovery`) 거절 기록은 이 수동 실행에서 발견되지 않았다. 이 세 조건은 [별도 자동 시험](#v05-equipment-recovery)에서 확인했다.
+
+**근거** · 로컬 `Artifacts/Validation/v05-equipment-healing-20261116-134904/restaged/manual-20261116-142321-854/`의 `server.log`·`a.log`·`b.log` 및 `Exports/` · [뷰어 사건과 필터](LogViewer.md#equipment-recovery-logs)
+
 <a id="단계별-시험-기준--첫-기술-범위-채택-나머지-제안"></a>
 <a id="active-tests"></a>
 ## 단계별 시험 기준 — 제출용 T1
@@ -1230,7 +1286,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 | V02 | GAS 단타·권한 | 정상/실제 서버 거절, 비용·쿨다운·대상·거리 검사, 공격당 중복 피해 없음, 양측 최종값 일치 | [두 클라이언트의 승인·거리 거절](#v02-basic-attack) · [공격 입력 통합 회귀](#v02-attack-input-regression) · [비용·쿨다운과 정상 반복](#v02-cost-cooldown) · [거리·HP 0·상태 및 피해 확정 재전달](#v03-attack-lifetime) · 실제 충돌 기반 중복 접촉은 통합 후 확인 |
 | V03 | 능력 수명 | 거절/명시 취소 후 재실행·자기 임시 상태 정리. 통합 후 사망/Result/재시작과 취소 경합 | [명시 취소·타이머 정리·재실행](#v03-attack-lifetime) 자동 시험 통과 · 피격·라운드 상태 연계는 미실행 |
 | V04 | 적 AI·사망·전리품 생성 | 서버의 탐지·추격·근접 공격과 피격, 적 사망 뒤 공격 중지, 겹친 마지막 타격에도 사망 확정·전리품 생성 1회 | 미실행 |
-| V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | [동시 열람·마지막 회복약 1개 지급](#v05-shared-chest-first) 통과. 무기·사용·팀 전리품·재전달·라운드 연계는 이후 확인. |
+| V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | [동시 열람·마지막 회복약 1개 지급](#v05-shared-chest-first) 및 [무기 장착·회복약 사용](#v05-equipment-recovery) 통과. 팀 전리품·재전달·라운드 연계는 이후 확인. |
 | V06 | 한 판·점수·다음 라운드 | 준비·공동 탈출·사망/시간초과 실패·이탈 중단·결과/점수 1회 확정·다음 맵 도착과 초기화, 중도참가/정원 거절·연결 종료 안내 | 미실행 |
 | V07 | 진행 가능성·설정 | 두 플레이어의 무기 확보 경로, 획득 가능한 전리품 수량과 탈출 조건, 값/정의와 실행 상태 분리, 서버·클라이언트 패키지에 양쪽 맵 포함 | 미실행 |
 | V08 | 지연/손실·진단 | T1 조건에서 V02/V03/V05/V06 핵심 반복·수렴 확인. 별도 PC/LAN은 V08-LAN으로 분리 | 미실행; V08-LAN도 미실행 |
