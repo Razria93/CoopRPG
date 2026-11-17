@@ -4,6 +4,10 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 ## 현재 상태
 
+2026-11-05: **최소 C++ Editor 빌드·기동 기반 위에 제출용 목적·MVP·학습/일정·일일 기록·시험 기준을 통합했다.** 게임플레이·GAS·Server/Game·V01~V09는 미실행이다. 현행 범위는 2인 협동 공동 회수·탈출이며 [현재 작업/다음 L00](Docs/Roadmap.md#next-work), [35개 요구의 적용 상태](Docs/Development.md#requirement-coverage), [이번 검증 결과](Docs/Validation/Index.md#operating-integration)를 확인한다. 일별 실제 진도의 원본은 CoopRPG의 Development다. 문서 준비·관련 정적 검사를 완료했으며 L00 학습 진단과 V01 구현에 착수할 수 있다. 서버 접속이나 게임 완성을 확인한 상태는 아니다.
+
+아래 날짜별 내용은 이전 실행 이력이다. 과거4주 목표·미실행 표시는 당시 시점으로 읽고 현재 납기는 Roadmap을 따른다.
+
 2026-10-30: 문서 6개·Git 관리 파일 2개·모델 추천 스킬 사본 1개와 커밋 3개를 [공개 저장소](https://github.com/Razria93/CoopRPG)의 `main`에 처음 공유했다. 이후 데스크탑 저장소 이관·기준 커밋 검증과 UE 5.8.4·기존 VS 2022 도구 조합 채택에 이어 공식 소스·Setup 의존성 준비와 기존 사전 구성 확인을 마쳤으며 당시 게임 프로젝트·게임 구현·게임 빌드·게임 시험은 모두 미착수였다. 4주는 검증 전 목표이며 최신 작업 상태는 [Roadmap](Docs/Roadmap.md)을 따른다.
 
 2026-11-02 엔진 빌드 후속: 엔진용 프로젝트 파일 생성은 성공했으며 UnrealEditor Win64 Development 재시도는 커밋 압박으로 중단해 미완료다. [실행 결과·한계](Docs/Validation/Environment.md#첫-unrealeditor-엔진-빌드--2026-11-02)를 확인하며 에디터 실행·게임 빌드·독립 접속 성공과 구분한다.
@@ -23,6 +27,8 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 | [작업 지침](AGENTS.md) | AI 작업 절차·범위 통제·검증 원칙 |
 | [프로젝트 기준](Docs/Project.md) | 확정 목적·제안 범위·게임 규칙·포트폴리오 방향 |
 | [진행 계획](Docs/Roadmap.md) | MVP 단계·현재 작업·남은 확인/선택/검증 사항·결정 기록 |
+| [개발·학습 기록](Docs/Development.md) | 일별 예정/실제·추가/미달·학습·변경·게이트·요구 대응·포트폴리오 연결 |
+| [최초 계획 보존본](Docs/Planning/Baseline-20261105.md) | 최초 범위·19일 일정·37강 매핑·완료 기준. 현행 변경과 비교하는 기준 |
 | [검증 색인](Docs/Validation/Index.md) | 시험 기준안·결과와 증거 기록 방식 |
 | [환경 조사](Docs/Validation/Environment.md) | 확인된 도구·환경과 미검증 항목 |
 
