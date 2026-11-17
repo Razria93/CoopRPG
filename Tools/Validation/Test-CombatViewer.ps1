@@ -69,6 +69,45 @@ try{
     $healed = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGChestRequest: RecoveryUsed HP=80.00->100.00 Recovery=1->0')
     Check 'weapon prerequisite and grant use server outcomes, actual equipment uses replication' ($unarmed.Detail -like '*무기 미장착*' -and $weapon.Outcome -eq '승인' -and $weapon.Detail -like '*2 → 1*' -and $equipped.Topic -eq '복제' -and $equipped.Detail -like '*256*')
     Check 'healing success and rejection show exact HP, item count, and reason' ($full.Summary -like '*최대 HP*1개' -and $empty.Summary -like '*회복약 없음*0개' -and $healed.Outcome -eq '승인' -and $healed.Detail -eq 'HP 80.00 → 100.00 · 보유량 1 → 0')
+    $enemyHit = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemy: EnemyAttackHit Actor=Enemy Target=PawnA TargetPlayerId=256 HP=100.00->90.00')
+    $enemyMiss = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemy: EnemyAttackMissed Actor=Enemy Target=PawnA TargetPlayerId=256 Reason=OutOfRange Distance=200.00 Range=135.00')
+    $enemyMove = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemy: EnemyMovementObserved Actor=Enemy Distance=45.00')
+    Check 'enemy hit identifies victim without implying an RPC requester' ($enemyHit.Outcome -eq '승인' -and $enemyHit.Detail -like '*256*100.00 → 90.00*' -and !$enemyHit.Fields.ContainsKey('RequesterPlayerId'))
+    Check 'enemy escape and movement replication retain their distinct stages' ($enemyMiss.Outcome -eq '빗나감' -and $enemyMiss.Detail -like '*사거리 밖*200.00*135.00*' -and $enemyMove.Topic -eq '복제')
+    function New-HealthFixture([string]$Text,[string]$Source,[int]$World=1,[int]$Generation=0){
+        $evt=ConvertTo-CombatLogEvent ($prefix+$Text)
+        Add-CombatEventContext $evt 'health-test' $Source $Source $path ([pscustomobject]@{ByteOffset=11;FileGeneration=$Generation;WorldSequence=$World}) 11
+    }
+    $replication='LogCoopRPGCombatAttributes: HealthReplicated Actor=CoopRPGCharacter_12 Before=100.00 After=90.00 NetMode=Client LocalRole=SimulatedProxy'
+    $equipped='LogCoopRPGEquipment: MeleeWeaponReplicated Actor=CoopRPGCharacter_12 Equipped=1 NetMode=Client EquippedPlayerId='
+    $direct=New-HealthFixture ($replication+' SubjectType=Player SubjectPlayerId=257 LocalPlayerId=256') a
+    $enemy=New-HealthFixture 'LogCoopRPGCombatAttributes: HealthReplicated Actor=CoopRPGEnemy_1 Before=100.00 After=90.00 NetMode=Client LocalRole=SimulatedProxy' a
+    $legacy=New-HealthFixture $replication b
+    $otherSource=New-HealthFixture $replication c
+    $otherWorld=New-HealthFixture $replication b 2
+    $otherFile=New-HealthFixture $replication b 1 1
+    $unknownWorld=New-HealthFixture $replication b 0
+    $weaponEvidence=New-HealthFixture ($equipped+'256') b
+    $clients=@{'256'='a';'257'='b'}
+    $labels=@{a='클라이언트 1';b='클라이언트 2'}
+    $events=@($direct,$enemy,$legacy,$otherSource,$otherWorld,$otherFile,$unknownWorld,$weaponEvidence)
+    Update-CombatHealthLabels $events $clients $labels
+    Check 'explicit subject identifies remote player, and legacy enemy type is recognized' ($direct.HealthSubject -eq '플레이어 2 (257)' -and $enemy.Summary -eq '체력 복제 · 적 · 100.00 → 90.00')
+    Check 'legacy actor evidence is scoped by source, world, and file, with no cross-scope inference' ($legacy.HealthSubject -eq '플레이어 1 (256)' -and @($otherSource,$otherWorld,$otherFile,$unknownWorld | Where-Object HealthSubject -eq '플레이어 (ID 미확인)').Count -eq 4)
+    Check 'search uses the same subject label and preserves the raw line' (@(Select-CombatEvents $events -Search '플레이어 1 (256)').Count -eq 1 -and $legacy.Raw.EndsWith($replication))
+    Update-CombatHealthLabels ($events+@(New-HealthFixture ($equipped+'257') b)) $clients $labels
+    Check 'conflicting older evidence drops the inferred ID' ($legacy.HealthSubject -eq '플레이어 (ID 미확인)' -and $direct.HealthSubject -eq '플레이어 2 (257)')
+    $scopePath=Join-Path $OutputDirectory 'world-scope.log'
+    [IO.File]::WriteAllLines($scopePath,@('before world','LogWorld: Bringing World /Game/One up for play',
+        'first world','LogWorld: BeginTearingDown for /Game/One','in transit',
+        'LogWorld: Bringing World /Game/Two up for play','second world'))
+    $scopeRows=@(Read-CombatLogRecords (New-CombatLogReader $scopePath))
+    Check 'legacy world scope opens at map play and stops at teardown' (($scopeRows.WorldSequence -join ',') -eq '0,1,1,0,0,2,2')
+    $death = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemy: EnemyDeathConfirmed Actor=Enemy HP=10.00->0.00 PendingAttackDiscarded=1')
+    $loot = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemy: EnemyLootSpawned Actor=Drop DropId=ABC')
+    $seenLoot = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemyLoot: EnemyLootReplicated Actor=Drop DropId=ABC')
+    Check 'enemy death shows the lethal transition and discarded attack' ($death.Stage -eq '서버 판정' -and $death.Detail -eq 'HP 10.00 → 0.00 · 대기 공격 취소')
+    Check 'loot generation and observed replication keep the same drop ID' ($loot.Outcome -eq '승인' -and $seenLoot.Topic -eq '복제' -and $loot.Detail -eq 'ID ABC' -and $seenLoot.Detail -eq $loot.Detail)
     $remaining=ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGCombatProbe: CombatSnapshot Label=Prepared Actor=PawnA HP=100 Stamina=9 Cooldown=1 Remaining=1.250')
     Check 'recorded cooldown remaining retained' ($remaining.Detail -like '*1.250s*')
     $unknown=ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGInventory: NewLootEvent Item=Potion Amount=1')

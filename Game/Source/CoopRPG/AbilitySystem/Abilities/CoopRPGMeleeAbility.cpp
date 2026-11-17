@@ -1,13 +1,13 @@
 #include "CoopRPGMeleeAbility.h"
 
-#include "CoopRPG/Character/CoopRPGCharacter.h"
-#include "CoopRPG/Combat/CoopRPGAttackTarget.h"
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
+#include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGGameMode.h"
 
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "TimerManager.h"
@@ -94,8 +94,10 @@ void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     }
 
     auto* GameMode = Attacker->GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
-    ACoopRPGAttackTarget* Target = GameMode ? GameMode->GetAttackTarget() : nullptr;
-    if (!IsValid(Target) || Target->GetHealth() <= 0.0f)
+    AActor* Target = GameMode ? GameMode->GetMeleeTarget() : nullptr;
+    const UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target, false);
+    const FGameplayAttribute HealthAttribute = UCoopRPGCombatAttributes::GetHealthAttribute();
+    if (!IsValid(TargetASC) || TargetASC->GetNumericAttribute(HealthAttribute) <= 0.0f)
     {
         UE_LOG(LogCoopRPGMelee, Log, TEXT("AttackRejected Attacker=%s Reason=InvalidTarget %s"),
             *GetNameSafe(Attacker), *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)));
@@ -104,7 +106,7 @@ void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     }
 
     const float Distance = FVector::Dist2D(Attacker->GetActorLocation(), Target->GetActorLocation());
-    const float HealthBefore = Target->GetHealth();
+    const float HealthBefore = TargetASC->GetNumericAttribute(HealthAttribute);
     const float StaminaBefore = Source->GetNumericAttribute(UCoopRPGCombatAttributes::GetStaminaAttribute());
     if (Distance > MeleeRangeCm)
     {
@@ -166,7 +168,10 @@ void UCoopRPGMeleeAbility::ResolveHit()
     const FGameplayAbilityActivationInfo ActivationInfo = GetCurrentActivationInfo();
     const AActor* Attacker = ActorInfo->AvatarActor.Get();
     UAbilitySystemComponent* Source = ActorInfo->AbilitySystemComponent.Get();
-    ACoopRPGAttackTarget* Target = PendingTarget.Get();
+    AActor* Target = PendingTarget.Get();
+    UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target, false);
+    const FGameplayAttribute HealthAttribute = UCoopRPGCombatAttributes::GetHealthAttribute();
+    const auto* GameMode = IsValid(Attacker) ? Attacker->GetWorld()->GetAuthGameMode<ACoopRPGGameMode>() : nullptr;
 
     const TCHAR* MissReason = nullptr;
     float Distance = 0.0f;
@@ -175,7 +180,8 @@ void UCoopRPGMeleeAbility::ResolveHit()
     {
         MissReason = TEXT("AttackerDead");
     }
-    else if (!IsValid(Target) || Target->GetHealth() <= 0.0f)
+    else if (!IsValid(TargetASC) || !GameMode || GameMode->GetMeleeTarget() != Target
+        || TargetASC->GetNumericAttribute(HealthAttribute) <= 0.0f)
     {
         MissReason = TEXT("InvalidTarget");
     }
@@ -197,13 +203,13 @@ void UCoopRPGMeleeAbility::ResolveHit()
         return;
     }
 
-    const float HealthBefore = Target->GetHealth();
+    const float HealthBefore = TargetASC->GetNumericAttribute(HealthAttribute);
     const FGameplayEffectSpecHandle Damage = MakeOutgoingGameplayEffectSpec(UCoopRPGMeleeDamage::StaticClass());
     check(Damage.IsValid());
-    Source->ApplyGameplayEffectSpecToTarget(*Damage.Data.Get(), Target->GetAbilitySystemComponent());
+    Source->ApplyGameplayEffectSpecToTarget(*Damage.Data.Get(), TargetASC);
     UE_LOG(LogCoopRPGMelee, Log,
         TEXT("AttackApproved Attacker=%s Target=%s Distance=%.2f Range=%.2f HP=%.2f->%.2f %s"),
-        *GetNameSafe(Attacker), *GetNameSafe(Target), Distance, MeleeRangeCm, HealthBefore, Target->GetHealth(),
+        *GetNameSafe(Attacker), *GetNameSafe(Target), Distance, MeleeRangeCm, HealthBefore, TargetASC->GetNumericAttribute(HealthAttribute),
         *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)));
     EndAbility(Handle, ActorInfo, ActivationInfo, false, false);
 }

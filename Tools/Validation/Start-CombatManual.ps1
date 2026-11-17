@@ -5,6 +5,7 @@
     [switch]$AlwaysOnTop,
     [switch]$NoForeground,
     [switch]$NoLogViewer,
+    [switch]$EnemyCombat,
     [ValidateSet('A','B')][string]$FocusClient='A'
 )
 $ErrorActionPreference='Stop'
@@ -67,9 +68,11 @@ try {
     foreach($note in $placement.Notes){Write-Warning $note}
     $work=$placement.Game
     $gap=12;$width=$placement.A.Width;$height=$placement.A.Height
-    $common=@('-CoopCombatTest','-nosound','-NoSplash','-forcelogflush')
+    $common=@('-nosound','-NoSplash','-forcelogflush')
+    if(!$EnemyCombat){$common+='-CoopCombatTest'}
+    $mapArgs=@(if($EnemyCombat){'/Game/Maps/L_Movement?EnemyCombat'})
     # Server log is written to disk; its console must not cover the two game windows.
-    $started.server=Start-Process -FilePath $server -WorkingDirectory (Split-Path $server) -ArgumentList (@("-port=$port",'-MULTIHOME=127.0.0.1','-log',"-ABSLOG=`"$out/server.log`"",'-ExecCmds="t.MaxFPS 30,Log LogCoopRPGInput Verbose,AbilitySystem.ServerRPCBatching.Log 1"')+$common) -WindowStyle Hidden -PassThru
+    $started.server=Start-Process -FilePath $server -WorkingDirectory (Split-Path $server) -ArgumentList ($mapArgs+@("-port=$port",'-MULTIHOME=127.0.0.1','-log',"-ABSLOG=`"$out/server.log`"",'-ExecCmds="t.MaxFPS 30,Log LogCoopRPGInput Verbose,AbilitySystem.ServerRPCBatching.Log 1"')+$common) -WindowStyle Hidden -PassThru
     Wait-Log 'server' "listening on port $port\b"
     foreach($role in @('a','b')) {
         $bounds=if($role -eq 'a'){$placement.A}else{$placement.B}
@@ -109,6 +112,7 @@ try {
             @{id=$role;label=$label;file=($role+'.log');processId=$started[$role].Id;processName=$started[$role].ProcessName;startedUtc=$started[$role].StartTime.ToUniversalTime().ToString('o')}
         }
     )
+    $meta.enemyCombat=[bool]$EnemyCombat
     $meta.monitorLayout=@{game=$placement.Game.DeviceName;log=$placement.Log.DeviceName;separate=$placement.Separate}
     # The viewer reads this manifest at startup, before its own PID is known.
     $meta|ConvertTo-Json -Depth 6|Set-Content -LiteralPath "$out/processes.json" -Encoding utf8

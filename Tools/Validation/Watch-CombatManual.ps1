@@ -45,9 +45,11 @@ else{
     }
 }
 $sources=@{}
+$sourceLabelById=@{}
 foreach($spec in $sourceSpecs){
     $path=[IO.Path]::GetFullPath((Join-Path $logRoot $spec.file))
     if(!(($path+[IO.Path]::DirectorySeparatorChar).StartsWith($logRoot.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){throw 'Source log must be inside the selected run directory.'}
+    $sourceLabelById[$spec.id]=[string]$spec.label
     $sources[$spec.id]=@{Spec=$spec;Reader=(New-CombatLogReader $path);Total=0;Ignored=0;LastEvent=$null;ProcessState='확인 대기';ProcessChecked=$false}
 }
 $script:store=New-Object Collections.Generic.List[object]
@@ -229,6 +231,7 @@ function Show-PaneDetail($Pane){
     $Pane.Detail.Lines = [string[]]@(
         "[$($e.SourceLabel) · $($e.Time) · 행 $($row.Ordinal)]"
         $e.Summary
+        if ($e.HealthSubject) { "체력 소유자: $($e.HealthSubject)" }
         if ($e.EventCode -eq 'AttackStarted' -and $e.Fields['Stamina'] -and $e.Fields['Windup']) {
             "피해 확정 대기 $($e.Fields['Windup'])초"
         }
@@ -375,6 +378,7 @@ function Refresh-Events {
     foreach($p in $script:activePanes){$idx=$p.Grid.FirstDisplayedScrollingRowIndex;$anchors[$p.Index]=if($idx -ge 0 -and $idx -lt $p.Rows.Count){$p.Rows[$idx].Basis.EventId}else{''}}
     $script:refreshing=$true
     try{
+        Update-CombatHealthLabels $script:store $script:clientByPlayerId $sourceLabelById
         $script:common=@(Select-CombatEvents -Events $script:store -Outcome ([string]$outcome.SelectedItem) -Search $search.Text -Topics @(Get-SelectedLogTopics) -CollectionOrder:($order.SelectedIndex -eq 1))
         $aligned=Test-Aligned
         $sharedAnchor=if($script:activePane -and $anchors.ContainsKey($script:activePane.Index)){$anchors[$script:activePane.Index]}else{$anchors[$script:activePanes[0].Index]}

@@ -1,6 +1,7 @@
 #include "CoopRPGGameMode.h"
 
 #include "CoopRPG/Character/CoopRPGCharacter.h"
+#include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 #include "CoopRPGGameState.h"
@@ -8,6 +9,7 @@
 #include "CoopRPGPlayerController.h"
 
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 
 ACoopRPGGameMode::ACoopRPGGameMode()
 {
@@ -20,6 +22,16 @@ ACoopRPGGameMode::ACoopRPGGameMode()
 ACoopRPGAttackTarget* ACoopRPGGameMode::GetAttackTarget() const
 {
     return AttackTarget;
+}
+
+AActor* ACoopRPGGameMode::GetMeleeTarget() const
+{
+    if (!bEnemyCombat)
+    {
+        return AttackTarget.Get();
+    }
+    const auto* State = GetGameState<ACoopRPGGameState>();
+    return State && State->IsRoundPlaying() && IsValid(Enemy.Get()) && !Enemy->IsDead() ? Enemy.Get() : nullptr;
 }
 
 void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
@@ -40,13 +52,25 @@ void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
     }
 }
 
+void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+    Super::InitGame(MapName, Options, ErrorMessage);
+    bEnemyCombat = UGameplayStatics::HasOption(Options, TEXT("EnemyCombat"));
+}
+
 void ACoopRPGGameMode::BeginPlay()
 {
     Super::BeginPlay();
     if (GetWorld()->GetMapName().EndsWith(TEXT("L_Movement")))
     {
-        // Fixed position on the movement map, outside the starting attack range.
-        AttackTarget = GetWorld()->SpawnActor<ACoopRPGAttackTarget>(FVector(350.0f, 35.0f, 60.0f), FRotator::ZeroRotator);
+        if (bEnemyCombat)
+        {
+            Enemy = GetWorld()->SpawnActor<ACoopRPGEnemy>(FVector(750.0f, -95.0f, 90.0f), FRotator::ZeroRotator);
+        }
+        else
+        {
+            AttackTarget = GetWorld()->SpawnActor<ACoopRPGAttackTarget>(FVector(350.0f, 35.0f, 60.0f), FRotator::ZeroRotator);
+        }
         if (auto* State = GetGameState<ACoopRPGGameState>())
         {
             auto* Chest = GetWorld()->SpawnActor<ACoopRPGSharedChest>(FVector(300.0f, -95.0f, 28.0f), FRotator::ZeroRotator);
