@@ -5,6 +5,7 @@
 #include "CoopRPGPlayerController.generated.h"
 
 class ACoopRPGSharedChest;
+class UCoopRPGCombatProbeComponent;
 
 UENUM()
 enum class ECoopRPGChestItem : uint8
@@ -26,6 +27,8 @@ public:
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+    void AcknowledgeRoundResult(FGuid RoundId);
+
     bool IsRoundReady() const { return bRoundReady; }
     ACoopRPGSharedChest* GetOpenedChest() const { return OpenedChest.Get(); }
     int32 GetRecoveryCount() const { return RecoveryCount; }
@@ -34,7 +37,12 @@ protected:
     virtual void SetupInputComponent() override;
 
 private:
+    friend class UCoopRPGCombatProbeComponent;
+
     void ReadyForRound();
+
+    UFUNCTION(Server, Reliable)
+    void ServerAcknowledgeRoundResult(FGuid RoundId);
     void OpenSharedChest();
     void CloseSharedChest();
     void TakeRecoveryItem();
@@ -83,6 +91,7 @@ private:
     UPROPERTY(Replicated)
     bool bRoundReady = false;
 
+    FGuid LastDisplayedResultRound;
     uint32 NextPickupRequest = 0;
     FGuid LastPickupRound;
     uint32 LastPickupRequest = 0;

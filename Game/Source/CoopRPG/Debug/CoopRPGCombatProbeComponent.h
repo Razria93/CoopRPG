@@ -24,6 +24,8 @@ public:
     void PositionForEnemyLoot(bool bNear);
     void PositionForExtraction(bool bInside);
     void PrepareRoundEnd(FName Scenario);
+    void SnapshotRound(FName Label);
+    void RequestStalePickup(FGuid RoundId);
 
 protected:
     virtual void BeginPlay() override;
@@ -51,10 +53,14 @@ private:
     UFUNCTION(Server, Reliable)
     void ServerPrepareRoundEnd(FName Scenario);
 
+    UFUNCTION(Server, Reliable)
+    void ServerSnapshotRound(FName Label);
+
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
     void OnPeerLogout(AGameModeBase* Mode, AController* Exiting);
 #endif
 
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);
     void WriteSnapshot(const FString& Label) const;
+    void WriteRoundSnapshot(FName Label) const;
 };

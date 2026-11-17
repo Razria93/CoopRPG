@@ -7,6 +7,7 @@
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
 #include "CoreGlobals.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRound, Log, All);
@@ -44,8 +45,9 @@ void ACoopRPGGameState::InitializeLootRound(ACoopRPGSharedChest* Chest, ACoopRPG
         SharedChest = Chest;
         ExtractionZone = Zone;
         RoundId = FGuid::NewGuid();
-        UE_LOG(LogCoopRPGRound, Log, TEXT("LootRoundCreated Round=%s Chest=%s Stock=%d"),
-            *RoundId.ToString(), *GetNameSafe(SharedChest), Chest->GetRecoveryStock());
+        UE_LOG(LogCoopRPGRound, Log, TEXT("LootRoundCreated Round=%s Chest=%s Stock=%d Map=%s"),
+            *RoundId.ToString(), *GetNameSafe(SharedChest), Chest->GetRecoveryStock(),
+            *UGameplayStatics::GetCurrentLevelName(this));
         ForceNetUpdate();
     }
 }

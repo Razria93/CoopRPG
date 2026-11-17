@@ -14,7 +14,7 @@ void ACoopRPGLootHUD::DrawHUD()
 {
     Super::DrawHUD();
 
-    const auto* Controller = Cast<ACoopRPGPlayerController>(GetOwningPlayerController());
+    auto* Controller = Cast<ACoopRPGPlayerController>(GetOwningPlayerController());
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     if (!Canvas || !Controller || !State || !State->GetSharedChest())
     {
@@ -66,6 +66,7 @@ void ACoopRPGLootHUD::DrawHUD()
         }
         DrawText(FString::Printf(TEXT("%s | Team score: %d"), ResultText, State->GetTeamScore()),
             Accent, TextX, Pad + 98.0f);
+        Controller->AcknowledgeRoundResult(State->GetRoundId());
         return;
     }
 

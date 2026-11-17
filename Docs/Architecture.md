@@ -132,6 +132,15 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 **근거** · [참가자·종료 입력](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [우선순위 및 결과 복제](../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp) · [전용 패키지 검증](Validation/Index.md#v06-round-outcomes)
 
+<a id="round-travel-design"></a>
+### 서버 주도 맵 이동과 라운드 수명
+
+결과 HUD가 그려지면 각 클라이언트의 `PlayerController`가 현재 `RoundId`를 표시 확인 RPC로 보낸다. `GameMode`는 서버에 기록한 두 참가자와 현재 결과를 대조하고 중복을 제외한다. 두 확인을 받은 뒤 서버 시계로 3초가 지나면 `ServerTravel`을 한 번 요청한다. 참가자가 이탈한 회차는 `Result`에 머문다.
+
+두 맵을 번갈아 선택하도록 구성했다. 이번 시험은 `L_Movement`에서 `L_Movement_Round2`로 이동했다. 목적지는 초기화 검증을 위해 원본과 같은 배치를 가진 별도 패키지다. 비심리스 이동을 선택해 같은 클라이언트 프로세스가 새 월드에 다시 접속하고 `GameState`, `PlayerController`, Pawn을 새로 만든다. 새 서버 월드는 다음 `RoundId`로 상자·적·탈출 구역을 초기화한다. 새 Pawn과 ASC는 초기 체력·스태미나와 쿨다운 상태로 시작한다. 상자 획득은 서버의 현재 `RoundId`를 검사하므로 새 상자를 대상으로 보낸 이전 회차 ID도 거절된다.
+
+**근거** · [서버의 표시 확인과 전환](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [표시 확인 RPC와 상자 요청 검사](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [패키지 시험](Validation/Index.md#v06-round-travel) · [Epic 멀티플레이 맵 이동](https://dev.epicgames.com/documentation/unreal-engine/travelling-in-multiplayer-in-unreal-engine?lang=en-US)
+
 ### 빌드에서 제외하는 코드와 실행 중 권한
 
 소스 저장소 공개 범위, 실행 파일에 포함되는 코드, 네트워크로 보내는 상태는 각각 관리한다. 클라이언트 배포물에는 컴파일된 코드와 콘텐츠가 들어가므로, 실행 파일과 수신 데이터는 분석될 수 있다고 가정한다. 서버 전용 로직의 빌드 제외, 비밀 키를 서버 환경에서만 관리하는 일, 숨겨야 할 상태를 복제 대상에서 제외하는 일은 각각 다른 노출을 줄인다. 게임 결과의 무결성은 서버가 요청을 검증하고 상태 변경을 통제하는 구조에 달려 있다.

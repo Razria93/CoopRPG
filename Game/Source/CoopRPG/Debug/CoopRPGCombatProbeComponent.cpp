@@ -4,12 +4,15 @@
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
+#include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGExtractionZone.h"
 #include "CoopRPG/GameFramework/CoopRPGGameMode.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
+#include "CoopRPG/GameFramework/CoopRPGPlayerController.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
+#include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -21,6 +24,7 @@
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 #include "InputKeyEventArgs.h"
+#include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
@@ -151,6 +155,28 @@ namespace
             }
         }));
 
+    FAutoConsoleCommandWithWorldAndArgs RoundSnapshotCommand(TEXT("Coop.Test.RoundSnapshot"),
+        TEXT("Coop.Test.RoundSnapshot <label>: compare local and server round state."),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World); Probe && Args.Num() == 1)
+            {
+                Probe->SnapshotRound(FName(*Args[0].Left(32)));
+            }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs StalePickupCommand(TEXT("Coop.Test.StalePickup"),
+        TEXT("Coop.Test.StalePickup <round guid>: send an old round ID through the normal pickup RPC."),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            FGuid RoundId;
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World);
+                Probe && Args.Num() == 1 && FGuid::Parse(Args[0], RoundId))
+            {
+                Probe->RequestStalePickup(RoundId);
+            }
+        }));
+
     FAutoConsoleCommandWithWorldAndArgs SnapshotCommand(TEXT("Coop.Test.Snapshot"),
         TEXT("Coop.Test.Snapshot <label>: log local and server HP/stamina/cooldown."),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
@@ -238,6 +264,34 @@ void UCoopRPGCombatProbeComponent::PrepareRoundEnd(FName Scenario)
     if (IsProbeEnabled(GetWorld()))
     {
         ServerPrepareRoundEnd(Scenario);
+    }
+}
+
+void UCoopRPGCombatProbeComponent::SnapshotRound(FName Label)
+{
+    if (IsProbeEnabled(GetWorld()))
+    {
+        WriteRoundSnapshot(Label);
+        ServerSnapshotRound(Label);
+    }
+}
+
+void UCoopRPGCombatProbeComponent::RequestStalePickup(FGuid RoundId)
+{
+    if (!IsProbeEnabled(GetWorld()))
+    {
+        return;
+    }
+
+    const auto* Pawn = Cast<ACoopRPGCharacter>(GetOwner());
+    auto* Controller = Pawn ? Cast<ACoopRPGPlayerController>(Pawn->GetController()) : nullptr;
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (Controller && Controller->IsLocalController() && State && State->GetSharedChest()
+        && RoundId.IsValid() && State->GetRoundId().IsValid() && State->GetRoundId() != RoundId)
+    {
+        UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestStalePickup OldRound=%s Round=%s"),
+            *RoundId.ToString(), *State->GetRoundId().ToString());
+        Controller->ServerTakeChestItem(State->GetSharedChest(), RoundId, 1, ECoopRPGChestItem::Recovery);
     }
 }
 
@@ -438,6 +492,14 @@ void UCoopRPGCombatProbeComponent::ServerPrepareRoundEnd_Implementation(FName Sc
 #endif
 }
 
+void UCoopRPGCombatProbeComponent::ServerSnapshotRound_Implementation(FName Label)
+{
+    if (IsProbeEnabled(GetWorld()))
+    {
+        WriteRoundSnapshot(Label);
+    }
+}
+
 #if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
 void UCoopRPGCombatProbeComponent::OnPeerLogout(AGameModeBase* Mode, AController* Exiting)
 {
@@ -484,4 +546,35 @@ void UCoopRPGCombatProbeComponent::WriteSnapshot(const FString& Label) const
     UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MovementSnapshot Label=%s Actor=%s Position=%s Velocity=%s %s"),
         *Label, *GetNameSafe(GetOwner()), *GetOwner()->GetActorLocation().ToString(), *GetOwner()->GetVelocity().ToString(),
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void UCoopRPGCombatProbeComponent::WriteRoundSnapshot(FName Label) const
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const auto* Pawn = Cast<ACoopRPGCharacter>(GetOwner());
+    const auto* Controller = Pawn ? Cast<ACoopRPGPlayerController>(Pawn->GetController()) : nullptr;
+    const UAbilitySystemComponent* ASC = GetSource(this);
+    if (!State || !Controller || !ASC || !State->GetSharedChest() || !State->GetRoundId().IsValid())
+    {
+        return;
+    }
+
+    float EnemyHP = -1.0f;
+    for (TActorIterator<ACoopRPGEnemy> It(GetWorld()); It; ++It)
+    {
+        EnemyHP = It->GetAbilitySystemComponent()->GetNumericAttribute(UCoopRPGCombatAttributes::GetHealthAttribute());
+        break;
+    }
+    const FVector Location = Pawn->GetActorLocation();
+    UE_LOG(LogCoopRPGCombatProbe, Log,
+        TEXT("TestRoundSnapshot Label=%s Map=%s Round=%s Actor=%s Phase=%s Ready=%d Open=%d HP=%.2f Stamina=%.2f Cooldown=%d Equipped=%d Recovery=%d ChestRecovery=%d ChestWeapons=%d EnemyHP=%.2f TeamLoot=%d Score=%d Clock=%d Extraction=%d X=%.2f Y=%.2f %s"),
+        *Label.ToString(), *UGameplayStatics::GetCurrentLevelName(this), *State->GetRoundId().ToString(),
+        *GetNameSafe(Pawn), State->IsRoundPlaying() ? TEXT("Playing") : State->HasRoundResult() ? TEXT("Result") : TEXT("Waiting"),
+        Controller->IsRoundReady(), Controller->GetOpenedChest() != nullptr, Pawn->GetHealth(),
+        ASC->GetNumericAttribute(UCoopRPGCombatAttributes::GetStaminaAttribute()),
+        ASC->GetTagCount(UCoopRPGMeleeCooldown::GetCooldownTag()), Pawn->HasMeleeWeapon(), Controller->GetRecoveryCount(),
+        State->GetSharedChest()->GetRecoveryStock(), State->GetSharedChest()->GetWeaponStock(), EnemyHP,
+        State->GetTeamLootCount(), State->GetTeamScore(), State->GetRoundRemainingSeconds() > 0.0,
+        State->IsExtractionInProgress(), Location.X, Location.Y,
+        *CoopRPG::Debug::DescribePlayerRequestContext(Pawn, ANSI_TO_TCHAR(__FUNCTION__)));
 }

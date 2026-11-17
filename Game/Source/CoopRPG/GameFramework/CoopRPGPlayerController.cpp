@@ -24,6 +24,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGManualInput, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGChestRequest, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundReady, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEnemyLootRequest, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundResultDisplay, Log, All);
 
 void ACoopRPGPlayerController::ReceivedPlayer()
 {
@@ -96,6 +97,17 @@ void ACoopRPGPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProper
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, bRoundReady, COND_OwnerOnly);
 }
 
+void ACoopRPGPlayerController::AcknowledgeRoundResult(FGuid RoundId)
+{
+    if (IsLocalController() && RoundId.IsValid() && LastDisplayedResultRound != RoundId)
+    {
+        LastDisplayedResultRound = RoundId;
+        UE_LOG(LogCoopRPGRoundResultDisplay, Log, TEXT("RoundResultDisplayed Round=%s %s"),
+            *RoundId.ToString(), *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        ServerAcknowledgeRoundResult(RoundId);
+    }
+}
+
 void ACoopRPGPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
@@ -116,6 +128,14 @@ void ACoopRPGPlayerController::ReadyForRound()
         UE_LOG(LogCoopRPGRoundReady, Log, TEXT("LootReadyRequested Round=%s %s"),
             *State->GetRoundId().ToString(), *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         ServerReadyForRound(State->GetRoundId());
+    }
+}
+
+void ACoopRPGPlayerController::ServerAcknowledgeRoundResult_Implementation(FGuid RoundId)
+{
+    if (auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>())
+    {
+        Mode->AcknowledgeRoundResult(this, RoundId);
     }
 }
 
