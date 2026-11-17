@@ -96,8 +96,9 @@ void UCoopRPGGameViewportClient::OnConnectionFailure(UWorld* FailureWorld, UNetD
         Notice = TEXT("Join with one player per client.");
         NoticeReason = Error;
     }
-    else if (Failure == ENetworkFailure::ConnectionLost || Failure == ENetworkFailure::ConnectionTimeout
-        || (Driver->NetDriverName == NAME_GameNetDriver && Failure == ENetworkFailure::FailureReceived))
+    else if (Driver->NetDriverName == NAME_GameNetDriver
+        && (Failure == ENetworkFailure::ConnectionLost || Failure == ENetworkFailure::ConnectionTimeout
+            || Failure == ENetworkFailure::FailureReceived))
     {
         Notice = TEXT("Connection to the server ended.");
         NoticeReason = TEXT("ConnectionEnded");

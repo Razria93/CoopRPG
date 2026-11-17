@@ -197,15 +197,53 @@ def trial(stage, output, scenario):
     return result
 
 
+def initial_timeout_trial(stage, output):
+    case = shared.Case(stage, output)
+    role = 'c-timeout'
+    failure = None
+    # A bound UDP socket silently drops packets and cannot accidentally admit the client.
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sink:
+        sink.bind(('127.0.0.1', 0))
+        port = sink.getsockname()[1]
+        try:
+            case.start(role, [f'127.0.0.1:{port}', *CLIENT_FLAGS,
+                       '-ini:Engine:[/Script/OnlineSubsystemUtils.IpNetDriver]:InitialConnectTimeout=3.0'],
+                       30, client_driver_end=1450)
+            case.wait('client renders the notice after an initial timeout',
+                      lambda: case.events(role, 'ConnectionNoticeDisplayed'), 45)
+            queued = case.events(role, 'ConnectionNoticeQueued')
+            displayed = case.events(role, 'ConnectionNoticeDisplayed')
+            log = (output / f'{role}.log').read_text(encoding='utf-8', errors='replace')
+            case.check('a pending connection times out without receiving a welcome',
+                       len(queued) == 1 and queued[0]['fields'].get('Failure') == 'ConnectionTimeout'
+                       and 'Welcomed by server' not in log)
+            case.check('the initial timeout queues and displays ConnectionFailed',
+                       [event['fields'].get('Reason') for event in queued] == ['ConnectionFailed']
+                       and [event['fields'].get('Reason') for event in displayed] == ['ConnectionFailed'])
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+            failure = str(exc)
+        finally:
+            case.finish(expected_process_count=1)
+
+    result = {'scenario': 'initial-timeout', 'checks': case.checks, 'error': failure,
+              'passed': not failure and all(item['passed'] for item in case.checks)}
+    (output / 'result.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+    print(result['scenario'], 'PASS' if result['passed'] else 'FAIL', len(case.checks), failure,
+          [item['description'] for item in case.checks if not item['passed']], flush=True)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--stage', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--scenario', choices=('admission', 'travel', 'shutdown'), action='append')
+    scenarios = ('admission', 'travel', 'shutdown', 'initial-timeout')
+    parser.add_argument('--scenario', choices=scenarios, action='append')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
-    results = [trial(args.stage.resolve(), args.output.resolve() / scenario, scenario)
-               for scenario in (args.scenario or ['admission', 'travel', 'shutdown'])]
+    stage, output = args.stage.resolve(), args.output.resolve()
+    results = [initial_timeout_trial(stage, output / scenario) if scenario == "initial-timeout"
+               else trial(stage, output / scenario, scenario) for scenario in (args.scenario or scenarios)]
     (args.output / 'summary.json').write_text(json.dumps(results, indent=2) + '\n', encoding='utf-8')
     return 0 if all(result['passed'] for result in results) else 1
 

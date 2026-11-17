@@ -162,15 +162,6 @@ void ACoopRPGCharacter::EquipMeleeWeapon()
     }
 }
 
-void ACoopRPGCharacter::OnRep_MeleeWeapon()
-{
-    WeaponMesh->SetVisibility(bHasMeleeWeapon);
-    const APlayerState* State = GetPlayerState();
-    UE_LOG(LogCoopRPGEquipment, Log, TEXT("MeleeWeaponReplicated Actor=%s Equipped=%d EquippedPlayerId=%d %s"),
-        *GetNameSafe(this), bHasMeleeWeapon ? 1 : 0, State ? State->GetPlayerId() : INDEX_NONE,
-        *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
-}
-
 void ACoopRPGCharacter::BeginPlay()
 {
     Super::BeginPlay();
@@ -245,4 +236,13 @@ void ACoopRPGCharacter::ServerCancelAttack_Implementation()
         UE_LOG(LogCoopRPGInput, Verbose, TEXT("CancelIgnored Actor=%s Reason=NoActiveAttack %s"),
             *GetNameSafe(this), *CoopRPG::Debug::DescribePlayerRequestContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
     }
+}
+
+void ACoopRPGCharacter::OnRep_MeleeWeapon()
+{
+    WeaponMesh->SetVisibility(bHasMeleeWeapon);
+    const APlayerState* State = GetPlayerState();
+    UE_LOG(LogCoopRPGEquipment, Log, TEXT("MeleeWeaponReplicated Actor=%s Equipped=%d EquippedPlayerId=%d %s"),
+        *GetNameSafe(this), bHasMeleeWeapon ? 1 : 0, State ? State->GetPlayerId() : INDEX_NONE,
+        *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
