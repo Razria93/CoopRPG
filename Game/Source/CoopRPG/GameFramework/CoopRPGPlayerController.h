@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGPlayerController.generated.h"
 
 class ACoopRPGSharedChest;
@@ -35,6 +36,7 @@ public:
 
 protected:
     virtual void SetupInputComponent() override;
+    virtual void Tick(float DeltaSeconds) override;
 
 private:
     friend class UCoopRPGCombatProbeComponent;
@@ -45,6 +47,7 @@ private:
     void ServerAcknowledgeRoundResult(FGuid RoundId);
     void OpenSharedChest();
     void CloseSharedChest();
+    void CloseOpenedChest(FGuid RoundId, const TCHAR* Reason);
     void TakeRecoveryItem();
     void TakeMeleeWeapon();
     void UseRecoveryItem();
@@ -61,6 +64,9 @@ private:
 
     UFUNCTION(Server, Reliable)
     void ServerUseRecovery(FGuid RoundId);
+
+    UFUNCTION(Client, Unreliable)
+    void ClientGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
 
     void TakeEnemyLoot();
 

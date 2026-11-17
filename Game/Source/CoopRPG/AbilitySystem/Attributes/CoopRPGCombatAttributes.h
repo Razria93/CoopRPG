@@ -29,6 +29,7 @@ private:
 
 public:
     static constexpr float MaxHealth = 100.0f;
+    static constexpr float MaxStamina = 100.0f;
 
 private:
     UPROPERTY(ReplicatedUsing = OnRep_Health)

@@ -8,6 +8,7 @@ class ACoopRPGCharacter;
 class UAbilitySystemComponent;
 class UCoopRPGCombatAttributes;
 class UStaticMeshComponent;
+class UMaterialInstanceDynamic;
 struct FOnAttributeChangeData;
 
 UCLASS()
@@ -19,11 +20,13 @@ public:
     ACoopRPGEnemy();
 
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+    float GetHealth() const;
     virtual void Tick(float DeltaSeconds) override;
     virtual void OnRep_ReplicatedMovement() override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     bool IsDead() const { return bDead; }
+    void FlashPresentationHit();
 
 protected:
     virtual void BeginPlay() override;
@@ -37,6 +40,8 @@ private:
     void HandleHealthChanged(const FOnAttributeChangeData& Change);
     void SpawnDeathLoot(const FGuid& RoundId);
     void ApplyDeathPresentation();
+    void SetPresentationTint(bool bDarkened);
+    void RestorePresentationTint();
 
     UFUNCTION()
     void OnRep_Dead();
@@ -50,6 +55,11 @@ private:
 
     UPROPERTY()
     TObjectPtr<UStaticMeshComponent> EnemyVisual;
+
+    UPROPERTY()
+    TObjectPtr<UMaterialInstanceDynamic> PresentationMaterial;
+
+    FTimerHandle HitFlashTimer;
 
     UPROPERTY(ReplicatedUsing = OnRep_Dead)
     bool bDead = false;

@@ -425,6 +425,17 @@ flowchart LR
 
 넓은 화면과 1000×700·900×480 창은 WinForms 자체 렌더링으로 확인했다. 최소 높이에서는 한두 행만 보이므로 장시간 검증은 최대화하거나 높이를 충분히 확보한다. PowerShell 호스트 GUI가 Computer Use 조작 대상으로 노출되지 않아 탭·필터·일시정지는 앱의 실제 컨트롤/이벤트 처리기로 시험했다. 후속 응답에서 사용자가 서버/클라이언트1 탭 전환과 `Attack` 검색에 따른 목록 변경을 정상 확인했다. 병렬 보기에서는 실제 컨트롤 검사40개와 자체 렌더링으로 2~4분할·각 칸 선택·동기 스크롤·늦은 기록·보관 한도 처리를 확인했다. 사용자의 종전 탭·검색 확인은 이번 병렬 UI 전체 확인으로 확대하지 않는다. 새 병렬 UI의 사람 조작, 서로 다른 DPI의 모니터 이동·물리 모니터 연결 해제는 미확인이다. 300ms는 타이머 설정이며 갱신 시간의 상한 보장이 아니다.
 
+<a id="pane-splitter-transition"></a>
+### 단일에서 2~4분할로 전환할 때 구분선 예외 · 2026-11-17
+
+사용자가 `관련 플레이어`와 `대상 객체` 열을 추가한 뒤부터 단일 화면을 분할로 바꿀 때 오류창이 나타난다고 보고했다. `1677b83`에서 열과 가로 스크롤이 함께 추가됐다. 이전 뷰어에서 첫 4분할 전환을 실행하자, WinForms가 창을 배치하는 동안 구분선 이동 이벤트가 발생했다. 다른 칸의 높이가 확정되기 전에 구분선을 동기화하면서 `SplitterDistance`에 허용 범위를 벗어난 값이 들어갔다.
+
+칸을 다시 붙이는 동안 동기화와 크기 재계산을 막고, 배치를 마친 뒤 실제 높이와 패널별 최소 높이로 구분선 범위를 계산한다. 상세창 표시를 다시 켤 때도 같은 범위를 사용한다. 목록과 상세의 관련 플레이어·대상 객체 표시를 유지했다.
+
+수정된 뷰어는 WinForms 회귀 53개를 통과했고 같은 시험에서 처리되지 않은 예외가 발생하지 않았다. 직전 SP 세션 원본 36개 사건으로 첫 4분할 전환과 1920×1000·1000×700·900×480의 2~4분할, 11·18pt, 상세 다시 열기를 확인했다. 상자 지급이 들어 있는 별도 SP 세션에서는 목록과 상세에 각각 `클라 1`과 `공용 상자`가 표시됨을 확인했다.
+
+**근거** · 로컬 `Artifacts/Validation/viewer-pane-switch-20261117/`의 `before-with-trace/winforms-exceptions.txt`, `after-with-trace/ui-result.json`, `sp-session-after/result.json`, `chest-after/result.json`과 PNG. [뷰어 실행](#실행과-배치)
+
 ## 근거 및 더 읽기
 
 - 구현·시험: [런처](../../Tools/Validation/Start-CombatManual.ps1), [뷰어](../../Tools/Validation/Watch-CombatManual.ps1), [읽기·분류](../../Tools/Validation/CombatLogReader.psm1), [배치·설정](../../Tools/Validation/CombatViewerLayout.psm1), [읽기·배치 검사](../../Tools/Validation/Test-CombatViewer.ps1), [병렬 행 구성](../../Tools/Validation/CombatLogViews.psm1), [병렬 UI 검사](../../Tools/Validation/Test-CombatParallel.ps1).

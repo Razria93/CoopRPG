@@ -18,7 +18,7 @@
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 11월5일 운영 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 현재 기능 결과는 [V06 입장과 연결 종료 안내 카드](#v06-round-admission-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
+- 현재 기능 결과는 [V07 기본 설정 완주 카드](#v07-default-playthrough-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -138,11 +138,26 @@
 - **연계** · [V06 입장과 연결 종료 안내](#v06-round-admission-card)에서 C의 접속과 두 참가자의 정상 전환을 대조했다.
 
 <a id="v06-round-admission-card"></a>
-### 현재 작업 · V06 입장과 연결 종료 안내 · 2026-11-16
+### 이전 작업 · V06 입장과 연결 종료 안내 · 2026-11-16
 
 - **확인** · 대기 중 정원 초과, 진행 중 신규 입장, 다음 맵 예약 중 새 입장을 서버가 각각 거절했다. 기존 A·B만 다음 맵에 도착해 재준비했다. 참가자 이탈의 기존 중단 결과와 서버 종료의 양쪽 연결 안내를 별도로 확인했다. [실행 근거](Validation/Index.md#v06-round-admission)
 - **사용자 확인** · 같은 실행에서 C의 두 거절, 사망 뒤 A·B의 새 맵 입장과 300초 재시작, 서버 정상 종료 뒤 양쪽 안내를 재현했다. [수동 검증](Validation/Index.md#v06-round-admission-user-result)
-- **다음** · V07에서 기본값·콘텐츠 경로와 기존 패키지의 완주 가능성을 점검한다. [V06·V07 시험](Validation/Index.md#active-tests)
+- **연계** · [V07 기본 설정 완주](#v07-default-playthrough-card)에서 동일 패키지의 전체 진행을 확인했다.
+
+<a id="v07-default-playthrough-card"></a>
+### 현재 작업 · V07 기본 설정 완주 · 2026-11-16
+
+- **확인** · 기존 Server·Client 패키지에서 일반 키와 마우스로 두 사람의 무장·전투·팀 루팅·공동 탈출·성공 1점·새 맵 재준비를 확인했다. [실제 검증](Validation/Index.md#v07-default-playthrough)
+- **사용자 확인** · 두 창에서 무기 장착부터 공동 탈출·성공 1점·다음 맵 재준비를 직접 확인했다. [수동 검증](Validation/Index.md#v07-default-playthrough-user-result)
+- **1차 마감 순서 · 2026-11-16 사용자 채택** · 상자 거리 이탈 자동 닫기와 두 품목 재고 로그 → 플레이어·적 식별과 행동 피드백 → 탈출·결과·준비 UI → 최종 패키지 기동 안내와 기본 조건 재현 → 제출 전 V08 핵심 시험.
+- **마감 기준** · 전용 서버와 두 클라이언트에서 사용자 성공 한 판과 실패 후 다음 맵 재준비, 안내만으로 기동·종료·재실행, 같은 패키지의 V08 핵심 세 시나리오를 확인한다. 중복 지급, 수락한 취소 뒤 피해, 결과·점수 불일치가 재현되면 수정하고 재시험한다. [제출 전 V08 범위](Validation/Index.md#pre-submission-v08)
+- **1차 보완 진행** · 상자 거리 이탈과 재고 로그를 새 전용 Server·Client 실행 파일로 검증했다. 다음은 P1·P2·적 식별과 피격·회복·획득·사용 표시다. [상자 검증](Validation/Index.md#shared-chest-distance-close)
+- **플레이 화면 진행** · P1·P2·적 식별과 서버 확정 피해·회복·획득·사용 표시를 새 전용 패키지로 검증했다. 다음은 탈출·결과·준비 UI다. [화면과 검증](Validation/Index.md#v07-game-presentation)
+- **탈출·결과·준비 UI** · 전용 서버와 두 클라이언트에서 이탈·재진입, 성공·실패 뒤 재준비와 접속 종료 안내를 자동 검증했다. 사용자 실행의 성공·재준비·접속 중단을 원본과 대조했다. 다음은 최종 기동 안내와 V08 핵심 시험이다. [자동 검증](Validation/Index.md#v07-round-ui) · [사용자 실행](Validation/Index.md#v07-round-ui-user-result)
+- **제출 후보 확인** · 새 폴더에서 README 기동·종료·재실행과 기본 완주를 검증했다. 동일 후보의 V08 핵심 세 시나리오를 기본·수신 지연 100ms·수신 손실 1%에서 확인했다. [후보와 실제 결과](Validation/Index.md#submission-candidate)
+- **HP 이름표와 제출 후보 재검증** · P1·P2·Enemy 현재/최대 HP, 사망·새 맵 초기화와 기본 완주를 후보에서 확인했다. 기본·100ms 수신 지연·1% 수신 손실의 V08 핵심 시험과 지연 경합 순차 5회를 다시 수행했다. [최종 후보 근거](Validation/Index.md#v07-hp-nameplates-final)
+- **두 줄 HP 제출 후보 확정** · 동일한 패키지에서 README 재현과 플레이어 사망 뒤 재준비, 3조건 V08 핵심 시험을 확인했다. [최종 후보와 근거](Validation/Index.md#v07-hp-stacked-submission)
+- **2차 후보** · 1차 결과를 보고 [후속 후보](Project.md#mvp-scope)의 범위와 순서를 정한다.
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬
 

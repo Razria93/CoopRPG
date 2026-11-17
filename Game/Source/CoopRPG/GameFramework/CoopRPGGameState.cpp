@@ -1,12 +1,14 @@
 #include "CoopRPGGameState.h"
 
 #include "CoopRPGExtractionZone.h"
-
+#include "CoopRPGLootHUD.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
 #include "CoreGlobals.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
@@ -33,6 +35,7 @@ void ACoopRPGGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGGameState, SharedChest);
     DOREPLIFETIME(ACoopRPGGameState, RoundId);
     DOREPLIFETIME(ACoopRPGGameState, RoundStatus);
+    DOREPLIFETIME(ACoopRPGGameState, ReadySlots);
     DOREPLIFETIME(ACoopRPGGameState, ExtractionZone);
     DOREPLIFETIME(ACoopRPGGameState, EnemyLoot);
     DOREPLIFETIME(ACoopRPGGameState, TeamLootCount);
@@ -70,6 +73,27 @@ void ACoopRPGGameState::SetRoundPlaying(bool bPlaying)
         RoundStatus.Phase = bPlaying ? ECoopRPGRoundPhase::Playing : ECoopRPGRoundPhase::Waiting;
         UE_LOG(LogCoopRPGRound, Log, TEXT("LootRoundPhase Round=%s Phase=%s"),
             *RoundId.ToString(), bPlaying ? TEXT("Playing") : TEXT("Waiting"));
+        ForceNetUpdate();
+    }
+}
+
+void ACoopRPGGameState::MulticastGameplayFeedback_Implementation(const FCoopRPGGameplayFeedback& Feedback)
+{
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        const APlayerController* Controller = GetWorld()->GetFirstPlayerController();
+        if (auto* HUD = Controller ? Cast<ACoopRPGLootHUD>(Controller->GetHUD()) : nullptr)
+        {
+            HUD->ShowGameplayFeedback(Feedback);
+        }
+    }
+}
+
+void ACoopRPGGameState::SetReadySlots(const FCoopRPGReadySlots& Slots)
+{
+    if (HasAuthority() && (Slots.PlayerOne != ReadySlots.PlayerOne || Slots.PlayerTwo != ReadySlots.PlayerTwo))
+    {
+        ReadySlots = Slots;
         ForceNetUpdate();
     }
 }
@@ -206,4 +230,13 @@ void ACoopRPGGameState::OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousSta
             *RoundId.ToString(), IsExtractionInProgress() ? TEXT("Started") : TEXT("Reset"),
             RoundStatus.ExtractionDeadline, *Context);
     }
+}
+
+void ACoopRPGGameState::OnRep_ReadySlots()
+{
+    const auto* StatusEnum = StaticEnum<ECoopRPGReadyStatus>();
+    UE_LOG(LogCoopRPGRound, Log, TEXT("RoundReadySlotsReplicated Round=%s P1=%s P2=%s %s"),
+        *RoundId.ToString(), *StatusEnum->GetNameStringByValue(static_cast<int64>(ReadySlots.PlayerOne)),
+        *StatusEnum->GetNameStringByValue(static_cast<int64>(ReadySlots.PlayerTwo)),
+        *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }

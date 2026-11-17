@@ -66,7 +66,13 @@ AActor* ACoopRPGGameMode::GetMeleeTarget() const
 void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
 {
     auto* State = GetGameState<ACoopRPGGameState>();
-    if (!State || State->HasRoundResult() || (bEnemyCombat && State->IsRoundPlaying()))
+    if (!State)
+    {
+        return;
+    }
+
+    PublishReadySlots(*State);
+    if (State->HasRoundResult() || (bEnemyCombat && State->IsRoundPlaying()))
     {
         return;
     }
@@ -219,12 +225,33 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
     }
 
     APlayerController* Player = Super::Login(NewPlayer, InRemoteRole, Portal, Options, UniqueId, ErrorMessage);
-    if (Player && GetNetMode() == NM_DedicatedServer)
+    if (!Player)
+    {
+        return nullptr;
+    }
+
+    int32 ReservedSlot = INDEX_NONE;
+    if (GetNetMode() == NM_DedicatedServer)
     {
         const FName Map(*UGameplayStatics::GetCurrentLevelName(this));
-        GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->Admit(Map, UniqueId);
+        ReservedSlot = GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->Admit(Map, UniqueId);
         UE_LOG(LogCoopRPGRoundAdmission, Log, TEXT("RoundPlayerAdmitted Map=%s Players=%d"),
             *Map.ToString(), GetNumPlayers());
+    }
+    if (ReservedSlot != INDEX_NONE)
+    {
+        PlayerSlots[ReservedSlot] = Player;
+    }
+    else
+    {
+        for (auto& Slot : PlayerSlots)
+        {
+            if (!Slot.IsValid())
+            {
+                Slot = Player;
+                break;
+            }
+        }
     }
     return Player;
 }
@@ -237,8 +264,49 @@ void ACoopRPGGameMode::Logout(AController* Exiting)
     {
         bParticipantDisconnected = true;
     }
+    for (auto& Slot : PlayerSlots)
+    {
+        if (Slot.Get() == Exiting)
+        {
+            Slot.Reset();
+        }
+    }
     Super::Logout(Exiting);
     UpdateLootRoundPhase(Exiting);
+}
+
+void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
+{
+    Super::RestartPlayer(NewPlayer);
+    if (auto* Character = NewPlayer ? Cast<ACoopRPGCharacter>(NewPlayer->GetPawn()) : nullptr)
+    {
+        for (int32 Index = 0; Index < RoundCapacity; ++Index)
+        {
+            if (PlayerSlots[Index].Get() == NewPlayer)
+            {
+                Character->SetDisplaySlot(Index + 1);
+                if (auto* State = GetGameState<ACoopRPGGameState>())
+                {
+                    PublishReadySlots(*State);
+                }
+                break;
+            }
+        }
+    }
+}
+
+void ACoopRPGGameMode::PublishReadySlots(ACoopRPGGameState& State) const
+{
+    const auto GetStatus = [](const APlayerController* Controller)
+    {
+        const auto* Player = Cast<ACoopRPGPlayerController>(Controller);
+        if (!Player || !Player->GetPawn())
+        {
+            return ECoopRPGReadyStatus::Disconnected;
+        }
+        return Player->IsRoundReady() ? ECoopRPGReadyStatus::Ready : ECoopRPGReadyStatus::Waiting;
+    };
+    State.SetReadySlots({GetStatus(PlayerSlots[0].Get()), GetStatus(PlayerSlots[1].Get())});
 }
 
 FString ACoopRPGGameMode::GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId)
@@ -279,9 +347,9 @@ bool ACoopRPGGameMode::ReserveRoundTravelSeats(const FString& Destination) const
     }
 
     TArray<FUniqueNetIdRepl> ConnectionIds;
-    for (const auto& Participant : RoundPlayers)
+    for (const auto& Slot : PlayerSlots)
     {
-        if (const auto* Player = Participant.Get())
+        if (const auto* Player = Slot.Get(); Player && IsRoundParticipant(Player))
         {
             const APlayerState* PlayerState = Player->GetPlayerState<APlayerState>();
             if (PlayerState && PlayerState->GetUniqueId().IsValid())

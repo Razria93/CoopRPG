@@ -10,6 +10,8 @@
 #include "AbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "TimerManager.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -59,6 +61,9 @@ ACoopRPGEnemy::ACoopRPGEnemy()
     EnemyVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
     EnemyVisual->SetStaticMesh(Cube.Object);
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> TintableMaterial(
+        TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+    EnemyVisual->SetMaterial(0, TintableMaterial.Object);
 
     AbilitySystem = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystem"));
     AbilitySystem->SetIsReplicated(true);
@@ -69,6 +74,11 @@ ACoopRPGEnemy::ACoopRPGEnemy()
 UAbilitySystemComponent* ACoopRPGEnemy::GetAbilitySystemComponent() const
 {
     return AbilitySystem;
+}
+
+float ACoopRPGEnemy::GetHealth() const
+{
+    return CombatAttributes->GetHealth();
 }
 
 void ACoopRPGEnemy::Tick(float DeltaSeconds)
@@ -167,9 +177,16 @@ void ACoopRPGEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
     DOREPLIFETIME(ACoopRPGEnemy, bDead);
 }
 
+void ACoopRPGEnemy::FlashPresentationHit()
+{
+    SetPresentationTint(true);
+    GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestorePresentationTint, 0.22f);
+}
+
 void ACoopRPGEnemy::BeginPlay()
 {
     Super::BeginPlay();
+    RestorePresentationTint();
     AbilitySystem->InitAbilityActorInfo(this, this);
     ObservationOrigin = GetActorLocation();
     SetActorTickEnabled(HasAuthority());
@@ -244,6 +261,13 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
     check(Damage.IsValid());
     const float HealthBefore = Player->GetHealth();
     AbilitySystem->ApplyGameplayEffectSpecToTarget(*Damage.Data.Get(), Player->GetAbilitySystemComponent());
+    if (const float DamageAmount = HealthBefore - Player->GetHealth(); DamageAmount > 0.0f)
+    {
+        if (auto* State = GetWorld()->GetGameState<ACoopRPGGameState>())
+        {
+            State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::Damage, Player, DamageAmount, 0});
+        }
+    }
     UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackHit Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f HP=%.2f->%.2f %s"),
         *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm,
         HealthBefore, Player->GetHealth(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
@@ -300,6 +324,28 @@ void ACoopRPGEnemy::ApplyDeathPresentation()
 {
     GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     EnemyVisual->SetVisibility(false);
+}
+
+void ACoopRPGEnemy::SetPresentationTint(bool bDarkened)
+{
+    if (GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+    if (!PresentationMaterial)
+    {
+        PresentationMaterial = EnemyVisual->CreateDynamicMaterialInstance(0);
+    }
+    if (PresentationMaterial)
+    {
+        const FLinearColor Color = CoopRPG::Presentation::EnemyColor();
+        PresentationMaterial->SetVectorParameterValue(TEXT("Color"), bDarkened ? Color * 0.25f : Color);
+    }
+}
+
+void ACoopRPGEnemy::RestorePresentationTint()
+{
+    SetPresentationTint(false);
 }
 
 void ACoopRPGEnemy::OnRep_Dead()

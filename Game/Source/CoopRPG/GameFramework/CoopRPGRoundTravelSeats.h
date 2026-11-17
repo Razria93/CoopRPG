@@ -14,7 +14,7 @@ public:
     void Reserve(FName Destination, TArray<FUniqueNetIdRepl> Participants);
     void Clear();
     bool Allows(FName Map, const FUniqueNetIdRepl& ConnectionId) const;
-    void Admit(FName Map, const FUniqueNetIdRepl& ConnectionId);
+    int32 Admit(FName Map, const FUniqueNetIdRepl& ConnectionId);
 
 private:
     bool IsActive(FName Map) const;
@@ -22,5 +22,6 @@ private:
 private:
     FName ReservedMap;
     TArray<FUniqueNetIdRepl> AwaitingPlayers;
+    TArray<FUniqueNetIdRepl> ReservedPlayers;
     double ExpiresAt = 0.0;
 };

@@ -4,10 +4,13 @@
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Debug/CoopRPGCombatProbeComponent.h"
+#include "CoopRPG/GameFramework/CoopRPGGameplayFeedback.h"
 
 #include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "TimerManager.h"
 #include "Engine/StaticMesh.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -28,21 +31,26 @@ ACoopRPGCharacter::ACoopRPGCharacter()
     GetCharacterMovement()->bOrientRotationToMovement = true;
     GetCharacterMovement()->MaxWalkSpeed = 300.0f;
 
-    auto* Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
-    Body->SetupAttachment(GetRootComponent());
-    Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    Body->SetRelativeScale3D(FVector(0.60f, 0.60f, 1.20f));
-    Body->SetRelativeLocation(FVector(0.0f, 0.0f, -18.0f));
+    BodyMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
+    BodyMesh->SetupAttachment(GetRootComponent());
+    BodyMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    BodyMesh->SetRelativeScale3D(FVector(0.60f, 0.60f, 1.20f));
+    BodyMesh->SetRelativeLocation(FVector(0.0f, 0.0f, -18.0f));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-    Body->SetStaticMesh(Cylinder.Object);
+    BodyMesh->SetStaticMesh(Cylinder.Object);
 
-    auto* Head = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Head"));
-    Head->SetupAttachment(GetRootComponent());
-    Head->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    Head->SetRelativeScale3D(FVector(0.48f));
-    Head->SetRelativeLocation(FVector(0.0f, 0.0f, 60.0f));
+    HeadMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Head"));
+    HeadMesh->SetupAttachment(GetRootComponent());
+    HeadMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    HeadMesh->SetRelativeScale3D(FVector(0.48f));
+    HeadMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 60.0f));
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-    Head->SetStaticMesh(Sphere.Object);
+    HeadMesh->SetStaticMesh(Sphere.Object);
+
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> TintableMaterial(
+        TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+    BodyMesh->SetMaterial(0, TintableMaterial.Object);
+    HeadMesh->SetMaterial(0, TintableMaterial.Object);
 
     WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeleeWeapon"));
     WeaponMesh->SetupAttachment(GetRootComponent());
@@ -87,11 +95,17 @@ void ACoopRPGCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGCharacter, bHasMeleeWeapon);
+    DOREPLIFETIME(ACoopRPGCharacter, DisplaySlot);
 }
 
 float ACoopRPGCharacter::GetHealth() const
 {
     return CombatAttributes->GetHealth();
+}
+
+float ACoopRPGCharacter::GetStamina() const
+{
+    return CombatAttributes->GetStamina();
 }
 
 void ACoopRPGCharacter::EquipMeleeWeapon()
@@ -102,6 +116,20 @@ void ACoopRPGCharacter::EquipMeleeWeapon()
         WeaponMesh->SetVisibility(true);
         ForceNetUpdate();
     }
+}
+
+void ACoopRPGCharacter::SetDisplaySlot(int32 Slot)
+{
+    check(HasAuthority());
+    DisplaySlot = Slot;
+    OnRep_DisplaySlot();
+    ForceNetUpdate();
+}
+
+void ACoopRPGCharacter::FlashPresentationHit()
+{
+    SetPresentationTint(true);
+    GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestorePresentationTint, 0.22f);
 }
 
 void ACoopRPGCharacter::BeginPlay()
@@ -187,4 +215,34 @@ void ACoopRPGCharacter::OnRep_MeleeWeapon()
     UE_LOG(LogCoopRPGEquipment, Log, TEXT("MeleeWeaponReplicated Actor=%s Equipped=%d EquippedPlayerId=%d %s"),
         *GetNameSafe(this), bHasMeleeWeapon ? 1 : 0, State ? State->GetPlayerId() : INDEX_NONE,
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGCharacter::OnRep_DisplaySlot()
+{
+    RestorePresentationTint();
+    UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerDisplaySlot Actor=%s Slot=%d %s"),
+        *GetNameSafe(this), DisplaySlot, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGCharacter::SetPresentationTint(bool bDarkened)
+{
+    if (DisplaySlot == 0 || GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+    if (!PresentationMaterial)
+    {
+        PresentationMaterial = BodyMesh->CreateDynamicMaterialInstance(0);
+        HeadMesh->SetMaterial(0, PresentationMaterial);
+    }
+    if (PresentationMaterial)
+    {
+        const FLinearColor Color = CoopRPG::Presentation::PlayerColor(DisplaySlot);
+        PresentationMaterial->SetVectorParameterValue(TEXT("Color"), bDarkened ? Color * 0.25f : Color);
+    }
+}
+
+void ACoopRPGCharacter::RestorePresentationTint()
+{
+    SetPresentationTint(false);
 }

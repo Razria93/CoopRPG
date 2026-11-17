@@ -118,6 +118,14 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         '^LootRoundPhase$' {$label='루팅 라운드 상태';$detail=[string]$fields['Phase'];break}
         '^LootReadyRequested$' {$label='준비 RPC 호출';$stage='RPC 호출';$outcome='호출';break}
         '^LootPlayerReady$' {$label='플레이어 준비 완료';$stage='서버 판정';break}
+        '^RoundReadySlotsReplicated$' {
+            $label='팀 준비 상태 복제';$stage='복제 관찰'
+            $names=@{Disconnected='미접속';Waiting='준비 전';Ready='준비 완료'}
+            $p1=$names[[string]$fields['P1']];$p2=$names[[string]$fields['P2']]
+            if(!$p1){$p1='미계측'}
+            if(!$p2){$p2='미계측'}
+            $detail="P1 $p1 · P2 $p2";break
+        }
         '^ChestTakeRequested$' {$label='회복약 획득 RPC 호출';$detail="요청 $($fields['Request'])";$stage='RPC 호출';$outcome='호출';break}
         '^ChestWeaponRequested$' {$label='근접무기 획득 RPC 호출';$detail="요청 $($fields['Request'])";$stage='RPC 호출';$outcome='호출';break}
         '^RecoveryUseRequested$' {$label='회복약 사용 RPC 호출';$stage='RPC 호출';$outcome='호출';break}
@@ -125,8 +133,12 @@ function ConvertTo-CombatLogEvent([string]$Line) {
             $label=if($fields['Action'] -eq 'Close'){'상자 닫기 RPC 호출'}else{'상자 열기 RPC 호출'}
             $stage='RPC 호출';$outcome='호출';break
         }
-        '^ChestClosed$' {$label='상자 닫기 확정';$stage='서버 판정';$outcome='승인';break}
-        '^ChestOpened$' {$label='상자 열람 승인';$detail="회복약 $($fields['Stock'])개";$stage='서버 판정';$outcome='승인';break}
+        '^ChestClosed$' {
+            $reason=[string]$fields['Reason']
+            $label=if($reason -eq 'OutOfRange'){'상자 자동 닫기'}else{'상자 닫기 확정'}
+            if($reason -eq 'OutOfRange'){$detail='거리 이탈'}
+            $stage='서버 판정';$outcome='승인';break
+        }
         '^ChestGranted$' {
             $label='회복약 지급';$stage='서버 판정';$outcome='승인'
             $detail="요청 $($fields['Request']) · 남은 수량 $($fields['Stock'] -replace '->',' → ')"
@@ -166,10 +178,21 @@ function ConvertTo-CombatLogEvent([string]$Line) {
             if($fields['Request'] -and $fields['Request'] -ne '0'){$detail+=" · 요청 $($fields['Request'])"}
             break
         }
-        '^ChestViewReplicated$' {
-            $label=if($fields['Open'] -eq '1'){'내 상자 열람'}else{'내 상자 닫기'}
-            if($fields['Open'] -eq '1'){$detail="회복약 $($fields['Stock'])개"}
-            $stage='복제 관찰';break
+        '^(ChestOpened|ChestViewReplicated)$' {
+            if($eventCode -eq 'ChestOpened'){
+                $label='상자 열람 승인';$stage='서버 판정';$outcome='승인'
+            }else{
+                $label=if($fields['Open'] -eq '1'){'내 상자 열람'}else{'내 상자 닫기'}
+                $stage='복제 관찰'
+            }
+            if($eventCode -eq 'ChestOpened' -or $fields['Open'] -eq '1'){
+                $stock=@(
+                    if($fields.ContainsKey('WeaponStock')){"근접무기 $($fields['WeaponStock'])개"}
+                    if($fields.ContainsKey('Stock')){"회복약 $($fields['Stock'])개"}
+                )
+                $detail=$stock -join ' · '
+            }
+            break
         }
         '^ChestStockReplicated$' {$label='공용 상자 재고 복제';$detail="남은 회복약 $($fields['Stock'])개";$stage='복제 관찰';break}
         '^WeaponStockReplicated$' {$label='근접무기 재고 복제';$detail="남은 무기 $($fields['Stock'])개";$stage='복제 관찰';break}

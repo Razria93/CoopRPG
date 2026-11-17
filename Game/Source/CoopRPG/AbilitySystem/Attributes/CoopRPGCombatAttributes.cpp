@@ -12,7 +12,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGCombatAttributes, Log, All);
 
 UCoopRPGCombatAttributes::UCoopRPGCombatAttributes()
-    : Health(MaxHealth), Stamina(100.0f)
+    : Health(MaxHealth), Stamina(MaxStamina)
 {
 }
 
@@ -32,7 +32,7 @@ void UCoopRPGCombatAttributes::PreAttributeBaseChange(const FGameplayAttribute& 
     }
     else if (Attribute == GetStaminaAttribute())
     {
-        NewValue = FMath::Clamp(NewValue, 0.0f, 100.0f);
+        NewValue = FMath::Clamp(NewValue, 0.0f, MaxStamina);
     }
 }
 

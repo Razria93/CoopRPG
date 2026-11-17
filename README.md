@@ -4,7 +4,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 ## 현재 상태
 
-**2026-11-15 현재:** V01 접속·이동·서버 종료 감지는 통과했고, V02 GAS 단타의 승인·거리 거절·입력 통합 및 사용자 수동 로그 확인까지 근거가 있다. 후속 [독립 패키지 비용·2초 쿨다운 시험](Docs/Validation/Index.md#v02-cost-cooldown)과 기존 회귀도 통과했다. 사용자 [새 기능 직접 재현](Docs/Validation/Index.md#v02-cost-cooldown-manual)과 Editor 갱신, V02 잔여·V03 취소·한 판 완주는 남아 있다. 아래 날짜별 결과는 당시 이력으로 보존한다.
+**2026-11-17 현재:** 전용 서버와 두 클라이언트에서 준비, 무장, 전투, 팀 루팅, 공동 탈출, 다음 맵 재준비가 연결된다. 1차 MVP 화면은 탈출 발판의 진행 상태, 결과·점수·스테이지, 두 플레이어의 준비 상태를 표시한다. [패키지 기본 완주](Docs/Validation/Index.md#v07-default-playthrough) · [탈출·결과·준비 UI](Docs/Validation/Index.md#v07-round-ui) · [실행 안내](#submission-start)
 
 2026-11-07 · **최소 맵 `L_Movement`에서 기본 캐릭터의 WASD 이동과 정지를 로컬 PIE로 확인했다.** 사용자가 `MaxWalkSpeed`를 500에서 300 cm/s로 바꿔 빌드하고 플레이에서 차이를 확인했다. 소스 UE 5.8.4의 패키지 전용 서버와 전용 Client 2개로 접속·자기 캐릭터 조작·상대 이동·정상 종료를 확인했다. 서버 선종료 감지를 포함한 전체 흐름은 자동 검증 3회를 통과했다. 수동 1회에서도 사용자 이동 복제 관찰과 양쪽 종료 로그를 확인했다. [수동 결과](Docs/Validation/Index.md#v01-manual-result) [V01 반복 근거](Docs/Validation/Index.md#v01-server-shutdown) [현재 카드](Docs/Roadmap.md#next-work) · [이동 구조](Docs/Architecture.md) · [검증 결과](Docs/Validation/Index.md#l00-movement) · [35개 요구](Docs/Development.md#requirement-coverage)
 
@@ -68,7 +68,29 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 새 판본을 낼 때 위 항목에서 실제 코드·시험 기준, 편집 원본/출력본, 검수 범위와 공개 상태를 갱신한다. 외부 공유가 필요하면 열람 가능한 배포 경로를 확인한 뒤 연결한다. 스킬·형식 규칙은 [작업 지침](AGENTS.md#session-workflow)과 [기능 문서 스킬](.agents/skills/cooprpg-feature-docs/SKILL.md)을 따른다.
 
+<a id="submission-start"></a>
 ## 실행 안내
+
+### 제출 후보 패키지 실행
+
+Windows에서 제공받은 Win64 Development 패키지의 `Stage`를 새 폴더에 푼다. `Stage` 아래의 `WindowsServer`와 `WindowsClient` 폴더를 함께 유지한다. 저장소 루트에서 PowerShell을 열고, 패키지를 푼 경로로 `$package`를 바꿔 실행한다. 이 명령은 같은 PC의 전용 서버 1개에 클라이언트 A·B를 연결하고 실시간 로그 뷰어를 연다.
+
+```powershell
+$package = 'C:\CoopRPG-Package\Stage'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Validation\Start-CombatManual.ps1 -PackageRoot $package -EnemyCombat
+```
+
+1. A·B에 `STAGE 1 | TEAM READY`가 뜨면 각 창에서 `R`을 누른다. 한 명만 준비하면 대기하고 둘 다 준비하면 시작한다. 창을 전환한 직후 첫 왼쪽 클릭은 포커스를 잡는다.
+2. `WASD`로 이동한다. 두 사람이 상자 가까이에서 각각 `E`로 열고 `G`로 무기를 장착한다. `F`는 회복약 획득, `Q`는 상자 닫기, `H`는 회복약 사용이다.
+3. 왼쪽 클릭으로 공격하고, 오른쪽 클릭으로 타격 전 공격을 취소한다. 적을 쓰러뜨리면 전리품 가까이에서 한 명이 `T`로 팀 전리품을 획득한다.
+4. 두 사람이 활성화된 탈출 발판에서 3초간 머문다. 양쪽에서 성공·1점을 확인하고, 자동 이동한 맵에서 각자 `R`로 다시 준비한다.
+5. 종료할 때는 두 게임 창과 로그 뷰어를 닫는다. 런처가 출력한 **이번 서버 PID**에 `Stop-Process -Id <이번 서버 PID>`를 실행한다. 위 기동 명령을 다시 실행하면 새 로컬 포트와 로그 폴더를 사용한다.
+
+런처가 출력하는 `manual-...` 폴더에 서버 `server.log`와 A·B의 `a.log`, `b.log`가 저장된다. 뷰어의 `창 캡처`와 `Excel 저장`은 그 아래 `Exports/`에 저장한다. [모니터 설정과 로그 도구](Docs/Validation/LogViewer.md#실행과-배치)
+
+**확인한 범위** · P1·P2·Enemy의 이름과 현재/최대 HP가 두 줄로 표시된다. 확정 후보에서 2인 기동·종료·재실행, 기본 완주, 플레이어 사망 뒤 다음 맵 HP 초기화와 재준비를 확인했다. [후보 해시와 V08 핵심 시험 결과](Docs/Validation/Index.md#v07-hp-stacked-submission)
+
+### 에디터 첫 이동 실습
 
 아래는 첫 이동 실습 안내다. 두 클라이언트 전투·로그 확인은 [V02 수동 검증 안내](Docs/Validation/Index.md#v02-manual-attack-log)를 사용한다.
 

@@ -181,7 +181,7 @@ void UCoopRPGMeleeAbility::ResolveHit()
     const FGameplayAttribute HealthAttribute = UCoopRPGCombatAttributes::GetHealthAttribute();
     const auto* GameMode = IsValid(Attacker) ? Attacker->GetWorld()->GetAuthGameMode<ACoopRPGGameMode>() : nullptr;
 
-    const auto* State = IsValid(Attacker) ? Attacker->GetWorld()->GetGameState<ACoopRPGGameState>() : nullptr;
+    auto* State = IsValid(Attacker) ? Attacker->GetWorld()->GetGameState<ACoopRPGGameState>() : nullptr;
 
     const TCHAR* MissReason = nullptr;
     float Distance = 0.0f;
@@ -221,6 +221,12 @@ void UCoopRPGMeleeAbility::ResolveHit()
     const FGameplayEffectSpecHandle Damage = MakeOutgoingGameplayEffectSpec(UCoopRPGMeleeDamage::StaticClass());
     check(Damage.IsValid());
     Source->ApplyGameplayEffectSpecToTarget(*Damage.Data.Get(), TargetASC);
+    if (const float DamageAmount = HealthBefore - TargetASC->GetNumericAttribute(HealthAttribute); State && DamageAmount > 0.0f)
+    {
+        const auto* Character = Cast<ACoopRPGCharacter>(Attacker);
+        const int32 Slot = Character && Character->GetDisplaySlot() > 0 ? Character->GetDisplaySlot() : INDEX_NONE;
+        State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::Damage, Target, DamageAmount, Slot});
+    }
     UE_LOG(LogCoopRPGMelee, Log,
         TEXT("AttackApproved Attacker=%s Target=%s Distance=%.2f Range=%.2f HP=%.2f->%.2f %s"),
         *GetNameSafe(Attacker), *GetNameSafe(Target), Distance, MeleeRangeCm, HealthBefore, TargetASC->GetNumericAttribute(HealthAttribute),
