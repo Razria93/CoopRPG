@@ -15,7 +15,6 @@ public:
 
     bool TryClaim();
 
-    static constexpr float PickupRangeCm = 250.0f;
     bool IsClaimed() const { return bClaimed; }
     FGuid GetDropId() const { return DropId; }
 
@@ -30,6 +29,9 @@ private:
     void OnRep_Claimed();
 
     void ApplyClaimPresentation();
+
+public:
+    static constexpr float PickupRangeCm = 250.0f;
 
 private:
     UPROPERTY(ReplicatedUsing = OnRep_DropId)
