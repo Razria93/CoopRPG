@@ -1,11 +1,11 @@
-# 최소 맵의 입력과 캐릭터 이동
+# 최소 맵의 입력과 서버 판정
 
-CoopRPG · 2026-11-07 · UE 5.8.4 · 첫 이동 구현
+CoopRPG · 2026-11-15 · UE 5.8.4 · 기본 이동과 고정 표적 GAS 단타
 
 ## 한 번의 입력이 이동이 되기까지
 
 1. 기본 맵 `L_Movement`가 열리면 게임 모드가 `PlayerStart`에 기본 캐릭터를 생성하고 엔진의 플레이어 컨트롤러가 이를 조작한다. [게임 시작 설정](../Game/Config/DefaultEngine.ini) · [기본 Pawn 선택](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp)
-2. 각 로컬 플레이어의 Enhanced Input 서브시스템이 `IMC_Player`를 적용한다. W/S는 `IA_Move`의 Y축, D/A는 X축에 각각 ±1을 더한다. [입력 설정](../Game/Config/DefaultInput.ini) · [키 매핑](../Game/Content/Input/IMC_Player.uasset)
+2. 각 로컬 플레이어의 Enhanced Input 서브시스템이 프로젝트 기본 매핑인 `IMC_Player`를 적용한다. 이동과 공격 키를 이 에셋에서 관리한다. W/S는 `IA_Move`의 Y축, D/A는 X축에 각각 ±1을 더한다. [입력 설정](../Game/Config/DefaultInput.ini) · [키 매핑](../Game/Content/Input/IMC_Player.uasset)
 3. 빙의한 캐릭터의 `SetupPlayerInputComponent`가 액션을 `Move`에 연결한다. 고정 카메라를 기준으로 화면 위쪽은 월드 +X, 오른쪽은 +Y다. `Move`는 `AddMovementInput`으로 방향과 세기를 보낸다. `CharacterMovement`가 이를 소비해 가속·속도 제한·충돌을 처리한다. [캐릭터 구현](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)
 
 ## 멀티플레이를 고려해 분리한 책임
@@ -23,9 +23,9 @@ PIE 단일 플레이의 근거는 [이동 검증](Validation/Index.md#l00-moveme
 <a id="server-authority"></a>
 ## 서버 권한과 신뢰 경계
 
-**현재 확인한 범위는 기본 이동이다.** 두 클라이언트에서 각자 자기 Pawn을 조작했고 상대 이동이 반영됐다. 아래 상자 판정과 GAS 책임은 다음 구현에서 사용할 설계 기준이다. 비정상 요청 차단이나 GAS 승인·거절을 이미 검증한 결과로 해석하지 않는다.
+기본 이동은 독립 클라이언트 2개에서 자기 Pawn 조작과 상대 이동을 확인했다. 고정 표적 단타의 코드 경계는 아래에 정리하고 실행 결과는 검증 색인에서 관리한다.
 
-**근거** · [2클라이언트 시험](Validation/Index.md#v01-two-clients) · [게임 규칙](Project.md#game-rules)
+**근거** · [2클라이언트 이동 시험](Validation/Index.md#v01-two-clients) · [게임 규칙](Project.md#game-rules)
 
 ### 클라이언트는 행동을 요청하고 서버는 결과를 확정한다
 
@@ -38,6 +38,28 @@ PIE 단일 플레이의 근거는 [이동 검증](Validation/Index.md#l00-moveme
 서버 RPC의 실행 위치와 소유 연결은 요청의 경로를 정한다. 서버는 그 경로를 거친 요청의 대상·거리·수량 등도 별도로 검증해야 한다. `HasAuthority()`는 해당 액터의 권한을 확인하며, 로컬 입력을 받는 주체인지는 `IsLocallyControlled()` 등으로 확인한다. 두 조건은 리슨 호스트에서 함께 성립할 수 있어도 서로 다른 판단이다.
 
 **근거** · [Epic 네트워킹 개요](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-overview-for-unreal-engine) · [Epic RPC와 소유 연결](https://dev.epicgames.com/documentation/en-us/unreal-engine/remote-procedure-calls-in-unreal-engine)
+
+<a id="gas-basic-attack"></a>
+
+### 고정 표적 단타 구현
+
+1. 소유 클라이언트에서 `IMC_Player`의 왼쪽 클릭이 Boolean 액션 `IA_Attack`을 시작한다. 캐릭터는 이동과 같은 에셋 참조 방식으로 액션을 읽고 `Started`를 `Attack`에 바인딩한다. 처음 누를 때 `ACoopRPGCharacter::Attack`이 Pawn의 ASC에 단타 실행을 요청한다. 서버가 Pawn 시작 시 `ServerOnly` Ability를 부여한다. Pawn을 기준으로 Owner와 Avatar를 초기화하고 컨트롤러가 바뀌면 ActorInfo를 갱신한다.
+2. 서버 게임 모드가 `L_Movement`에 고정 표적 하나를 생성한다. `UCoopRPGMeleeAbility::ActivateAbility`는 서버의 표적 유효성·HP와 공격자에서 표적까지의 수평 거리를 검사한다. 거리 250 cm를 초과하면 Commit 전에 종료한다.
+3. 승인되면 `CommitAbility`가 공격자의 스태미나를 10 차감하고 서버가 표적에 순간 피해 Effect를 한 번 적용한다. 표적 HP는 10 줄고 두 클라이언트에 복제된다. 공격자 스태미나 변경은 소유 클라이언트에 복제된다.
+
+250 cm, 스태미나 100·비용 10, HP 100·피해 10은 첫 실행을 위한 시험값이다. 현재 공격은 즉시 종료한다. 무기 장착·조준·충돌 기반 타격·쿨다운·피해 확정 전 취소는 이후 작업 범위다.
+
+**근거** · [공통 키 매핑](../Game/Content/Input/IMC_Player.uasset) · [공격 액션](../Game/Content/Input/IA_Attack.uasset) · [입력과 ASC 초기화](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [서버 승인과 거절](../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [속성 복제](../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp) · [입력 통합 후 두 클라이언트 결과](Validation/Index.md#v02-attack-input-regression) · [Epic AttributeSet 설명](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-attributes-and-attribute-sets-for-the-gameplay-ability-system-in-unreal-engine)
+
+단타의 호출 순서, GA 등록·비용·피해 GE, 속성 매크로와 복제는 [CoopRPG의 GAS 단타 구현 읽기](Learning/GASMeleeAttack.md)에 정리했다.
+
+#### ASC 배치와 전투 상태의 수명
+
+CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현재 `InitAbilityActorInfo(this, this)`는 캐릭터를 `OwnerActor`와 `AvatarActor`로 지정한다. MVP에서는 한 명이라도 사망하면 라운드가 실패하고 라운드 중 부활은 없다. 새 라운드에서 HP·스태미나·쿨다운을 초기화하므로, 전투 상태를 현재 Pawn의 수명에 맞추는 편이 게임 규칙과 일치한다. 새 Pawn을 생성하면 새 ASC에서 시작한다. 기존 Pawn을 재사용하는 방식으로 라운드를 전환한다면 초기화는 전환 시점에 명시적으로 처리해야 한다.
+
+`PlayerState`에 ASC를 두는 방식은 리스폰이나 Pawn 교체 뒤에도 일부 능력·지속 효과·쿨다운을 유지해야 할 때 적합하다. Epic의 Lyra는 `PlayerState`가 ASC를 소유하고 현재 Pawn을 `AvatarActor`로 연결한다. 빙의가 바뀌면 Avatar를 갱신하고, 기존 Pawn에만 부여된 능력과 효과를 정리한다. CoopRPG에서 Pawn 교체 후에도 전투 상태를 유지할 요구가 생기면 이 배치를 다시 검토한다.
+
+**근거** · [CoopRPG 게임 규칙 M1](Project.md#game-rules) · [캐릭터의 ASC 생성과 초기화](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [Epic ASC 배치 설명](https://dev.epicgames.com/documentation/unreal-engine/gameplay-ability-system-component-and-gameplay-attributes-in-unreal-engine?lang=en-US) · [Epic Lyra의 PlayerState 구성](https://dev.epicgames.com/documentation/unreal-engine/abilities-in-lyra-in-unreal-engine?lang=en-US#alyraplayerstate)
 
 <a id="상자-상호작용-설계-예시"></a>
 
@@ -62,5 +84,7 @@ CoopRPG는 현재 하나의 게임 모듈을 공유한다. 필요할 때 빌드 
 ## 근거 및 더 읽기
 
 - **현재 구현 근거** — [이동 코드](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)와 [2클라이언트 시험](Validation/Index.md#v01-two-clients)은 입력·Pawn 이동과 상대 관찰의 확인 범위를 보여준다.
+- **GAS 구현 근거** — [고정 표적 단타 구현](#gas-basic-attack)은 Pawn ASC의 수명과 입력부터 서버 확정·속성 복제까지의 흐름을 보여준다.
+- **ASC 배치 더 읽기** — [Epic Lyra의 PlayerState 구성](https://dev.epicgames.com/documentation/unreal-engine/abilities-in-lyra-in-unreal-engine?lang=en-US#alyraplayerstate)은 Pawn 교체 시 유지하는 상태와 정리하는 상태의 예를 보여준다.
 - **설계 근거** — [CoopRPG 게임 규칙](Project.md#game-rules)은 동시 열람, 개인 지급 경합, 적 전리품 팀 지급의 원본이다. [시험 기준](Validation/Index.md#active-tests)은 구현 후 판정에 사용한다.
 - **더 읽기** — [Epic RPC 문서](https://dev.epicgames.com/documentation/en-us/unreal-engine/remote-procedure-calls-in-unreal-engine)는 소유 연결에 따른 호출 경로, [네트워킹 개요](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-overview-for-unreal-engine)는 권한·복제·빌드 조건, [캐릭터 이동 동기화](https://dev.epicgames.com/documentation/en-us/unreal-engine/understanding-networked-movement-in-the-character-movement-component-for-unreal-engine)는 현재 사용 중인 엔진 이동 경로를 설명한다.

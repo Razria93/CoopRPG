@@ -4,6 +4,8 @@
 #include "GameFramework/GameModeBase.h"
 #include "CoopRPGGameMode.generated.h"
 
+class ACoopRPGAttackTarget;
+
 UCLASS()
 class COOPRPG_API ACoopRPGGameMode : public AGameModeBase
 {
@@ -11,4 +13,13 @@ class COOPRPG_API ACoopRPGGameMode : public AGameModeBase
 
 public:
     ACoopRPGGameMode();
+
+    ACoopRPGAttackTarget* GetAttackTarget() const;
+
+protected:
+    virtual void BeginPlay() override;
+
+private:
+    UPROPERTY()
+    TObjectPtr<ACoopRPGAttackTarget> AttackTarget;
 };
