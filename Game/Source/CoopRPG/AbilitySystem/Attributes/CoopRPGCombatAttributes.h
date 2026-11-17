@@ -27,6 +27,9 @@ private:
     UFUNCTION()
     void OnRep_Stamina(const FGameplayAttributeData& PreviousStamina);
 
+public:
+    static constexpr float MaxHealth = 100.0f;
+
 private:
     UPROPERTY(ReplicatedUsing = OnRep_Health)
     FGameplayAttributeData Health;

@@ -8,7 +8,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGCombatAttributes, Log, All);
 
 UCoopRPGCombatAttributes::UCoopRPGCombatAttributes()
-    : Health(100.0f), Stamina(100.0f)
+    : Health(MaxHealth), Stamina(100.0f)
 {
 }
 
@@ -22,7 +22,11 @@ void UCoopRPGCombatAttributes::GetLifetimeReplicatedProps(TArray<FLifetimeProper
 void UCoopRPGCombatAttributes::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
 {
     Super::PreAttributeBaseChange(Attribute, NewValue);
-    if (Attribute == GetHealthAttribute() || Attribute == GetStaminaAttribute())
+    if (Attribute == GetHealthAttribute())
+    {
+        NewValue = FMath::Clamp(NewValue, 0.0f, MaxHealth);
+    }
+    else if (Attribute == GetStaminaAttribute())
     {
         NewValue = FMath::Clamp(NewValue, 0.0f, 100.0f);
     }

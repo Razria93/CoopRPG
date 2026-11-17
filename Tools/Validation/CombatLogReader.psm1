@@ -96,7 +96,7 @@ function ConvertTo-CombatLogEvent([string]$Line) {
             $label=if($eventCode -eq 'AttackBlocked'){'클라 차단'}else{'서버 거절'}
             $stage=if($eventCode -eq 'AttackBlocked'){'로컬 검사'}else{'서버 판정'};$outcome='거절';$kind='Reject'
             $reason=[string]$fields['Reason']
-            $names=@{Cost='비용 부족';Cooldown='쿨다운 중';OutOfRange='사거리 밖';InvalidTarget='유효하지 않은 표적';AttackerDead='공격자 HP 0';CommitFailed='커밋 실패 · 세부 원인 미확인'}
+            $names=@{Cost='비용 부족';Cooldown='쿨다운 중';OutOfRange='사거리 밖';InvalidTarget='유효하지 않은 표적';AttackerDead='공격자 HP 0';Unarmed='무기 미장착';CommitFailed='커밋 실패 · 세부 원인 미확인'}
             $detail=if($names.ContainsKey($reason)){$names[$reason]}elseif($reason){$reason}else{'사유 미기록'}
             if($reason){$detail+=" ($reason)"}
             if($fields.ContainsKey('Distance')){$detail+=" · 거리 $($fields['Distance'])cm"}
@@ -107,6 +107,72 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         }
         '^CancelRPCCalled$' {$label='취소 RPC 호출';$stage='RPC 호출';$outcome='호출';break}
         '^CancelRPCReceived$' {$label='취소 RPC 수신';$stage='RPC 수신';$outcome='수신';break}
+        '^LootRoundCreated$' {$label='루팅 라운드 생성';$detail="상자 재고 $($fields['Stock'])개";break}
+        '^LootRoundPhase$' {$label='루팅 라운드 상태';$detail=[string]$fields['Phase'];break}
+        '^LootReadyRequested$' {$label='준비 RPC 호출';$stage='RPC 호출';$outcome='호출';break}
+        '^LootPlayerReady$' {$label='플레이어 준비 완료';$stage='서버 판정';break}
+        '^ChestTakeRequested$' {$label='회복약 획득 RPC 호출';$detail="요청 $($fields['Request'])";$stage='RPC 호출';$outcome='호출';break}
+        '^ChestWeaponRequested$' {$label='근접무기 획득 RPC 호출';$detail="요청 $($fields['Request'])";$stage='RPC 호출';$outcome='호출';break}
+        '^RecoveryUseRequested$' {$label='회복약 사용 RPC 호출';$stage='RPC 호출';$outcome='호출';break}
+        '^ChestViewRequested$' {
+            $label=if($fields['Action'] -eq 'Close'){'상자 닫기 RPC 호출'}else{'상자 열기 RPC 호출'}
+            $stage='RPC 호출';$outcome='호출';break
+        }
+        '^ChestClosed$' {$label='상자 닫기 확정';$stage='서버 판정';$outcome='승인';break}
+        '^ChestOpened$' {$label='상자 열람 승인';$detail="회복약 $($fields['Stock'])개";$stage='서버 판정';$outcome='승인';break}
+        '^ChestGranted$' {
+            $label='회복약 지급';$stage='서버 판정';$outcome='승인'
+            $detail="요청 $($fields['Request']) · 남은 수량 $($fields['Stock'] -replace '->',' → ')"
+            break
+        }
+        '^ChestWeaponGranted$' {
+            $label='근접무기 지급·장착';$stage='서버 판정';$outcome='승인'
+            $detail="요청 $($fields['Request']) · 남은 무기 $($fields['Stock'] -replace '->',' → ')"
+            break
+        }
+        '^RecoveryUsed$' {
+            $label='회복약 사용 승인';$stage='서버 판정';$outcome='승인'
+            $detail="HP $($fields['HP'] -replace '->',' → ') · 보유량 $($fields['Recovery'] -replace '->',' → ')"
+            break
+        }
+        '^RecoveryUseRejected$' {
+            $label='회복약 사용 거절';$stage='서버 판정';$outcome='거절';$reason=[string]$fields['Reason']
+            $names=@{WrongRound='라운드 불일치';NotPlaying='라운드 대기 중';NotAlive='사망 상태';NoRecovery='회복약 없음';FullHealth='최대 HP';InvalidEffect='회복 효과 생성 실패';NoHealing='회복량 0'}
+            $detail=if($names[$reason]){$names[$reason]}else{$reason}
+            if($fields.ContainsKey('Recovery')){$detail+=" · 보유량 $($fields['Recovery'])개"}
+            break
+        }
+        '^ChestRejected$' {
+            $reason=[string]$fields['Reason'];$stage='서버 판정';$outcome='거절'
+            switch($fields['Action']){
+                'Open'  {$label='상자 열람 거절'}
+                'Close' {
+                    if($reason -eq 'NotOpen'){$label='상자 닫기 무시';$outcome='관찰'}
+                    else{$label='상자 닫기 거절'}
+                }
+                'TakeWeapon' {$label='근접무기 획득 거절'}
+                default {$label='회복약 획득 거절'}
+            }
+            $names=@{WrongRound='라운드 불일치';NotPlaying='라운드 대기 중';InvalidChest='대상 불일치';NotAlive='사망 상태';OutOfRange='거리 초과';NotOpen='상자 닫힘';DuplicateRequest='중복 요청';Depleted='회복약 소진';AlreadyEquipped='이미 장착함';InvalidItem='유효하지 않은 아이템'}
+            if($fields['Action'] -eq 'TakeWeapon'){$names['Depleted']='근접무기 소진'}
+            $detail=if($names[$reason]){$names[$reason]}else{$reason}
+            if($fields['Request'] -and $fields['Request'] -ne '0'){$detail+=" · 요청 $($fields['Request'])"}
+            break
+        }
+        '^ChestViewReplicated$' {
+            $label=if($fields['Open'] -eq '1'){'내 상자 열람'}else{'내 상자 닫기'}
+            if($fields['Open'] -eq '1'){$detail="회복약 $($fields['Stock'])개"}
+            $stage='복제 관찰';break
+        }
+        '^ChestStockReplicated$' {$label='공용 상자 재고 복제';$detail="남은 회복약 $($fields['Stock'])개";$stage='복제 관찰';break}
+        '^WeaponStockReplicated$' {$label='근접무기 재고 복제';$detail="남은 무기 $($fields['Stock'])개";$stage='복제 관찰';break}
+        '^MeleeWeaponReplicated$' {
+            $label=if($fields['Equipped'] -eq '1'){'근접무기 장착 복제'}else{'근접무기 해제 복제'}
+            $playerId=$fields['EquippedPlayerId']
+            if($playerId -match '^\d+$'){$detail="PlayerId: $playerId"}
+            $stage='복제 관찰';break
+        }
+        '^RecoveryCountReplicated$' {$label='내 회복약 보유량 복제';$detail="$($fields['Count'])개";$stage='복제 관찰';break}
         '^AttackStarted$' {
             $label='공격 준비 시작';$stage='서버 판정'
             $detail="피해 확정 대기 $($fields['Windup'])초"

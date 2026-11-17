@@ -78,9 +78,23 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 <a id="상자-상호작용-설계-예시"></a>
 
-### 공용 상자와 적 전리품 처리 설계
+<a id="shared-chest-implementation"></a>
 
-두 클라이언트는 같은 상자의 내용물을 동시에 볼 수 있다. 각 클라이언트는 자기 소유의 네트워크 객체를 통해 대상 상자와 아이템을 지정해 요청한다. 서버는 현재 라운드, 요청자의 생존·거리, 대상과 남은 수량을 검사한 뒤, 처음 처리한 유효 요청에 대해 아이템 소비와 개인 지급을 한 처리 흐름으로 확정한다. 거절된 요청은 상자 잔량과 개인 소지량을 바꾸지 않는다. 상자에 남은 아이템은 양쪽에 반영하고, 지급 결과는 수령자의 소지품에 반영한다.
+### 공용 상자 구현과 적 전리품 설계
+
+두 명이 준비하면 서버 `GameMode`가 `GameState`의 라운드 상태를 Playing으로 바꾼다. 클라이언트는 복제된 현재 상자와 라운드 ID를 사용하고, 자기 소유의 `PlayerController`에서 열람·획득 RPC를 요청한다. 서버는 Playing, 요청 라운드, 지정 상자, 생존, 거리 220 cm와 열람 여부를 확인한다. 각 컨트롤러는 자신의 열람 포인터와 회복약 소지량을 받으므로 같은 상자를 열어도 상대의 열람·소지량을 가져오지 않는다.
+
+`ACoopRPGSharedChest`는 공용 회복약 재고를 두 클라이언트에 복제한다. 서버는 첫 유효 요청에서 재고 1→0과 수령자의 보유량 증가를 같은 RPC 처리 안에서 확정한다. 두 번째 유효 조건의 요청은 소진으로 거절되고, 무효 요청은 재고를 차감하지 않는다. Canvas HUD는 공용 잔량과 자신의 수량을 읽어 표시한다.
+
+**근거** · [상자 재고](../Game/Source/CoopRPG/Loot/CoopRPGSharedChest.cpp) · [입력·서버 판정·소유자 복제](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [2인 패키지 시험](Validation/Index.md#v05-shared-chest-first)
+
+상자에는 같은 근접무기 두 개가 있다. 서버가 첫 유효 획득에서 재고를 한 개 줄이고 요청자 Pawn을 장착 상태로 바꾼다. 두 사람의 HUD와 무기 외형은 복제 상태를 읽는다. 이미 장착한 Pawn의 재요청은 재고를 차감하기 전에 거절한다. 공격 GA는 미장착 요청을 서버에서 비용·쿨다운 커밋 전에 거절한다.
+
+개인 회복약은 소유 `PlayerController`의 서버 RPC로 사용한다. 서버는 재고·라운드·생존·현재 HP를 검사하고, 자기 Pawn의 ASC에 즉시 회복 GE `+30`을 적용한다. HP 상한 100은 `AttributeSet`의 기본값 변경에서 적용하며, HP가 실제로 오른 경우에만 회복약 한 개를 차감한다. HP는 관찰 클라이언트에, 개인 회복약 수량은 컨트롤러 소유자에게 복제한다.
+
+**근거** · [장착 복제](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [서버 권한·거절](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [회복 GE](../Game/Source/CoopRPG/AbilitySystem/Effects/CoopRPGRecoveryEffect.cpp) · [2인 패키지 시험](Validation/Index.md#v05-equipment-recovery)
+
+아래 적 전리품 동작은 이후 구현 설계다.
 
 적의 생존→사망 전환은 서버에서 한 번 확정한다. 그 전환에서 생성한 전리품은 공용 상자와 같은 서버 검증·소진 처리 흐름을 사용한다. 획득을 확정하면 팀 전리품 수량을 올려 양쪽 클라이언트에 복제한다. 시험에서는 사망, 전리품 생성, 팀 지급이 각각 한 번인지 확인한다.
 

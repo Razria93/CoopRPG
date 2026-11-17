@@ -1131,6 +1131,149 @@ Git 제외 로컬 근거는 `Artifacts/Validation/work-planning-20261115-final/`
 
 **근거** · [적용 기록 R006](../Development.md#workflow-adoption-20261115) · [현재 카드](../Roadmap.md#next-work)
 
+<a id="v05-shared-chest-first"></a>
+## V05 공용 상자 동시 열람과 마지막 회복약 · 2026-11-16
+
+`feat/shared-loot-chest`, 시작 HEAD `8257ac2`. `L_Movement`에서 별도 Win64 Development Server 1개와 Client 2개를 같은 PC에 실행했다. 매 시험의 시작 재고는 1개다. 자동 하네스가 실제 클라이언트에 준비·이동·상자 열기·획득 키를 전달했다. 키 입력 뒤 호출되는 RPC와 정상 복제 경로를 확인했다.
+
+| 시험 | 두 요청의 준비 조건 | 서버 결과 | 서버 기록 시각 차이 |
+|---|---|---|---:|
+| 1 | A에 100 ms 먼저 신호 | A 지급 1개 · 상대는 소진 거절 | 170 ms |
+| 2 | B에 100 ms 먼저 신호 | B 지급 1개 · 상대는 소진 거절 | 100 ms |
+| 3 | A에 100 ms 먼저 신호 | A 지급 1개 · 상대는 소진 거절 | 67 ms |
+| 4 | B에 100 ms 먼저 신호 | B 지급 1개 · 상대는 소진 거절 | 167 ms |
+| 5 | 두 클라이언트 함께 신호 | B 지급 1개 · 상대는 소진 거절 | 5 ms |
+| 6 | 범위 밖 A 먼저, 이후 B | A 거절 → B 지급 1개 | 209 ms |
+
+모든 정상 경합에서 두 소유 클라이언트가 같은 상자를 열어 회복약 1개를 본 뒤 각자 획득을 요청했다. 서버는 먼저 처리한 유효 요청만 재고 1→0으로 바꿨다. 수령자의 개인 보유량만 1로 복제했고, 두 클라이언트 모두 상자 0개를 받았다. 정상 경합의 수령자는 A 2회·B 3회였다. 비정상 요청 시험에서는 라운드 준비 전 열람과 상자를 열고 밖으로 이동한 A의 획득을 거절했다. B가 뒤이어 1개를 받고, 재시도는 소진으로 거절됐다. 총 50개 판정을 통과했다.
+
+별도 실행 `hud-check/`에서 A·B 모두 열람 중 `Recovery item: 1`과 개인 보유량 0을 표시했다. 지급 뒤에는 두 화면의 `Chest empty`와 A 1개·B 0개를 패키지 PNG로 확인했다. 이 실행에서 기존 GAS 단타와 양쪽의 표적 HP 100→90 복제도 확인했다.
+
+동시에 입력을 전달한 5회차에서는 양쪽의 획득 요청 로그가 각각의 재고 0 복제보다 먼저 찍혔다. 서버는 같은 프레임(466) 안에서 B에 먼저 지급하고 5 ms 뒤 A를 소진으로 거절했다.
+
+서버 시각 차이는 원본 로그의 지급·거절 행을 비교한 값이며 같은 요청 ID나 패킷 분석값이 아니다. 실제 맵 이동 뒤 도착한 요청, 동일 요청 번호 재전달, 무기 장착·회복약 사용, 적 전리품은 이후 통합 시험으로 남긴다. [사용자 직접 확인](#v05-shared-chest-user-result)은 아래에 기록했다.
+
+최초 Server 빌드에서 로컬 `Pawn`이 `AController::Pawn`을 가리는 C4458이 나왔고 이름을 `CurrentPawn`으로 정리했다. 최종 증분 빌드는 Server 28.64초·Client 35.91초, Stage는 Server 44.38초·Client 38.36초였다. 변경 없는 Cook을 재사용했다.
+
+첫 실행에서는 획득·복제가 확인됐으나 종료 신호를 파일로 준 서버가 종료되지 않아 그 실행을 실패로 보존했다. 전용 서버의 종료는 시작 명령 `DEFER`로 예약한 뒤 다시 검증했고, 모든 최종 실행에서 세 프로세스가 종료 코드 0을 남겼다. 원본·판정 JSON은 로컬 `Artifacts/Validation/v05-shared-chest-20261116-115211/contention-01/` 아래에 있다.
+
+### 직접 재현
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Validation/Start-CombatManual.ps1" -PackageRoot "C:/CoopRPG/Artifacts/Validation/v05-shared-chest-20261116-115211/Stage" -AlwaysOnTop
+```
+
+1. 두 창에서 각각 `R`을 눌러 준비한다. 두 캐릭터 모두 앞쪽 상자 가까이 이동한 뒤 `E`를 눌러 연다. 두 창의 `Recovery item: 1`을 확인한다.
+2. 각 창에서 `F`로 획득을 요청한다. 수령자는 `Your recovery items: 1`, 상대는 0이다. 두 화면의 상자는 `Chest empty`로 갱신된다. `Q`로 열람을 닫는다.
+3. 뷰어 서버 탭에서 `회복약 지급` 한 행과 `회복약 획득 거절`을 확인한다. 두 클라이언트 탭의 `공용 상자 재고 복제`와 수령자 탭의 `내 회복약 보유량 복제`를 대조한다.
+
+**근거** · [상자 구조](../Architecture.md#shared-chest-implementation) · [시험 하네스](../../Tools/Validation/Run-SharedChest.py) · [T1 기준](#test-conditions)
+
+<a id="v05-shared-chest-user-result"></a>
+### 사용자 직접 확인 · 2026-11-16
+
+사용자가 새 패키지의 두 창에서 공용 상자를 열고 한 명만 회복약을 받는 것을 확인했다. 실행 ID는 `manual-20261116-124405-187`이다. 12:47:59(KST) 캡처·메타데이터와 12:48:00 Excel을 같은 실행의 원본 로그와 대조했다.
+
+| 확인 | 원본에서 확인한 결과 |
+|---|---|
+| 준비·열람 | 서버에서 A(PlayerId 256)·B(PlayerId 257)의 준비가 각각 기록됐다. Playing 전환 뒤 A·B가 동일한 서버 상자를 열어 두 소유 클라이언트 모두 `Open=1 Stock=1`을 받았다. |
+| 단일 지급·복제 | 12:45:46.070에 A의 획득 요청 1번이 기록됐다. 서버가 12:45:46.079에 재고 1→0과 A 보유량 1을 확정했다. A에게 소지량 1이 복제됐고, 두 클라이언트 모두 재고 0을 받았다. |
+| 닫기·다시 열기 | A·B에서 각각 `Open=0`이 기록됐고 다시 연 뒤 양쪽 모두 `Open=1 Stock=0`을 받았다. |
+
+이 실행의 획득 로그는 A의 요청 한 건이다. B의 소진 거절과 같은 프레임의 두 요청 경합은 [자동 시험](#v05-shared-chest-first)에서 확인했다.
+
+**근거** · 로컬 `Artifacts/Validation/v05-shared-chest-20261116-115211/manual-20261116-124405-187/`의 `server.log`·`a.log`·`b.log` 및 `Exports/` · [로그 표시 검토](LogViewer.md#shared-chest-log-audit)
+
+<a id="v05-chest-lifecycle-logs"></a>
+### V05 준비·열기·닫기 RPC 계측 검증 · 2026-11-16
+
+공용 상자 구현·시험·사용자 검증을 로컬 커밋으로 보존한 뒤 `3635070`에서 로그를 보완했다. 같은 PC의 새 Win64 Development Server 1개와 Client 2개에 `R`·`E`·`Q`·`F`의 정상 키 입력을 전달했다. 날짜가 붙은 [사용자 수동 기록](#v05-shared-chest-user-result)은 당시 패키지에서 관찰한 결과다.
+
+| 확인 | 실제 결과 |
+|---|---|
+| 준비와 열기 | 두 클라이언트의 `LootReadyRequested`를 서버 `LootPlayerReady`, `ChestViewRequested Action=Open`을 서버 열람 승인과 각 소유자의 `Open=1`에 대조했다. 두 플레이어의 PlayerId와 Round ID가 일치했다. |
+| 닫기 | 각 소유자의 `ChestViewRequested Action=Close`부터 서버 `ChestClosed` 2건과 두 `Open=0` 복제를 확인했다. 닫기 복제 원문은 공용 재고 필드를 쓰지 않는다. |
+| 중복 닫기 | Client A의 수신 경로에 400ms를 설정하고 닫힘 복제 전에 실제 Q 입력을 다시 보냈다. 서버는 정상 닫기를 한 번 처리한 뒤 이미 닫힌 요청 1건을 `NotOpen`으로 기록했다. |
+| 재고 및 회귀 | 열기·닫기 동안 재고·소지량을 소비하지 않았다. 다시 연 뒤 획득 요청 두 건에 최초 유효 요청만 지급하고 상대는 소진으로 거절했다. 양쪽 상자 재고는 0, 수령자 소지량은 1이었다. |
+
+실행 판정 13개와 뷰어 파싱 54개가 통과했다. 기존 수동 원본의 `Open=0 Stock=0`과 새 원본의 `Open=0` 모두 뷰어에서 `내 상자 닫기`로 읽혔다. 서버·클라이언트 증분 빌드는 28.64초·34.76초, Stage는 16.03초·38.97초였다. 변경 없는 Cook을 재사용했다.
+
+원본·판정 JSON과 뷰어 기준으로 해석한 사건은 로컬 `Artifacts/Validation/v05-chest-lifecycle-20261116-125620/lifecycle-01/`에 있다. 실행 스크립트는 같은 실행 루트의 `lifecycle-check.py`다. 사용자 확인에는 [기존 상자 재현 순서](#v05-shared-chest-first)를 따르고 런처의 `-PackageRoot`에 `C:/CoopRPG/Artifacts/Validation/v05-chest-lifecycle-20261116-125620/Stage`를 사용한다.
+
+**근거** · [준비·열기·닫기 구현](../../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [로그 표시와 분류](LogViewer.md#shared-chest-lifecycle)
+
+<a id="v05-chest-lifecycle-user-result"></a>
+#### 사용자 직접 확인 · 준비·열기·닫기 RPC
+
+사용자가 새 패키지의 두 창을 조작해 2026-11-16 13:26:40(KST) PNG·JSON과 13:26:41 Excel을 저장했다. 실행 ID는 `manual-20261116-132401-880`이다. 모든 카테고리를 켠 공통 행 비교 화면이며, 캡처 메타데이터에는 61개 사건이 기록됐다.
+
+| 항목 | 서버와 두 클라이언트 원본 대조 |
+|---|---|
+| 준비 | Client A(PlayerId 256)·B(PlayerId 257)의 `LootReadyRequested` 각각 1건과 서버 준비 완료 각각 1건을 확인했다. 서버는 두 번째 준비를 처리한 뒤 13:25:15.043에 Playing으로 전환했다. |
+| 열기 | A·B 각각 열기 RPC 호출 1건, 서버의 같은 상자 열람 승인 1건, 소유자의 `Open=1 Stock=1` 1건을 확인했다. |
+| 닫기 | A·B 각각 닫기 RPC 호출 1건, 같은 서버 상자의 닫기 확정 1건, 소유자의 `Open=0` 1건을 확인했다. B는 13:26:28.426 → .451 → .458, A는 13:26:31.229 → .258 → .295였다. 닫기 복제 행에는 재고 필드가 없다. |
+| 회복약 | 중간에 B가 회복약을 요청해 한 번 지급받았다. B에만 소지량 1이 복제됐고 두 창 모두 공용 재고 0을 받았다. |
+
+중복 닫기 무시는 위 [자동 검증](#v05-chest-lifecycle-logs)의 확인 범위다.
+
+**근거** · 로컬 `Artifacts/Validation/v05-chest-lifecycle-20261116-125620/manual-20261116-132401-880/`의 두 클라이언트와 서버 원본 및 `Exports/` · [로그 표시 안내](LogViewer.md#shared-chest-lifecycle)
+
+<a id="v05-equipment-recovery"></a>
+## V05 근접무기 장착과 회복약 사용 · 2026-11-16
+
+같은 PC의 독립 Win64 Development 전용 서버 1개와 클라이언트 2개에서 `L_Movement`를 실행했다. 정상 키 입력으로 준비·열기·획득·공격·사용을 수행했다. 플레이어 부상만 `Coop.Test.Vitals`로 설정했다. 시험 중 A의 `PlayerId`는 257, B는 256이었다.
+
+| 확인 항목 | 실제 결과 |
+|---|---|
+| 미장착 공격 | A·B 모두 `Unarmed`로 서버에서 거절됐다. 스태미나는 100, 쿨다운은 0이었다. 비용 확정과 표적 피해는 기록되지 않았다. |
+| 무기 지급·장착 | 같은 상자에서 A에 `2→1`, B에 `1→0`으로 한 개씩 지급했다. A가 다시 요청하자 `AlreadyEquipped`로 거절했다. 양쪽에서 재고 0과 두 Pawn의 장착을 관찰했다. 자기 Pawn은 `AutonomousProxy`, 상대 Pawn은 `SimulatedProxy`로 기록됐다. |
+| 장착 후 공격 | A와 B가 각각 한 번 타격했다. 서버 표적 HP가 `100→90→80`으로 바뀌었고 두 클라이언트가 두 변화를 관찰했다. |
+| 최대 HP | 회복약을 받은 A가 최대 HP에서 사용을 시도했다. 서버가 `FullHealth`로 거절했고 1개를 유지했다. |
+| 회복과 소모 | A의 HP `80→100`, 보유량 `1→0`을 서버가 확정했다. A·B가 HP 변화를 받았고 A만 소지량 변화를 받았다. 시험 회복량 `+30`은 최대 HP 100에서 제한됐다. |
+| 소진 | 다시 HP 60을 설정한 A와 회복약이 없는 B의 요청은 `NoRecovery`로 거절됐다. 추가 회복은 없었다. |
+
+12개 자동 판정을 통과했다. 세 프로세스는 종료 코드 0을 남겼다. 근접무기 외형은 임시 큐브 메시이며 타격 검증은 고정 표적과 기존 250cm 거리 판정을 사용했다. Windows 루프백 실행 결과로, 사용자의 GUI 조작과 적 공격에 의한 실전 부상은 이번 실행 범위 밖이다.
+
+빌드는 SDK `10.0.26100.0`과 `-NoEngineChanges`를 사용했다. Server 41.03초, Client 40.00초에 성공했다. 처음 UAT의 `-skipcook -stage`는 Zen 재연결 중 `UnrealPak`이 `-1073741819`로 종료됐다. 이전 패키지와 현재 콘텐츠·설정 해시가 일치하는지 확인하고, 기존 컨테이너와 새 실행 파일을 별도 `restaged/Stage`에 스테이징했다. 원본과 복사본의 컨테이너 해시 및 새 바이너리 해시를 대조했다.
+
+**근거** · [실행 스크립트](../../Tools/Validation/Run-EquipmentRecovery.py) · [구조 설명](../Architecture.md#shared-chest-implementation) · 로컬 `Artifacts/Validation/v05-equipment-healing-20261116-134904/equipment-01/`의 원본 로그·`result.json`·`processes.json`, `build-01/`·`package/`·`restaged/stage-hashes.json`
+
+### 기존 전투·상자 동작 재검증
+
+동일한 전용 서버·클라이언트 패키지에서 V02 비용·쿨다운 149개와 V03 취소·거리·타격 수명 354개 판정을 통과했다. 두 시험은 `-EquipFromChest`로 각 Pawn을 장착한 뒤 기존 전투 시나리오를 시작했다. 별도 상자 시험의 동시 요청에서 한 명만 지급받았다. 지급과 소진 거절을 기록한 서버 시각의 차이는 3ms였다. 로그 뷰어 56개 판정과 이번 실행의 새 사건 31행 분류를 확인했다.
+
+**근거** · [비용·쿨다운 실행](../../Tools/Validation/Run-CombatBoundaries.ps1) · [능력 수명 실행](../../Tools/Validation/Run-CombatLifetime.ps1) · [상자 경합 실행](../../Tools/Validation/Run-SharedChest.py) · 로컬 `restaged/boundaries-01/boundary-result.json`·`restaged/lifetime-01/lifetime-result.json`·`restaged/contention-regression-01/result.json`·`equipment-01/viewer-events.json`
+
+### 직접 확인하는 순서
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Validation/Start-CombatManual.ps1" -PackageRoot "C:/CoopRPG/Artifacts/Validation/v05-equipment-healing-20261116-134904/restaged/Stage" -AlwaysOnTop
+```
+
+1. 두 창에서 `R`로 준비한다. 표적 방향으로 이동해 누가 먼저 `G`를 누르기 전에, 두 창에서 공격을 시도하고 서버의 `무기 미장착`을 확인한다. 창에 포커스를 주기 위한 첫 클릭 뒤 공격한다.
+2. 양쪽에서 상자 주변의 `E`로 열고 각각 `G`로 획득한다. 장착 상태와 공용 무기 재고 0을 확인한다. 돌아가며 한 번씩 공격해 서버의 `타격 확정`과 양쪽 `체력 복제`를 대조한다.
+3. 한 창에서 `F`로 회복약을 받고 최대 HP에서 `H`를 누른다. 서버의 `최대 HP`와 HUD의 보유량 1을 확인한다. 타격 두 번이 끝난 상태에서 해당 창의 개발 콘솔에 `Coop.Test.Vitals 80 80`을 실행한다.
+4. 해당 창에서 `H`를 다시 눌러 HP `80→100`과 보유량 `1→0`을 확인한다. 한 번 더 눌러 서버 `회복약 없음`을 확인한다. 두 탭의 `체력 복제`와 소유자 탭의 `내 회복약 보유량 복제`를 구분해 본다.
+
+**근거** · [수동 런처](../../Tools/Validation/Start-CombatManual.ps1) · [뷰어 사건과 필터](LogViewer.md#equipment-recovery-logs)
+
+<a id="v05-equipment-recovery-user-result"></a>
+### 사용자 수동 검증 · 시작 HP 70
+
+사용자가 전용 서버와 두 클라이언트의 새 수동 환경에서 양쪽을 조작하고 뷰어에서 PNG·상태 JSON·Excel을 저장했다. 실행 ID는 `manual-20261116-142321-854`다. AI가 시작 HP를 70으로 설정했고, 서버 `TestVitals`와 양쪽 `HealthReplicated`에서 확인했다. 이번 실행에서 클라이언트 1(A)의 `PlayerId`는 256, 클라이언트 2(B)는 257이다.
+
+| 확인 항목 | 원본 로그로 확인한 결과 |
+|---|---|
+| 무기 1개씩 지급·장착 | 서버가 B에 14:24:17.908에 `2→1`, A에 14:25:23.512에 `1→0`으로 지급했다. 양쪽에서 공용 재고 0과 자기 Pawn `AutonomousProxy`·상대 Pawn `SimulatedProxy` 장착 복제를 확인했다. |
+| 회복약 지급·사용 | B가 회복약을 한 번 지급받았다. 14:24:20.943 서버가 B의 HP `70→100`, 소지량 `1→0`을 확정했다. A와 B 모두 B의 HP 변화를 받았고, 보유량 변화는 B에만 기록됐다. |
+| 두 플레이어의 장착 후 공격 | B가 7회, A가 3회 적중했다. 같은 고정 표적의 HP가 `100→0`으로 줄었고 양쪽 클라이언트에서 10단계 복제를 관찰했다. 0이 된 뒤 A의 공격 두 건은 서버에서 `InvalidTarget`으로 거절됐다. |
+
+PNG는 14:25:41에 저장한 3분할 화면으로, 표적의 마지막 HP `10→0` 복제와 후속 `InvalidTarget`을 보여준다. 14:25:42·14:25:48에 내보낸 Excel에는 각각 300·307행의 사건이 있다. 두 파일 모두 위 항목을 대조한 주요 사건 52행의 원문이 서버·클라이언트 로그와 일치했다. 시각은 KST다.
+
+미장착(`Unarmed`), 최대 HP(`FullHealth`), 소진 뒤 사용(`NoRecovery`) 거절 기록은 이 수동 실행에서 발견되지 않았다. 이 세 조건은 [별도 자동 시험](#v05-equipment-recovery)에서 확인했다.
+
+**근거** · 로컬 `Artifacts/Validation/v05-equipment-healing-20261116-134904/restaged/manual-20261116-142321-854/`의 `server.log`·`a.log`·`b.log` 및 `Exports/` · [뷰어 사건과 필터](LogViewer.md#equipment-recovery-logs)
+
 <a id="단계별-시험-기준--첫-기술-범위-채택-나머지-제안"></a>
 <a id="active-tests"></a>
 ## 단계별 시험 기준 — 제출용 T1
@@ -1143,7 +1286,7 @@ Git 제외 로컬 근거는 `Artifacts/Validation/work-planning-20261115-final/`
 | V02 | GAS 단타·권한 | 정상/실제 서버 거절, 비용·쿨다운·대상·거리 검사, 공격당 중복 피해 없음, 양측 최종값 일치 | [두 클라이언트의 승인·거리 거절](#v02-basic-attack) · [공격 입력 통합 회귀](#v02-attack-input-regression) · [비용·쿨다운과 정상 반복](#v02-cost-cooldown) · [거리·HP 0·상태 및 피해 확정 재전달](#v03-attack-lifetime) · 실제 충돌 기반 중복 접촉은 통합 후 확인 |
 | V03 | 능력 수명 | 거절/명시 취소 후 재실행·자기 임시 상태 정리. 통합 후 사망/Result/재시작과 취소 경합 | [명시 취소·타이머 정리·재실행](#v03-attack-lifetime) 자동 시험 통과 · 피격·라운드 상태 연계는 미실행 |
 | V04 | 적 AI·사망·전리품 생성 | 서버의 탐지·추격·근접 공격과 피격, 적 사망 뒤 공격 중지, 겹친 마지막 타격에도 사망 확정·전리품 생성 1회 | 미실행 |
-| V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | 미실행 |
+| V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | [동시 열람·마지막 회복약 1개 지급](#v05-shared-chest-first) 및 [무기 장착·회복약 사용](#v05-equipment-recovery) 통과. 팀 전리품·재전달·라운드 연계는 이후 확인. |
 | V06 | 한 판·점수·다음 라운드 | 준비·공동 탈출·사망/시간초과 실패·이탈 중단·결과/점수 1회 확정·다음 맵 도착과 초기화, 중도참가/정원 거절·연결 종료 안내 | 미실행 |
 | V07 | 진행 가능성·설정 | 두 플레이어의 무기 확보 경로, 획득 가능한 전리품 수량과 탈출 조건, 값/정의와 실행 상태 분리, 서버·클라이언트 패키지에 양쪽 맵 포함 | 미실행 |
 | V08 | 지연/손실·진단 | T1 조건에서 V02/V03/V05/V06 핵심 반복·수렴 확인. 별도 PC/LAN은 V08-LAN으로 분리 | 미실행; V08-LAN도 미실행 |

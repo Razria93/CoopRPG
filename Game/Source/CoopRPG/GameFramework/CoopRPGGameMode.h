@@ -15,9 +15,11 @@ public:
     ACoopRPGGameMode();
 
     ACoopRPGAttackTarget* GetAttackTarget() const;
+    void UpdateLootRoundPhase(const AController* Leaving = nullptr);
 
 protected:
     virtual void BeginPlay() override;
+    virtual void Logout(AController* Exiting) override;
 
 private:
     UPROPERTY()

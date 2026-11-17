@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$RunRoot,[string]$Attempt='boundaries-01',[switch]$DisableServerProbe)
+param([Parameter(Mandatory)][string]$RunRoot,[string]$Attempt='boundaries-01',[switch]$DisableServerProbe,[switch]$EquipFromChest)
 $ErrorActionPreference='Stop'
 $out=Join-Path $RunRoot $Attempt
 if(Test-Path -LiteralPath $out){throw 'Fresh attempt required'}
@@ -26,7 +26,15 @@ function Start-Client($role,$offset){
     $events=[Collections.Generic.List[object]]::new()
     function At($frame,$command){$events.Add(@([int]$frame,[string]$command))}
     function Click($frame){At $frame 'Input.+key LeftMouseButton'; At ($frame+3) 'Input.-key LeftMouseButton'}
-    At 270 'Input.+key W'; At 290 'Input.-key W'
+    if($EquipFromChest){
+        At 110 'Input.+key R'; At 111 'Input.-key R'
+        At 120 'Input.+key W'; At 153 'Input.-key W'
+        At 180 'Input.+key E'; At 181 'Input.-key E'
+        At 210 'Input.+key G'; At 211 'Input.-key G'
+        At 240 'Input.+key Q'; At 241 'Input.-key Q'
+    }else{
+        At 270 'Input.+key W'; At 290 'Input.-key W'
+    }
     At 330 "Coop.Test.Snapshot $role-Ready"
     if($DisableServerProbe){
         At 360 'Coop.Test.Prepare 9'; At 420 "Coop.Test.Snapshot $role-Disabled"; At 510 'quit'
@@ -72,6 +80,7 @@ try{
     Start-Client b 1500
     Wait-Log a 'Welcomed by server' 60
     Wait-Log b 'Welcomed by server' 60
+    if($EquipFromChest){Wait-Log server 'ChestWeaponGranted .*Stock=1->0' 30}
     foreach($role in @('a','b','server')){
         if(!$processes[$role].WaitForExit(180000)){throw "$role timeout"}
         if($processes[$role].ExitCode -ne 0){throw "$role exit $($processes[$role].ExitCode)"}
