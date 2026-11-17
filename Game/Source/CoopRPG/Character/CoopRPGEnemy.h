@@ -20,6 +20,7 @@ public:
     ACoopRPGEnemy();
 
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+    float GetHealth() const;
     virtual void Tick(float DeltaSeconds) override;
     virtual void OnRep_ReplicatedMovement() override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;

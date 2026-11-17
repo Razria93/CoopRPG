@@ -4,6 +4,7 @@
 #include "CoopRPGGameState.h"
 #include "CoopRPGGameViewportClient.h"
 #include "CoopRPGPlayerController.h"
+#include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
@@ -30,6 +31,8 @@ namespace
     const FLinearColor LockedColor(0.36f, 0.39f, 0.47f);
     const FLinearColor AvailableColor(0.16f, 0.88f, 0.55f);
     const FLinearColor ProgressColor(1.0f, 0.71f, 0.12f);
+
+    constexpr float HealthNameplateLineSpacing = 17.0f;
 
     const TCHAR* ReadyStatusLabel(ECoopRPGReadyStatus Status)
     {
@@ -133,21 +136,52 @@ void ACoopRPGLootHUD::DrawWorldLabel(const FVector& Location, const FString& Tex
     DrawText(Text, Color, X, Y);
 }
 
+void ACoopRPGLootHUD::DrawHealthNameplate(const FVector& Location, const FString& Name, float Health,
+    const FLinearColor& Color)
+{
+    const FVector Screen = Project(Location);
+    if (Screen.Z <= 0.0f || Screen.X < 0.0f || Screen.X >= Canvas->ClipX || Screen.Y < 0.0f || Screen.Y >= Canvas->ClipY)
+    {
+        return;
+    }
+
+    const FString NameLine = FString::Printf(TEXT("[%s]"), *Name);
+    const FString HealthLine = FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Health),
+        static_cast<int32>(UCoopRPGCombatAttributes::MaxHealth));
+    float NameWidth, NameHeight, HealthWidth, HealthHeight;
+    GetTextSize(NameLine, NameWidth, NameHeight);
+    GetTextSize(HealthLine, HealthWidth, HealthHeight);
+
+    const float RowSpacing = FMath::Max(HealthNameplateLineSpacing, NameHeight);
+    const float HalfWidth = FMath::Max(NameWidth, HealthWidth) * 0.5f;
+    const float Height = RowSpacing + HealthHeight;
+    const float CenterX = FMath::Clamp(static_cast<float>(Screen.X), HalfWidth + 4.0f,
+        FMath::Max(HalfWidth + 4.0f, Canvas->ClipX - HalfWidth - 4.0f));
+    const float Top = FMath::Clamp(static_cast<float>(Screen.Y) - RowSpacing, 4.0f,
+        FMath::Max(4.0f, Canvas->ClipY - Height - 4.0f));
+    DrawRect(FLinearColor(0.02f, 0.03f, 0.05f, 0.85f), CenterX - HalfWidth - 3.0f, Top - 1.0f,
+        HalfWidth * 2.0f + 6.0f, Height + 2.0f);
+    DrawText(NameLine, Color, CenterX - NameWidth * 0.5f, Top);
+    DrawText(HealthLine, Color, CenterX - HealthWidth * 0.5f, Top + RowSpacing);
+}
+
 void ACoopRPGLootHUD::DrawGameplayFeedback()
 {
     for (TActorIterator<ACoopRPGCharacter> It(GetWorld()); It; ++It)
     {
         if (const int32 Slot = It->GetDisplaySlot(); Slot > 0)
         {
-            DrawWorldLabel(It->GetActorLocation() + FVector(0.0f, 0.0f, 94.0f),
-                FString::Printf(TEXT("P%d"), Slot), CoopRPG::Presentation::PlayerColor(Slot));
+            DrawHealthNameplate(It->GetActorLocation() + FVector(0.0f, 0.0f, 94.0f),
+                FString::Printf(TEXT("P%d"), Slot), It->GetHealth(),
+                CoopRPG::Presentation::PlayerColor(Slot));
         }
     }
     for (TActorIterator<ACoopRPGEnemy> It(GetWorld()); It; ++It)
     {
         if (!It->IsDead())
         {
-            DrawWorldLabel(It->GetActorLocation() + FVector(0.0f, 0.0f, 76.0f), TEXT("Enemy"), CoopRPG::Presentation::EnemyColor());
+            DrawHealthNameplate(It->GetActorLocation() + FVector(0.0f, 0.0f, 76.0f),
+                TEXT("Enemy"), It->GetHealth(), CoopRPG::Presentation::EnemyColor());
         }
     }
 
@@ -169,7 +203,7 @@ void ACoopRPGLootHUD::DrawGameplayFeedback()
             }
             continue;
         }
-        const FVector2D Offset(0.0, -15.0 - Row * 17.0 - (Now - Entry.StartedAt) * 14.0);
+        const FVector2D Offset(0.0, -15.0 - HealthNameplateLineSpacing - Row * 17.0 - (Now - Entry.StartedAt) * 14.0);
         DrawWorldLabel(Anchor, Entry.Text, Entry.Color, Offset);
     }
 }

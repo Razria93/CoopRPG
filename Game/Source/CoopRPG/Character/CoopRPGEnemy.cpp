@@ -76,6 +76,11 @@ UAbilitySystemComponent* ACoopRPGEnemy::GetAbilitySystemComponent() const
     return AbilitySystem;
 }
 
+float ACoopRPGEnemy::GetHealth() const
+{
+    return CombatAttributes->GetHealth();
+}
+
 void ACoopRPGEnemy::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
