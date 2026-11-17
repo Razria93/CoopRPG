@@ -2,199 +2,412 @@
 
 CoopRPG · 2026-11-15 · UE 5.8.4 · V02 학습·구현 기록
 
-왼쪽 클릭 한 번으로 전용 서버가 공격을 판단하고, 공격자의 스태미나와 표적의 체력을 바꾸는 경로를 읽는다. **GA는 언제 실행할지, GE는 어떤 규칙으로 값을 바꿀지, AttributeSet은 값을 어떻게 저장하고 복제할지 맡는다.** ASC는 그 사이에서 능력 등록·실행 요청·효과 적용·속성 변경 통지를 연결한다.
+**왼쪽 클릭 한 번을 서버가 승인하면, 공격자의 스태미나 10과 고정 표적의 체력 10이 각각 감소한다.** 이 문서는 입력부터 서버 판정·효과 적용·속성 복제까지를 실제 코드에 연결해 설명한다. Unreal의 Actor·Component와 C++ 함수 호출에 익숙하고, GAS와 CoopRPG는 처음 접하는 독자를 대상으로 한다.
 
-[1. 한 번의 클릭](#attack-flow) · [2. GA 초기화와 수명](#ability-lifecycle) · [3. 확인·소모·피해](#attack-checks) · [4. GE와 Modifier](#effect-definition) · [5. AttributeSet과 복제](#attribute-replication) · [6. 확인 범위](#verification-scope)
+현재 대상은 `L_Movement`의 **고정 표적 단타**다. 서버는 자신이 보유한 표적과 좌표로 공격을 판단한다. 클라이언트가 피해량이나 표적의 최종 체력을 지정하는 별도 RPC는 만들지 않았다. 무기 충돌·장착·쿨다운·피격 취소와 완성된 전투 시스템은 후속 범위다.
 
-범위는 **현재 고정 표적 단타**다. 프로젝트에서 실제 사용하는 코드를 중심으로 다루며, 무기 장착·쿨다운·버프·피격 취소는 비교가 필요한 곳에서만 언급한다.
+- **ASC · Ability System Component** — 능력을 등록하고 활성화 요청·GE 적용·속성 변경 통지를 연결한다. 공격자와 표적이 각각 갖는다.
+- **GA · Gameplay Ability** — 공격의 검사 → 비용 확정 → 피해 적용 → 종료 순서를 정의한다. 본체는 서버에서 실행한다.
+- **GE · Gameplay Effect** — 스태미나 또는 체력을 어떤 연산과 크기로 변경할지 정의한다.
+- **AttributeSet** — Health·Stamina 값을 보관하고 범위 제한과 복제 콜백을 구현한다. 전송은 언리얼 복제 시스템이 수행한다.
+
+**확인한 결과** · 11월 15일 같은 PC의 독립 전용 Server 1개·Client 2개에서 클릭 4회에 서버 요청 4건, 거리 밖 거절 2건과 안쪽 승인 2건을 확인했다. 표적 체력은 양쪽에서 `100 → 90 → 80`, 각 공격자의 스태미나는 소유 클라이언트에서 `100 → 90`이었다. 비용 부족·쿨다운의 실제 서버 거절은 아직 검증하지 않았다.
+
+**근거** · [패키지 입력 회귀의 조건과 결과](../Validation/Index.md#v02-attack-input-regression) · [현재 구현과 ASC 배치의 선택 이유](../Architecture.md#gas-basic-attack)
+
+**읽는 순서**
+
+1. [한 번의 클릭과 전체 흐름](#attack-flow)
+2. [GA의 준비·등록·실행·종료](#ability-lifecycle)
+3. [검사 위치와 비용 확정](#attack-checks)
+4. [GE 정의·Modifier·Spec 적용](#effect-definition)
+5. [AttributeSet의 매크로와 복제](#attribute-replication)
+6. [실제 검증 범위와 로그 읽기](#verification-scope)
+7. [코드 읽는 순서와 근거](#engine-source)
 
 <a id="attack-flow"></a>
-## 1. 왼쪽 클릭에서 체력 90까지
+## 1. 한 번의 클릭은 어디를 거치는가
+
+먼저 **입력 → 로컬 사전 확인 → 서버 확인 → 비용·피해 → 복제**의 흐름을 읽는다. 두 그림의 **A**는 같은 실행의 연결 지점이다. 구획은 실행 위치, 블록 안은 **처리 주체 → 대표 함수 → 판단 또는 처리** 순서다. 마름모는 조건, 사각형은 처리·종료, 실선은 진행, 점선은 속성 복제 경로다. 여러 내부 호출을 대표 함수로 요약했으므로 모든 화살표가 직접적인 C++ 호출을 뜻하지는 않는다.
+
+### 1-1. 입력부터 서버의 표적·거리 확인까지
 
 ```mermaid
 flowchart TD
     subgraph Client["공격자 클라이언트"]
-        Input["왼쪽 클릭 → IA_Attack Started → Attack()"]
-        Local{"ASC: 등록된 Spec과 로컬 활성화 조건 통과?"}
-        LocalStop["클라이언트에서 종료 · 서버 요청 없음"]
+        Input["캐릭터<br/>IA_Attack Started → Attack<br/>ASC에 단타 활성화 요청"]
+        Local{"공격자 ASC<br/>CanActivateAbility<br/>등록·로컬 조건 통과?"}
+        LocalStop["로컬 차단<br/>서버 요청 없이 종료"]
         Input --> Local
         Local -->|아니요| LocalStop
     end
     subgraph Server["전용 서버"]
-        Can{"ASC: 서버에서 활성화 가능?"}
-        Check{"ActivateAbility: 권한·표적·거리 통과?"}
-        Commit{"CommitAbility: 비용 등 재검사 통과?"}
-        Stop["해당 단계에서 종료 · 비용과 피해 없음"]
-        Cost["공격자 ASC에 비용 GE · Stamina 100 → 90"]
-        Damage["피해 Spec을 표적 ASC에 적용 · Health 100 → 90"]
-        End["EndAbility · 이번 실행 종료"]
-        Can -->|예| Check
-        Check -->|예| Commit
-        Commit -->|예| Cost
-        Cost --> Damage
-        Damage --> End
-        Can -->|아니요| Stop
-        Check -->|아니요| Stop
-        Commit -->|아니요| Stop
+        ServerCan{"공격자 ASC<br/>CanActivateAbility<br/>서버 활성화 조건 통과?"}
+        ServerStop["서버 활성화 실패<br/>GA 본체 진입 없음<br/>비용·피해 없음"]
+        TargetCheck{"단타 GA<br/>ActivateAbility<br/>권한·표적·거리 통과?"}
+        TargetStop["단타 GA · EndAbility<br/>거절 후 실행 종료<br/>비용·피해 없음"]
+        Continue(("A"))
+        ServerCan -->|아니요| ServerStop
+        ServerCan -->|예| TargetCheck
+        TargetCheck -->|아니요| TargetStop
+        TargetCheck -->|예| Continue
     end
-    subgraph Replication["결과를 받은 클라이언트"]
-        Props["복제된 필드 갱신 · Health는 두 Client, Stamina는 소유자"]
-        Notify["OnRep 함수 → GAS RepNotify → 로컬 ASC 변경 통지"]
-        Props --> Notify
-    end
-    Local -->|GAS RPC| Can
-    Cost -->|Stamina 복제| Props
-    Damage -->|Health 복제| Props
+    Local -->|예 · GAS 서버 활성화 RPC| ServerCan
+    LocalStop ~~~ ServerCan
 ```
 
-그림을 표시하지 않는 뷰어에서는 다음 순서로 읽으면 된다. **입력 → ASC의 로컬 확인·서버 요청 → 서버의 활성화 확인 → 표적·거리 판단 → 비용 확정 → 피해 GE 적용 → 속성 복제와 로컬 변경 통지.** 복제 화살표는 변경값의 전달을 뜻하며 두 속성의 도착 순서를 보장하지 않는다.
+왼쪽 클릭은 `IMC_Player`의 Boolean 액션 `IA_Attack`에 연결돼 있다. 캐릭터의 `SetupPlayerInputComponent`가 **`Started`를 `Attack`에 바인딩**한다. 현재 입력 구성에서는 처음 누르는 이벤트에 활성화를 요청한다. 이동의 `Triggered`처럼 누르는 동안 매 프레임 공격을 요청하는 구성이 아니다.
 
-**근거** · [입력·ASC 호출](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [서버 단타](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [속성 복제 코드](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp) · [두 클라이언트 시험](../Validation/Index.md#v02-attack-input-regression)
+`Attack()`은 ASC의 `TryActivateAbilityByClass`를 호출한다. `ServerOnly` GA라도 소유 클라이언트는 등록 항목과 로컬 활성화 조건을 먼저 확인한다. 통과하면 GAS가 서버 활성화 RPC를 보낸다. 서버는 서버 상태로 다시 확인하며, 클라이언트에서 이 함수가 `true`를 반환하는 것만으로 피해 승인이 확정되지는 않는다.
+
+**근거** · [입력 바인딩과 Attack](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [서버 GA의 검사](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [엔진 활성화 경로](#engine-source)
+
+### 1-2. 비용 확정부터 피해와 복제까지
+
+아래 수치는 두 속성의 시작값이 100이고 다른 보정이 없는 **첫 승인 공격**의 예다. 비용은 `CommitAbility` 내부에서 적용되고, 피해는 그 함수가 성공을 반환한 뒤 적용된다.
+
+```mermaid
+flowchart TD
+    subgraph Server["전용 서버 · A에서 계속"]
+        Continue(("A"))
+        Commit{"단타 GA<br/>CommitAbility / CommitCheck<br/>비용 등 재검사 통과?"}
+        CommitStop["단타 GA · EndAbility<br/>Commit 실패 후 종료<br/>비용·피해 없음"]
+        Cost["단타 GA · Commit 내부<br/>CommitExecute → ApplyCost<br/>공격자 Stamina 100 → 90"]
+        Damage["단타 GA → 표적 ASC<br/>피해 Spec 생성·적용<br/>표적 Health 100 → 90"]
+        Finish["단타 GA<br/>EndAbility<br/>실행 종료 · 등록 유지"]
+        Continue --> Commit
+        Commit -->|아니요| CommitStop
+        Commit -->|예| Cost
+        Cost -->|Commit 성공 반환 뒤| Damage
+        Damage --> Finish
+    end
+    subgraph Clients["결과를 받은 클라이언트"]
+        Replication["언리얼 프로퍼티 복제<br/>각 속성의 조건에 따라 수신"]
+        Props["AttributeSet 필드 갱신<br/>표적 Health는 두 Client<br/>공격자 Stamina는 소유자"]
+        OnRep["AttributeSet<br/>OnRep → GAS RepNotify 매크로<br/>같은 클라이언트 ASC에 연결"]
+        Notify["로컬 ASC<br/>필요한 계산 갱신<br/>속성 변경 델리게이트 통지"]
+        Props --> OnRep --> Notify
+    end
+    Cost -. Stamina .-> Replication
+    Damage -. Health .-> Replication
+    Replication -.-> Props
+    Finish ~~~ Replication
+```
+
+두 점선이 합류하는 것은 경로를 간결하게 표현하기 위해서다. **Health와 Stamina는 개별 속성이며 한 묶음의 동시 전송이나 도착 순서를 보장하지 않는다.** `EndAbility`도 클라이언트의 복제 수신 완료를 기다리는 함수가 아니다. `Health는 두 Client`라는 표기는 현재 표적이 양쪽에 복제되는 시험 조건을 뜻한다.
+
+그림을 표시하지 않는 뷰어에서는 다음과 같이 읽는다.
+
+1. 로컬 확인 실패면 서버에 요청하지 않는다. 서버 활성화 확인 실패면 GA 본체에 진입하지 않는다.
+2. 본체의 표적·거리 검사 또는 Commit 재검사 실패면 비용과 피해 없이 종료한다.
+3. Commit 성공 시 공격자에게 비용을 적용하고, 이어서 표적에게 피해를 적용한다.
+4. 각 속성이 해당 클라이언트에 도착하면 OnRep가 로컬 GAS의 계산·알림 경로에 연결한다.
+
+**근거** · [Commit·피해·종료의 실제 순서](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [속성별 복제 조건과 OnRep](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp)
 
 <a id="ability-lifecycle"></a>
-## 2. GA는 어떻게 준비되고 다시 쓸 수 있는가
+## 2. GA는 어떻게 준비되고 다시 실행되는가
 
-### 클래스 설정, ActorInfo, 능력 부여는 서로 다른 단계다
+### 2-1. 클래스 기본값은 실행 방식을 정한다
 
-| 단계                   | 현재 CoopRPG                                                                                                                            | 여기서 정하는 것                                                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| GA 클래스 기본값           | 생성자에서 `InstancedPerActor`, `ServerOnly`, `CostGameplayEffectClass = UCoopRPGMeleeCost::StaticClass()`                                 | ASC에 부여된 능력이 실행 간 인스턴스를 재사용할 수 있게 한다. 능력 본체는 서버에서만 실행한다. 기본 비용 GE도 지정한다. 이 시점에 능력이 특정 캐릭터에게 부여되거나 비용이 차감되지는 않는다.               |
-| ASC와 AttributeSet 준비 | 캐릭터와 표적 생성자에서 두 객체를 기본 서브오브젝트로 만든다. 둘 다 복제 ASC에 `Minimal`을 설정한다.                                                                      | 객체를 준비한다. `Minimal`은 활성 GE의 복제 정책이고, Health·Stamina의 수신 범위는 각 프로퍼티의 복제 조건이 정한다.                                                |
-| ActorInfo 초기화        | 양쪽 Actor의 `BeginPlay`에서 `InitAbilityActorInfo(this, this)`. 캐릭터는 `NotifyControllerChanged`에서도 갱신한다.                                   | ASC가 누구의 것인지(`OwnerActor`), 누구를 통해 실행하는지(`AvatarActor`) 연결한다. 여기서는 둘 다 같은 Actor다.                                              |
-| 서버에서 GA 부여           | 캐릭터 `BeginPlay`의 `HasAuthority()` 분기에서 `GiveAbility(FGameplayAbilitySpec(UCoopRPGMeleeAbility::StaticClass()))`. 표적에는 이 GA를 부여하지 않는다. | ASC의 사용 가능 목록에 등록한다. 현재 Spec 기본값은 레벨 1, `InputID = INDEX_NONE`, `SourceObject = nullptr`다. 입력은 Enhanced Input에서 클래스 기준으로 요청한다. |
-| 이번 실행과 종료            | `TryActivateAbilityByClass` → `ActivateAbility` → `EndAbility`                                                                        | 클릭마다 등록된 능력을 찾아 이번 실행을 시도한다. `EndAbility`는 이 실행을 닫으며 기존 등록은 다음 클릭에도 남는다.                                                       |
+`UCoopRPGMeleeAbility` 생성자는 다음 세 가지를 설정한다.
 
-예를 들어 무기로 능력을 제공하는 구조에서는 **장착할 때 서버가 부여하고, 해제할 때 저장한 Handle로 제거**할 수 있다. 캐릭터의 기본 능력으로 계속 부여하고 장착 여부만 판정하는 방식도 가능하다. 어느 쪽을 쓸지는 장착에 따라 **능력 목록 자체가 달라지는지**로 판단한다. 현재 단타에는 장착 판정과 장착별 부여·제거가 없다.
+- **`InstancedPerActor`** — 이 ASC에 부여된 단타의 인스턴스를 실행 간 재사용한다. 클릭마다 새 능력을 부여하는 방식이 아니다.
+- **`ServerOnly`** — 능력 본체를 서버에서 실행한다. 현재 공격은 클라이언트의 피해 예측을 하지 않는다.
+- **`CostGameplayEffectClass`** — `UCoopRPGMeleeCost`를 비용 정의로 지정한다. 생성자에서 스태미나를 차감하는 것은 아니다.
 
-AttributeSet을 ASC에 연결하는 것과 ActorInfo 초기화도 별개다. 엔진은 ASC 초기화 시 소유 Actor의 서브오브젝트에서 AttributeSet을 찾아 등록한다. CoopRPG는 두 Actor의 생성자에 AttributeSet을 만들어 두므로 별도의 수동 등록을 하지 않는다. `NotifyControllerChanged`는 ActorInfo만 갱신하고 능력을 다시 부여하지 않는다.
+### 2-2. ASC·AttributeSet 준비와 ActorInfo 연결
 
-**근거** · [캐릭터의 초기화와 부여](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [표적의 초기화](../../Game/Source/CoopRPG/Combat/CoopRPGAttackTarget.cpp) · [GA 생성자](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [Epic의 능력 수명](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-gameplay-abilities-in-unreal-engine)
+캐릭터와 고정 표적은 생성자에서 ASC와 AttributeSet을 기본 서브오브젝트로 만든다. ASC는 복제를 켜고 `Minimal` 모드를 사용한다. **`Minimal`은 활성 GE의 복제 방식에 관한 설정이며, Health·Stamina의 수신 범위는 별도의 프로퍼티 복제 조건으로 정한다.**
 
-### 자주 읽게 되는 함수
+엔진의 `UAbilitySystemComponent::InitializeComponent`는 소유 Actor의 AttributeSet 서브오브젝트를 찾아 등록한다. 따라서 현재 구성에서는 별도의 수동 등록 코드가 없다. 프로젝트는 각 Actor의 `BeginPlay`에서 `InitAbilityActorInfo(this, this)`를 호출해 다음 관계를 설정한다.
 
-| 함수 | 누가 호출하며 무엇을 하는가 |
+| ActorInfo 항목 | 현재 의미 |
 |---|---|
-| `GiveAbility(Spec)` / `ClearAbility(Handle)` | 서버가 ASC 목록에 등록하거나 제거한다. 제거 시점에 실행 중이면 종료 뒤 제거하는 `SetRemoveAbilityOnEnd`도 선택할 수 있다. 현재 단타에는 개별 능력 제거 코드가 없다. |
-| `OnGiveAbility` / `OnRemoveAbility` | 능력 부여·제거와 관련된 엔진 확장 지점이다. CoopRPG가 재정의한 함수는 아니다. |
-| `TryActivateAbilityByClass(Class, bAllowRemoteActivation)` | ASC에서 등록된 클래스를 찾고 Handle로 활성화를 시도한다. 기본 인수 `true`는 필요한 경우 원격 활성화 요청을 허용한다. 클라이언트 호출이 `true`를 반환해도 이번 공격의 피해가 승인됐다는 뜻은 아니다. |
-| `CanActivateAbility(...)` | 실행 전 사전 확인이다. 기본 구현은 역할, 태그, 비용과 쿨다운 등을 본다. 현재 GA는 기본 구현을 사용한다. |
-| `IsActive()` | 능력이 현재 실행 중인지 조회한다. 사용 가능 여부를 검사하는 `CanActivateAbility`와 목적이 다르다. |
-| `ActivateAbility(...)` | 활성화 조건을 통과하면 실행되는 본체다. CoopRPG가 직접 재정의해 서버 표적·거리 판단부터 피해 적용까지 처리한다. |
-| `CommitAbility(...)` | 사용을 확정할 시점에 비용·쿨다운을 다시 확인하고 설정된 GE를 공격자에게 적용한다. 현재 단타는 비용 GE만 설정돼 있다. |
-| `EndAbility(...)` / `CancelAbility(...)` | `EndAbility`는 현재 실행을 정리한다. `CancelAbility`는 취소 가능 여부를 확인하고 실행을 중단하는 경로다. 이 단타는 별도 취소 절차를 구현하지 않았으며, 실패 분기에서 직접 `EndAbility`를 호출한다. |
+| `OwnerActor` | ASC를 소유하는 Actor. 공격자는 캐릭터, 표적은 표적 Actor다. |
+| `AvatarActor` | 능력을 실행하는 몸체. 현재는 각각 자신의 OwnerActor와 같다. |
+| `AbilitySystemComponent` | 해당 주체의 ASC. GA에서 공격자 ASC를 찾는 데 쓴다. |
 
-### `ActivateAbility`의 매개변수 네 개
+캐릭터의 `NotifyControllerChanged`는 ActorInfo를 갱신하며 능력을 다시 부여하지 않는다. ASC를 캐릭터에 둔 이유는 현재 전투 상태의 수명을 Pawn에 맞추기 위해서다. Pawn 교체 후에도 능력·효과를 유지해야 할 경우의 PlayerState 배치와 비교는 설계 문서에서 다룬다.
 
-| 매개변수 | 코드에서 읽는 법 |
+**근거** · [캐릭터의 생성·초기화](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [고정 표적의 초기화](../../Game/Source/CoopRPG/Combat/CoopRPGAttackTarget.cpp) · [ASC 배치와 전투 상태의 수명](../Architecture.md#gas-basic-attack)
+
+### 2-3. 서버가 능력을 부여하고, 입력은 등록된 능력을 찾는다
+
+캐릭터 `BeginPlay`의 `HasAuthority()` 분기에서 `GiveAbility(FGameplayAbilitySpec(UCoopRPGMeleeAbility::StaticClass()))`를 호출한다. **`FGameplayAbilitySpec`은 ASC의 능력 등록 항목**이다. 현재 생략한 인수의 기본값은 레벨 1, `InputID = INDEX_NONE`, `SourceObject = nullptr`다. 표적에는 이 단타 GA를 부여하지 않는다.
+
+입력은 Enhanced Input에서 받고, `TryActivateAbilityByClass`가 등록된 클래스의 Spec을 찾은 뒤 Handle로 활성화를 시도한다. `CanActivateAbility`는 실행 가능 여부를 확인하고, `ActivateAbility`는 조건을 통과한 실행의 본체다. `IsActive()`는 이미 실행 중인지를 조회하므로 두 질문을 구분해야 한다.
+
+### 2-4. 실행 본체가 받는 네 가지 정보
+
+다음은 실제 override의 매개변수다. 선언 형식은 유지하고 줄바꿈만 조정했다.
+
+```cpp
+virtual void ActivateAbility(
+    FGameplayAbilitySpecHandle Handle,
+    const FGameplayAbilityActorInfo* ActorInfo,
+    FGameplayAbilityActivationInfo ActivationInfo,
+    const FGameplayEventData* TriggerEventData) override;
+```
+
+- **`Handle` — 어떤 등록 항목인가.** 서버가 부여한 Spec의 식별자다. 클릭마다 새로 생기는 공격 번호가 아니다.
+- **`ActorInfo` — 누가 실행하는가.** 현재 코드는 `AvatarActor`로 공격 Pawn을, `AbilitySystemComponent`로 공격자 ASC를 찾는다.
+- **`ActivationInfo` — 이번 실행은 어떤 상태인가.** 실행 모드와 예측 키 등의 활성화 정보를 담는다. 현재 코드는 Commit과 종료에 전달한다. 인수가 존재한다는 사실만으로 클라이언트 피해 예측을 사용하는 것은 아니다.
+- **`TriggerEventData` — 어떤 이벤트가 실행을 시작했는가.** 이벤트 기반 실행이면 발신자·대상·태그 등을 전달할 수 있다. 현재 클릭 경로는 이벤트 페이로드 없이 클래스로 활성화하며 이 인수를 사용하지 않는다.
+
+### 2-5. 종료는 이번 실행을 닫는다
+
+현재 GA는 검사와 효과 적용을 한 번 수행하고 `EndAbility`를 호출한다. 등록된 Spec은 남아 다음 클릭에도 사용된다. 정상 경로의 마지막 두 인수는 `false, false`, 본체의 거절 경로는 `false, true`다.
+
+| 종료 인수 | 의미 |
 |---|---|
-| `FGameplayAbilitySpecHandle Handle` | **어떤 등록 항목인가.** ASC가 부여한 `FGameplayAbilitySpec`을 찾는 식별자다. 클릭마다 새로 부여되는 번호가 아니다. |
-| `const FGameplayAbilityActorInfo* ActorInfo` | **누가 실행하는가.** Owner·Avatar와 ASC 등이 들어 있다. 현재 구현은 `AvatarActor`를 공격 Pawn으로, `AbilitySystemComponent`를 공격자 ASC로 사용한다. |
-| `FGameplayAbilityActivationInfo ActivationInfo` | **이번 실행이 어떤 상태인가.** 실행 모드와 예측 키 등 활성화 정보를 담는다. 현재 코드는 받아서 `CommitAbility`와 `EndAbility`에 전달하며 클라이언트 피해 예측은 하지 않는다. |
-| `const FGameplayEventData* TriggerEventData` | **어떤 게임플레이 이벤트가 실행을 시작했는가.** 이벤트로 시작한 경우 발신자·대상·태그 등의 전달 데이터를 담을 수 있다. 현재 클릭은 이벤트 페이로드 없이 클래스로 활성화하며 본체에서 이 인수를 쓰지 않는다. |
+| `bReplicateEndAbility` | 이번 종료를 네트워크로 전파할지 정한다. 현재 서버 전용 실행에서는 `false`다. |
+| `bWasCancelled` | 취소로 정리하는 종료인지 표시한다. 본체의 거절은 `true`, 정상 완료는 `false`다. |
 
-`CanActivateAbility`에는 `Handle`, `ActorInfo` 외에 선택적인 출발·대상 태그와 실패 이유를 담을 출력 태그가 있다. 기본 태그 확인이 표적을 검색하거나 사거리를 재는 것은 아니다. `CommitAbility`는 `Handle`, `ActorInfo`, `ActivationInfo`와 선택적 실패 태그 출력을 받는다. `EndAbility` 뒤의 두 bool은 종료를 네트워크로 전파할지(`bReplicateEndAbility`), 취소로 정리할지(`bWasCancelled`)다. 현재 코드는 정상에 `false, false`, 본체의 거절 경로에 `false, true`를 전달한다.
+`CancelAbility`는 취소 가능 여부를 확인하고 취소 통지를 거쳐 실행을 끝내는 경로다. 현재 코드가 실패 시 `EndAbility(..., false, true)`를 호출한다는 사실은 **공격 도중 피격 취소·몽타주 정리·재실행을 구현하고 검증했다는 뜻이 아니다.**
 
-**근거** · [실제 GA 선언](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h) · [실행·종료 호출부](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [Epic의 GA API](https://dev.epicgames.com/documentation/unreal-engine/API/Plugins/GameplayAbilities/UGameplayAbility?application_version=5.8)
+**근거** · [GA의 선언](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h) · [클래스 설정과 모든 종료 분기](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [Epic의 능력 수명](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-gameplay-abilities-in-unreal-engine)
+
+<details>
+<summary>보충 — 능력 제거와 추가 함수 인수</summary>
+
+서버는 `ClearAbility(Handle)`로 등록을 제거할 수 있다. `SetRemoveAbilityOnEnd`는 실행 중이면 종료 뒤 제거하고, 실행 중이 아니면 즉시 제거한다. `OnGiveAbility`·`OnRemoveAbility`는 관련 확장 지점이며 현재 프로젝트에서는 재정의하지 않았다.
+
+무기 장착으로 능력 목록이 바뀐다면 서버가 장착 시 부여하고 해제 시 저장한 Handle로 제거할 수 있다. 기본 능력을 계속 부여하고 서버에서 장착 조건만 검사하는 선택도 가능하다. 현재 단타에는 장착별 부여·제거와 장착 판정이 없다.
+
+`TryActivateAbilityByClass`의 `bAllowRemoteActivation`은 기본값이 `true`이며 필요한 원격 활성화 요청을 허용한다. `CanActivateAbility`에는 `Handle`·`ActorInfo` 외에 선택적인 출발·대상 태그와 실패 태그 출력이 있다. 이 태그 검사가 표적 검색이나 거리 계산까지 해주는 것은 아니다. `CommitAbility`는 `Handle`·`ActorInfo`·`ActivationInfo`와 선택적 실패 태그 출력을 받는다.
+
+**근거** · [Epic GA API](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Plugins/GameplayAbilities/UGameplayAbility) · [장착에 따른 능력 관리 사례인 Lyra](https://dev.epicgames.com/documentation/en-us/unreal-engine/abilities-in-lyra-in-unreal-engine)
+
+</details>
 
 <a id="attack-checks"></a>
 ## 3. 어디서 거절하고 언제 스태미나를 차감하는가
 
-| 시점 | 검사와 처리 | 실패하면 |
-|---|---|---|
-| 소유 클라이언트의 ASC | 등록된 Spec을 찾아 `CanActivateAbility`로 로컬 상태를 검사한다. 현재 `ServerOnly` 정책에서도 통과한 경우에만 GAS가 서버로 활성화 요청을 보낸다. | 요청을 보내지 않는다. 서버 로그에 거리 거절이 뜨지 않는다. |
-| 서버 ASC | 수신한 Handle과 정책 등을 확인하고 서버 상태로 `CanActivateAbility`를 검사한다. 비용 검사도 여기서 실행될 수 있다. | `ActivateAbility` 본체에 들어가지 않는다. `AttackRejected ... CommitFailed`는 본체 안의 별도 로그다. |
-| 서버 GA 본체 | 유효한 공격 Pawn·권한·공격자 ASC를 확인한다. 서버의 GameMode에서 고정 표적을 찾고 유효성 및 `Health > 0`을 확인한다. 서버 좌표의 **수평 거리**(`Dist2D`)가 250cm를 넘으면 거절한다. | 거리 실패는 `Reason=OutOfRange`, 표적 실패는 `Reason=InvalidTarget`으로 기록하고 확정 전에 종료한다. |
-| `CommitAbility` | 비용과 설정된 쿨다운을 재검사한다. 현재 비용은 **스태미나 10**이다. 기본 `CheckCost`는 Additive 비용에 대해 `CurrentValue + CostValue < 0`인지 본다. 스태미나 9는 실패하고 정확히 10은 통과해 0이 될 수 있다. | 본체에서 재검사가 실패한 경우 `Reason=CommitFailed`. 이 분기에서 피해 GE를 만들거나 적용하지 않는다. |
-| Commit 성공 뒤 | 공격자의 스태미나를 깎는 비용 GE는 Commit 과정에서 적용된다. 그 뒤 GA가 피해 Spec을 만들어 **표적 ASC**에 적용한다. | Commit은 공격 사용의 확정 지점이다. 피해 효과가 나중에 거절되더라도 비용을 자동으로 되돌리는 트랜잭션은 아니다. |
+### 3-1. 서버는 활성화 조건과 실제 공격 조건을 나눠 확인한다
 
-현재 사거리는 두 Actor 원점 사이 수평 거리다. 고도 차이, 장애물, 공격 방향, 무기 충돌, 무기 장착은 검사하지 않는다. 쿨다운도 아직 설정되지 않았다. 기본 GAS 방식으로 추가한다면 지속 시간과 차단 태그를 부여하는 쿨다운 GE를 지정한 다음, 태그의 보유와 만료를 시험할 수 있다.
+로컬 ASC는 등록된 Spec과 `CanActivateAbility`를 확인한다. 서버도 요청을 받으면 서버의 상태로 활성화를 검사한다. 기본 구현은 역할·태그·비용·쿨다운 등 GAS 조건을 다루며, 현재 GA는 `CanActivateAbility`를 재정의하지 않는다.
 
-**근거** · [서버의 표적·거리·Commit 구현](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [UE 5.8.4 활성화·비용 소스 위치](#engine-source) · [Epic의 활성화 및 비용·쿨다운 설명](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-gameplay-abilities-in-unreal-engine)
+이후 서버의 `ActivateAbility`는 다음 순서로 게임 규칙을 확인한다.
+
+1. 공격 Pawn과 공격자 ASC가 유효하고 Pawn에 서버 권한이 있는가.
+2. 서버 GameMode가 제공하는 고정 표적이 유효하고 `Health > 0`인가.
+3. 서버의 두 Actor 원점 사이 **수평 거리 `Dist2D`가 250cm 이하인가.**
+
+고도 차이, 장애물, 공격 방향, 무기 충돌과 장착 여부는 아직 검사하지 않는다. 이 선택은 고정 표적으로 GAS의 권한·비용·복제를 먼저 확인하기 위한 현재 구현 범위다.
+
+### 3-2. Commit은 비용을 다시 검사한 뒤 사용을 확정한다
+
+기본 `CommitAbility`는 `CommitCheck`를 통과하면 `CommitExecute`에서 설정된 쿨다운과 비용을 적용한다. 현재 GA에는 **비용 GE만 설정**돼 있다. 승인 경로에서는 이 과정에서 공격자 스태미나를 10 소모한 뒤, GA 본체가 피해 Spec을 만들어 표적 ASC에 적용한다.
+
+기본 Additive 비용 검사는 `CurrentValue + CostValue < 0`이면 실패한다. 비용이 `-10`인 현재 설정의 경계는 다음과 같다.
+
+| 검사 직전 Stamina | 비용 검사 기대값 |
+|---:|---|
+| 9 | 실패. 비용·피해 없이 종료해야 한다. |
+| 10 | 통과. 나머지 조건도 유효하면 비용 적용 뒤 0이 된다. |
+| 100 | 통과. 나머지 조건도 유효하면 비용 적용 뒤 90이 된다. |
+
+**9·10 경계는 엔진 코드에서 도출한 기대값이며 실행 검증 결과가 아니다.** 활성화 사전 검사에서 이미 거절될 수 있으므로 비용 부족이 항상 `CommitFailed`로 기록되지는 않는다. Commit 성공 뒤 피해 효과가 적용되지 않더라도 비용을 자동 환불하는 트랜잭션은 아니다.
+
+쿨다운을 기본 GAS 방식으로 추가하려면 지속 시간과 차단 태그를 가진 쿨다운 GE를 지정하고, 재사용 차단·만료·재실행을 시험해야 한다. 현재는 해당 GE와 실제 서버 거절 검증이 모두 남아 있다.
+
+### 3-3. 실패 위치를 로그로 구분한다
+
+| 실패 위치 | 현재 관찰할 수 있는 것 |
+|---|---|
+| 클라이언트 사전 확인 | `AttackInput`은 찍힐 수 있지만 서버 요청은 없을 수 있다. 입력 로그만으로 전송 성공을 판정하지 않는다. |
+| 서버 활성화 확인 | GA 본체 진입 전 실패다. 본체에 있는 `AttackRejected`가 없을 수 있어 서버 수신·활성화 실패를 별도로 확인해야 한다. |
+| 본체의 초기 권한·참조 확인 | `EndAbility` 후 반환한다. 현재 이 분기에는 별도 `AttackRejected` 로그가 없다. |
+| 본체의 표적·거리 확인 | 각각 `Reason=InvalidTarget`, `Reason=OutOfRange`다. Commit 전에 종료한다. |
+| 본체의 Commit 재검사 | 실패 시 `Reason=CommitFailed`다. 피해 Spec을 만들거나 적용하지 않는다. |
+
+**근거** · [검사·로그·Commit 호출부](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [엔진의 활성화·비용 계산 경로](#engine-source) · [다음 V02 검증 카드](../Roadmap.md#next-work)
 
 <a id="effect-definition"></a>
 ## 4. GE는 어떻게 구성하고 누구에게 적용하는가
 
-**GE 클래스는 효과의 정의, `FGameplayEffectSpec`은 이번에 적용할 효과의 실행 데이터**다. Spec에는 GE 정의의 참조, 레벨, 효과 컨텍스트, 평가된 Modifier 값 등이 들어간다. 컨텍스트에는 효과를 일으킨 주체 정보 등이 담길 수 있다. 표적 ASC는 아래 호출에서 별도로 전달한다.
+### 4-1. GE 정의와 Spec은 역할이 다르다
 
-| GE 구성 항목 | 의미 | 비용 GE | 피해 GE |
-|---|---|---|---|
-| `DurationPolicy` | 즉시 실행, 시간 제한, 무기한 중 효과 수명을 정한다. | `Instant` | `Instant` |
-| `Modifiers` | 어떤 속성을 어떻게 바꿀지 지정하는 목록이다. | 스태미나 Modifier 1개 | 체력 Modifier 1개 |
-| `Attribute` | 바꿀 속성의 식별자. Modifier 1개의 대상 필드다. | `GetStaminaAttribute()` | `GetHealthAttribute()` |
-| `ModifierOp` | 기존 값과 계산한 크기를 어떻게 합칠지 정한다. | `Additive` | `Additive` |
-| `ModifierMagnitude` | 연산에 쓸 크기와 계산 방식이다. | `FScalableFloat(-10.0f)` | `FScalableFloat(-10.0f)` |
+**GE 클래스는 효과의 정의이고 `FGameplayEffectSpec`은 이번 적용에 사용할 실행 데이터다.** Spec은 정의의 참조, 레벨, 효과 컨텍스트와 Modifier 평가 데이터 등을 갖는다. 컨텍스트에는 효과를 일으킨 주체 등의 정보가 담길 수 있으며, 수신 대상 ASC는 적용 호출에서 지정한다.
 
-`FGameplayModifierInfo`에는 평가 채널 설정과 소스·대상 태그 조건도 있다. 현재 두 Modifier에는 별도 설정이 없다. 이 예에서 핵심은 **대상 속성·연산·크기** 세 가지다. 효과 종류를 늘릴 때는 정의의 기간과, 태그로 효과 적용 자체를 제한할지 Modifier 평가를 제한할지도 따로 결정한다.
+GA 등록에 쓰던 `FGameplayAbilitySpec`과도 구분해야 한다. Ability Spec은 **사용 가능한 능력의 등록 항목**, Effect Spec은 **적용할 효과의 실행 데이터**다.
 
-지금은 레벨에 따른 커브를 연결하지 않아 두 크기가 모두 고정 `-10`이다. `Additive`이므로 기존 값에 `-10`을 더한다. 비용과 피해를 두 GE로 나눈 이유는 **수신 ASC와 적용 책임이 다르기 때문**이다. 비용은 공격자가 내고, 피해는 표적이 받는다. 같은 형식의 GE라도 공격자에게 적용할지 표적에게 적용할지는 호출 경로에서 결정한다.
+### 4-2. 현재 두 GE의 설정
+
+| 항목 | 비용 GE | 피해 GE |
+|---|---|---|
+| 클래스 | `UCoopRPGMeleeCost` | `UCoopRPGMeleeDamage` |
+| 수신 ASC | 공격자 | 고정 표적 |
+| GE 기간 정책 | `Instant` | `Instant` |
+| Modifier 대상 속성 | `GetStaminaAttribute()` | `GetHealthAttribute()` |
+| 연산 | `Additive` | `Additive` |
+| 크기 | 고정 `-10` | 고정 `-10` |
+
+`DurationPolicy`는 GE 전체의 수명이다. `Modifiers`는 속성 변경 규칙의 목록이며 현재 각 GE에 하나씩 들어 있다. **Modifier 하나는 대상 속성(`Attribute`), 연산(`ModifierOp`), 크기와 계산 방식(`ModifierMagnitude`)을 묶는다.** 두 효과는 `FScalableFloat(-10.0f)`를 사용하며 레벨별 커브를 연결하지 않았다.
+
+`FGameplayModifierInfo`에는 평가 채널과 소스·대상 태그 조건도 있지만 현재는 별도 설정이 없다. 효과를 늘릴 때는 GE 자체의 적용 조건과 개별 Modifier의 평가 조건을 구분해야 한다. 지금은 C++ 생성자에서 정의했으며 데이터 전용 GE Blueprint로 설정하는 방법도 있다.
+
+### 4-3. 피해 Spec을 표적 ASC에 적용한다
+
+아래는 서버 GA의 실제 C++ 코드이며 줄바꿈만 조정했다.
 
 ```cpp
-const FGameplayEffectSpecHandle Damage = MakeOutgoingGameplayEffectSpec(UCoopRPGMeleeDamage::StaticClass());
+const FGameplayEffectSpecHandle Damage =
+    MakeOutgoingGameplayEffectSpec(UCoopRPGMeleeDamage::StaticClass());
 check(Damage.IsValid());
-Source->ApplyGameplayEffectSpecToTarget(*Damage.Data.Get(), Target->GetAbilitySystemComponent());
+Source->ApplyGameplayEffectSpecToTarget(
+    *Damage.Data.Get(), Target->GetAbilitySystemComponent());
 ```
 
-위 C++ 코드는 서버 GA의 피해 적용 부분이다. 여기서 두 ASC의 역할이 드러난다. `Source`가 적용을 요청하고, 두 번째 인수인 표적 ASC의 AttributeSet에서 `Health`가 바뀐다. 이 프로젝트에서는 C++ 생성자로 두 GE를 정의했으며, 같은 종류의 설정은 데이터 전용 GE Blueprint로도 구성할 수 있다.
+`Source`는 공격자 ASC, 두 번째 인수는 표적 ASC다. 표적 ASC가 피해 정의를 실행하면서 **표적 AttributeSet의 Health**를 바꾼다. 공격자 Stamina는 앞선 Commit의 **별도 비용 GE**로 바뀐다. 비용과 피해를 분리한 이유는 수신 ASC와 적용 책임이 다르기 때문이다.
 
-**근거** · [피해와 비용 GE 정의](../../Game/Source/CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.cpp) · [피해 Spec 생성·적용](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [Epic의 GE 구성](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-effects-for-the-gameplay-ability-system-in-unreal-engine) · [Modifier API](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Plugins/GameplayAbilities/FGameplayModifierInfo)
+현재는 다른 보정이 없고 두 GE 모두 `Instant`이므로 각 대상 속성의 BaseValue와 CurrentValue가 함께 감소한다. 피해 GE 하나가 Health와 Stamina를 동시에 깎는 구조가 아니다.
+
+**근거** · [GE 생성자와 Modifier 구성](../../Game/Source/CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.cpp) · [Spec 생성·적용 코드](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [Epic의 GE와 Spec 설명](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-effects-for-the-gameplay-ability-system-in-unreal-engine) · [Modifier API](https://dev.epicgames.com/documentation/unreal-engine/API/Plugins/GameplayAbilities/FGameplayModifierInfo)
 
 <a id="attribute-replication"></a>
-## 5. AttributeSet의 매크로·재정의·복제 연결
+## 5. AttributeSet의 선언·매크로·복제는 어떻게 연결되는가
 
-`UCoopRPGCombatAttributes`는 `UCLASS()`와 `GENERATED_BODY()`로 언리얼 리플렉션을 사용하는 클래스다. `UPROPERTY`는 속성 필드를, `UFUNCTION()`은 복제 시 엔진이 부를 콜백을 리플렉션에 노출한다. GAS 전용 접근자 매크로는 그 위에 별도로 쓰는 C++ 편의 코드다.
+### 5-1. 값은 어느 객체에 있는가
 
-`UCoopRPGCombatAttributes` 안에 `FGameplayAttributeData Health`와 `Stamina`가 있다. 각각 `BaseValue`와 `CurrentValue`를 가지며 생성자의 `Health(100.0f), Stamina(100.0f)`가 두 값의 시작점을 100으로 잡는다. 현재 즉시 GE처럼 다른 보정이 없는 예에서 100에 `-10`을 적용하면 Base와 Current가 모두 90이 된다.
+`UCoopRPGCombatAttributes`에는 `FGameplayAttributeData` 타입의 `Health`와 `Stamina`가 있다. 각 필드는 **BaseValue와 CurrentValue**를 갖고 생성자에서 둘 다 100으로 시작한다. 이번 공격에서 공격자와 표적의 AttributeSet은 서로 다른 객체다.
 
-### 어떤 매크로가 어떤 함수를 만드는가
+- 공격자에게 비용 GE 적용 → 공격자 **Stamina의 Base·Current가 각각 100 → 90**.
+- 표적에게 피해 GE 적용 → 표적 **Health의 Base·Current가 각각 100 → 90**.
 
-| 헤더·구현에 쓴 매크로 | 생기는 함수 또는 수행하는 일 | 현재 어디서 쓰는가 |
+`GetHealth()`가 읽는 곳은 이 AttributeSet의 Health다. 표적 Actor의 같은 이름 함수는 자신의 AttributeSet에 조회를 위임한다. AttributeSet 안의 `OnRep_Health`에서 인수 없이 부르는 `GetHealth()`는 **그 AttributeSet 객체에 생성된 멤버 함수**다.
+
+### 5-2. 매크로가 만드는 접근자와 직접 작성하는 콜백
+
+다음은 실제 헤더에서 Health 관련 부분만 발췌한 C++ 코드다. 생략한 클래스 구문과 접근 지정자는 원본에서 확인할 수 있다.
+
+```cpp
+GAMEPLAYATTRIBUTE_PROPERTY_GETTER(UCoopRPGCombatAttributes, Health)
+GAMEPLAYATTRIBUTE_VALUE_GETTER(Health)
+
+UFUNCTION()
+void OnRep_Health(const FGameplayAttributeData& PreviousHealth);
+
+UPROPERTY(ReplicatedUsing = OnRep_Health)
+FGameplayAttributeData Health;
+```
+
+- `GAMEPLAYATTRIBUTE_PROPERTY_GETTER`는 `static FGameplayAttribute GetHealthAttribute()`를 만든다. GE가 변경할 **속성의 식별자**를 얻거나 범위 제한 함수에서 속성을 비교할 때 쓴다.
+- `GAMEPLAYATTRIBUTE_VALUE_GETTER`는 `float GetHealth() const`를 만든다. 해당 객체의 **현재 숫자 CurrentValue**를 읽는다.
+- `UPROPERTY(ReplicatedUsing = OnRep_Health)`는 Health의 복제 콜백을 지정한다. `OnRep_Health`의 선언과 본문은 개발자가 직접 작성하고 `UFUNCTION()`으로 노출한다.
+- 클래스의 `UCLASS()`·`GENERATED_BODY()`는 언리얼 리플렉션을 위한 선언이다. GAS의 위 두 접근자 매크로는 별도의 C++ 편의 코드다.
+
+Stamina에도 같은 방식의 식별자 getter·현재값 getter·직접 작성한 OnRep가 있다. 이 클래스는 `GAMEPLAYATTRIBUTE_VALUE_SETTER`와 `GAMEPLAYATTRIBUTE_VALUE_INITTER`를 쓰지 않으므로 `SetHealth`·`InitHealth`와 대응 스태미나 함수는 이 선언에서 자동 생성되지 않는다. 초기값은 생성자에서, 전투 중 변경은 GE에서 처리한다.
+
+### 5-3. 복제 조건과 재정의 함수
+
+`GetLifetimeReplicatedProps`는 엔진 가상 함수를 **재정의**한 것이다. 그 안의 `DOREPLIFETIME_CONDITION_NOTIFY`가 필드와 수신 조건·통지 정책을 복제 목록에 등록한다.
+
+| 필드 | 수신 조건 | 복제 콜백 |
 |---|---|---|
-| `GAMEPLAYATTRIBUTE_PROPERTY_GETTER(UCoopRPGCombatAttributes, Health)` | `static FGameplayAttribute GetHealthAttribute()`를 만든다. 반사 프로퍼티로부터 **어떤 속성인지** 식별한다. | GE의 대상 속성 지정, `PreAttributeBaseChange`에서 속성 비교 등에 쓴다. `GetStaminaAttribute()`도 같은 방식이다. |
-| `GAMEPLAYATTRIBUTE_VALUE_GETTER(Health)` | `float GetHealth() const`를 만든다. 해당 객체의 **현재 숫자**(`CurrentValue`)를 읽는다. | AttributeSet의 `OnRep_Health` 로그와 표적 Actor의 `GetHealth()` 위임에서 사용한다. `GetStamina()`도 같은 방식이다. |
-| `GAMEPLAYATTRIBUTE_REPNOTIFY(Class, Health, PreviousHealth)` | 함수를 선언하지 않는다. 이미 작성된 `OnRep_Health` 안에서 실행돼 새 값과 옛 값을 로컬 ASC의 `SetBaseAttributeValueFromReplication`에 넘긴다. | 복제된 프로퍼티 변경을 GAS의 계산·알림 경로에 연결한다. 스태미나에도 동일하게 사용한다. |
-| `DOREPLIFETIME_CONDITION_NOTIFY(...)` | 복제 목록에 필드와 수신 조건·통지 정책을 등록한다. | 프로젝트가 재정의한 `GetLifetimeReplicatedProps` 안에서 Health·Stamina를 각각 등록한다. |
+| Health | `COND_None` — 해당 Actor가 복제되는 연결 | `OnRep_Health` |
+| Stamina | `COND_OwnerOnly` — 소유 연결 | `OnRep_Stamina` |
 
-`GAMEPLAYATTRIBUTE_VALUE_SETTER`와 `GAMEPLAYATTRIBUTE_VALUE_INITTER`는 이 클래스에서 쓰지 않는다. 따라서 `SetHealth`, `InitHealth` 및 스태미나 쪽 대응 함수는 이 선언에서 자동으로 생기지 않는다. 엔진의 setter 매크로는 ASC를 통해 Base 값을 설정하고, initter 매크로는 필드의 Base·Current를 초기화한다. 현재 코드는 초기값을 생성자에서, 전투 중 변경을 GE에서 처리한다.
+둘 다 `REPNOTIFY_Always`를 사용한다. **프로퍼티를 복제로 수신했을 때 값이 같아 보여도 콜백을 실행하도록 하는 정책**이다. 매 프레임 전송하거나 복제 대상을 늘리는 설정이 아니다. 현재 시험에서는 표적 Health를 두 Client가 받고 공격자 Stamina를 해당 소유자만 받는다.
 
-### 어떤 선언이 어떤 콜백과 이어지는가
+또 다른 override인 `PreAttributeBaseChange`는 변경할 Base 값을 참조 인수 `NewValue`로 받아 0~100으로 제한한다. 효과 적용 승인이나 사망 처리를 담당하지 않으며, 지속 효과로 계산된 모든 Current 값의 상한까지 보장하지 않는다. `PreAttributeChange`·`PreGameplayEffectExecute`·`PostGameplayEffectExecute`는 현재 재정의하지 않았다.
 
-| 연결 | Health | Stamina |
-|---|---|---|
-| `UPROPERTY(ReplicatedUsing = ...)` | `OnRep_Health`를 이 필드의 복제 콜백으로 지정 | `OnRep_Stamina` 지정 |
-| 복제 조건·통지 | `COND_None` · `REPNOTIFY_Always`. 표적이 복제되는 두 클라이언트 모두 받는다. | `COND_OwnerOnly` · `REPNOTIFY_Always`. 해당 Pawn의 소유 클라이언트만 받는다. |
-| 개발자가 작성한 `UFUNCTION()` | `OnRep_Health(const FGameplayAttributeData& PreviousHealth)` | `OnRep_Stamina(const FGameplayAttributeData& PreviousStamina)` |
+**근거** · [AttributeSet 선언](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h) · [생성자·복제 등록·범위 제한](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp) · [표적 Actor의 getter 위임](../../Game/Source/CoopRPG/Combat/CoopRPGAttackTarget.cpp)
 
-`REPNOTIFY_Always`는 **프로퍼티를 복제로 수신했을 때** 같아 보이는 값에도 RepNotify를 실행하는 조건이다. 값을 매 프레임 보내는 설정은 아니다. 위 OnRep 두 개는 개발자가 직접 작성한 콜백이다. 이 클래스에서 엔진 가상 함수를 재정의한 것은 **`GetLifetimeReplicatedProps`와 `PreAttributeBaseChange`**다. `PreAttributeBaseChange`는 Base 값이 바뀌기 전에 참조 인수 `NewValue`를 0~100으로 제한한다. 효과 적용을 승인하거나 죽음을 처리하는 함수는 아니며, 지속 버프로 계산한 모든 Current 값의 상한을 보장하지도 않는다. `PreAttributeChange`, `PreGameplayEffectExecute`, `PostGameplayEffectExecute`는 현재 클래스에서 재정의하지 않았다.
+### 5-4. Health 100 → 90에서 RepNotify가 하는 일
 
-### Health 100 → 90에서 RepNotify가 필요한 이유
+지속 보정과 예측이 없고 클라이언트도 변경 전 Health 100을 가진 현재 단타 예시다.
 
-1. 서버의 즉시 피해 GE가 표적 AttributeSet의 값을 바꾸고, 언리얼 복제가 클라이언트의 `Health` 필드에 90을 쓴다.
-2. 클라이언트에서 `OnRep_Health`가 호출된다. `PreviousHealth.GetCurrentValue()`는 100이고, 이 사례의 `GetHealth()`는 콜백 시작부터 이미 90이다.
-3. 콜백 안의 `GAMEPLAYATTRIBUTE_REPNOTIFY`가 같은 클라이언트의 ASC에 새 값·옛 값을 연결한다. 해당 속성의 Aggregator가 없으면 등록된 속성 변경 델리게이트로 이전·현재 값을 알린다. Aggregator가 있으면 서버 Base를 계산기에 맞추고 해당 클라이언트의 적용 가능한 보정으로 다시 평가한다.
-4. 따라서 이 단순 경로에서 매크로를 빼도 콜백이 직접 읽는 `GetHealth()` 값과 로그는 90일 수 있다. 하지만 ASC의 `GetGameplayAttributeValueChangeDelegate`에만 구독한 체력바는 그 복제 이벤트의 알림을 받지 못한다. 현재 체력바는 미구현이며 이는 엔진 코드에서 읽은 결과다. 이 호출로 서버에 수신 확인을 보내지는 않는다.
+1. **서버에서 변경** — 피해 GE가 표적 Health를 90으로 만든다.
+2. **클라이언트 필드 갱신** — 언리얼 복제가 클라이언트 AttributeSet의 Health를 갱신한다. `OnRep_Health` 진입 시 `PreviousHealth.GetCurrentValue()`는 100, `GetHealth()`는 이미 90이다.
+3. **로컬 GAS에 연결** — OnRep 본문의 `GAMEPLAYATTRIBUTE_REPNOTIFY`가 새 값과 옛 값을 **같은 클라이언트의 ASC**에 전달한다. 이 매크로는 함수를 새로 선언하거나 서버에 수신 확인을 보내지 않는다.
+4. **계산과 알림** — 엔진은 해당 속성의 Aggregator 유무에 따라 계산 상태를 갱신하거나 등록된 속성 변경 델리게이트에 이전·현재 값을 통지한다.
 
-**근거** · [AttributeSet 선언](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h) · [초기값·복제 등록·OnRep·범위 제한](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp) · [표적의 getter 위임](../../Game/Source/CoopRPG/Combat/CoopRPGAttackTarget.cpp) · [UE 5.8.4 매크로·복제 소스 위치](#engine-source) · [Epic의 AttributeSet 복제 예시](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-attributes-and-attribute-sets-for-the-gameplay-ability-system-in-unreal-engine)
+```text
+Health의 ReplicatedUsing 설정
+    → 언리얼 복제로 Health 필드 갱신
+    → 직접 작성한 OnRep_Health(PreviousHealth)
+    → GAMEPLAYATTRIBUTE_REPNOTIFY
+    → 로컬 ASC의 SetBaseAttributeValueFromReplication
+    → 필요한 계산 갱신과 속성 변경 통지
+```
+
+**왜 매크로가 필요한가?** 이 단순 예에서는 매크로를 빼도 직접 읽은 `GetHealth()`와 체력 로그는 90일 수 있다. 그러나 `GetGameplayAttributeValueChangeDelegate`만 구독한 체력바에는 그 복제 이벤트의 알림이 전달되지 않는다. 따라서 getter 숫자가 맞는 것만으로 GAS의 변경 알림도 정상이라고 판단할 수 없다. 체력바는 현재 미구현이고, 매크로 제거 실험도 하지 않았다. 이 차이는 엔진 코드에서 확인한 동작이다.
+
+<details>
+<summary>보충 — BaseValue·CurrentValue와 Aggregator</summary>
+
+BaseValue는 계산의 기준값, CurrentValue는 적용 가능한 보정을 반영한 현재 값이다. 예를 들어 공격력 Base 100에 일시 Additive +20이 있으면 Current는 120이다. 버프 중 Base가 130으로 바뀌면 Current는 150, 버프가 끝나면 남은 조건으로 다시 계산해 130이 된다. 처음 값 100을 저장했다가 되돌리는 방식이 아니다. 이 공격력 예시는 원리 설명이며 현재 CoopRPG에 구현한 기능은 아니다.
+
+Aggregator는 속성의 기준값과 Modifier를 평가하는 GAS 내부 계산 객체다. AttributeSet의 Health와 무관한 별도 체력 저장소로 이해하면 안 된다. 지속 보정이나 속성 캡처 등 GAS 내부 경로가 만들 수 있으므로, 존재 여부를 `Instant / Duration` 구분만으로 단정하지 않는다.
+
+`SetBaseAttributeValueFromReplication`에서 Aggregator가 없으면 새·옛 CurrentValue로 등록된 변경 델리게이트에 알린다. 있으면 이전 Base로 알림에 쓸 이전 평가값을 구성하고, 새 서버 Base를 반영한 뒤 `OnAttributeAggregatorDirty` 경로로 계산·알림을 갱신한다. 실제 반영할 보정은 해당 클라이언트가 가진 효과와 예측 상태에 따른다. 현재 단타의 확인 수치와 이 일반 동작 설명을 구분한다.
+
+참고로 setter 매크로는 ASC를 통해 Base 값을 설정하고, initter 매크로는 필드의 Base·Current를 초기화한다. 현재 AttributeSet에서 두 매크로를 사용한 것은 아니다.
+
+</details>
+
+**근거** · [프로젝트의 OnRep 본문](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp) · [엔진 매크로·복제 처리의 확인 위치](#engine-source) · [Epic의 AttributeSet과 복제 예시](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-attributes-and-attribute-sets-for-the-gameplay-ability-system-in-unreal-engine)
 
 <a id="verification-scope"></a>
-## 6. 무엇을 실제로 확인했는가
+## 6. 무엇을 실제로 확인했고 무엇이 남았는가
 
-기존 전용 서버·독립 Client 2개 시험에서 **공격 클릭 4회 → 서버 요청 4회**를 관찰했다. 거리 밖 두 요청은 피해와 비용 없이 거절됐다. 거리 안 두 요청에서 양쪽 표적 체력은 100→90→80, 각 요청자의 스태미나는 자신의 클라이언트에서 100→90이었다. 이번 문서에서는 해당 시험 기록과 코드·엔진 구현을 대조했다.
+### 6-1. 실행 조건별로 결과를 읽는다
 
-비용 부족은 **로컬에서 요청 없이 차단하는 경우**와 **서버가 수신한 뒤 차단하는 경우**를 분리해서 보아야 한다. 후속 시험에서는 클라이언트 요청 로그, 서버 수신·활성화 실패 로그, 서버의 HP·스태미나 전후를 함께 대조하는 편이 좋다. 위의 스태미나 9/10 경계는 코드에서 도출한 기대값이다. 쿨다운은 아직 설정이 없고 무효 표적·피격 취소·패킷 지연·손실도 이번 문서의 신규 실행 검증 범위가 아니다.
+아래는 기존 시험 기록을 대조한 요약이다. **이번 문서 개정에서는 게임을 다시 실행하지 않았다.** 모든 시험을 하나의 최신 패키지 결과로 합치지 않는다.
 
-**근거** · [V02 고정 표적 첫 시험](../Validation/Index.md#v02-basic-attack) · [입력 통합 이후 회귀](../Validation/Index.md#v02-attack-input-regression) · [다음 검증 카드](../Roadmap.md#next-work)
+1. **입력 통합 후 독립 패키지** — 같은 PC·루프백의 Server 1개와 Client 2개. AI의 입력 주입으로 이동, 클릭 4회·서버 요청 4건, 거절·승인 각 2건을 확인했다. [패키지 시험 근거](../Validation/Index.md#v02-attack-input-regression)
+2. **GAS 소스 이동 후 Editor 회귀** — 새 DLL로 Editor 실행 파일의 서버 1개·게임 2개를 기동했다. 거절·승인 각 2건과 동일한 속성 변화를 확인했다. 이동 후 독립 패키지 재빌드는 미실행이다. [소스 이동 회귀 근거](../Validation/Index.md#v02-gas-source-layout)
+3. **로그 문맥 검증** — 단일 프로세스 PIE의 서버·두 Client와 별도 Editor 프로세스 시험을 구분해 수행했다. 입력·서버 판정·OnRep의 NetMode·PIE·함수명을 확인했다. [로그 검증 근거](../Validation/Index.md#v02-log-context)
+4. **사용자 수동 PIE 확인** — 사용자가 두 창에서 조작한 Output Log를 대조했다. 입력 4건·서버 판정 4건, 거절·승인 각 2건을 확인했다. RPC 호출 수의 직접 근거는 앞선 자동 시험이다. [수동 확인 근거](../Validation/Index.md#v02-manual-attack-result)
+
+승인 두 건에서 **표적 Health는 양쪽에서** `100 → 90 → 80`, **각 요청자의 Stamina는 소유 클라이언트에서** `100 → 90`이었다. 거리 밖 두 거절에서는 체력과 비용이 변하지 않았다. 사용자 수동 확인의 거절 거리는 351.75cm·351.58cm, 승인 거리는 87.50cm·74.12cm였다. 각 시험의 입력 순서·빌드·실행 ID는 연결한 검증 기록에 둔다.
+
+### 6-2. 입력·판정·복제 로그를 연결해서 본다
+
+| 로그 | 입증하는 지점 |
+|---|---|
+| `AttackInput` · Verbose | 로컬 `Attack()` 진입. 서버 수신이나 피해 승인을 단독으로 입증하지 않는다. |
+| `AttackRejected` / `AttackApproved` | 서버 GA 본체의 판정. 승인 로그의 HP·Stamina 전후와 복제 결과를 함께 확인한다. |
+| `HealthReplicated` / `StaminaReplicated` | 해당 클라이언트 AttributeSet의 OnRep 실행과 값. 어느 월드의 로그인지 함께 읽는다. |
+
+같은 액터 이름이 여러 PIE 월드에 나타날 수 있어 **실행 문맥**인 `NetMode`·`PIE`·`Func`를 함께 본다. 공격 입력은 `Log LogCoopRPGInput Verbose`, GAS 서버 활성화 호출은 `AbilitySystem.ServerRPCBatching.Log 1`로 관찰할 수 있다. 정확한 실행 순서와 필터는 기존 수동 가이드를 따른다.
+
+**근거** · [수동 실행과 로그 필터](../Validation/Index.md#v02-manual-attack-log) · [로그 문맥 구현](../../Game/Source/CoopRPG/Debug/CoopRPGLogContext.cpp)
+
+### 6-3. 다음 검증에서 분리할 경계
+
+**비용 부족은 로컬 차단과 실제 서버 거절을 나눠 검증해야 한다.** `AttackInput` 뒤 서버 판정이 없다는 사실만으로 어느 단계가 거절했는지 확정할 수 없다. 서버 수신·활성화 실패, 서버 HP·Stamina 전후를 함께 남길 계측이 필요하다. Stamina 9·10 경계는 아직 기대값이다.
+
+쿨다운은 구현과 검증이 남아 있다. 무효 표적·중복 접촉·피격 취소·재실행, 지연·손실, 별도 PC 접속, 계획한 반복 횟수도 이 문서의 통과 주장에 포함하지 않는다. **첫 단타의 승인·거리 거절 통과와 V02/G2 전체 통과는 구분한다.**
+
+**근거** · [다음 작업](../Roadmap.md#next-work) · [V02 등 단계별 통과 기준](../Validation/Index.md#active-tests) · [계획한 반복·네트워크 조건](../Validation/Index.md#test-conditions)
 
 <a id="engine-source"></a>
 ## 근거 및 더 읽기
 
-직접 대조한 엔진 코드의 경로는 UE 5.8.4 설치 트리의 `Engine/Plugins/Runtime/GameplayAbilities/Source/GameplayAbilities/`를 기준으로 한다. 장비마다 설치 위치가 달라질 수 있어 파일 이름과 검색할 심볼을 함께 적는다.
+### 프로젝트 코드를 따라가는 순서
 
-| 파일 | 찾아볼 심볼과 판단 |
-|---|---|
-| `Public/AttributeSet.h` · `Private/GameplayEffect.cpp` | `GAMEPLAYATTRIBUTE_REPNOTIFY`와 `SetBaseAttributeValueFromReplication`에서 매크로 확장 및 Aggregator 유무에 따른 통지 경로를 확인할 수 있다. |
-| `Private/AbilitySystemComponent_Abilities.cpp` | `InitializeComponent`의 AttributeSet 자동 등록과 `TryActivateAbilityByClass`, `TryActivateAbility`, `InternalServerTryActivateAbility`의 활성화 경로를 볼 수 있다. |
-| `Private/Abilities/GameplayAbility.cpp` · `Private/GameplayEffect.cpp` | `CanActivateAbility`, `CommitCheck`, `CommitExecute`, `CanApplyAttributeModifiers`에서 비용의 사전 검사·재검사·적용을 나눠 볼 수 있다. |
+1. [CoopRPGCharacter.cpp](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) — 생성자·`BeginPlay`에서 ASC와 능력을 준비하고, `SetupPlayerInputComponent`·`Attack`에서 입력을 연결한다.
+2. [CoopRPGMeleeAbility.cpp](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) — 서버의 검사·Commit·피해·종료 순서를 읽는다.
+3. [CoopRPGMeleeEffects.cpp](../../Game/Source/CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.cpp) — 비용·피해 GE의 대상 속성·연산·크기를 확인한다.
+4. [CoopRPGCombatAttributes.h](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h)와 [구현](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp) — 생성 접근자·직접 작성 콜백·복제 조건·값 제한을 연결한다.
+5. [고정 표적](../../Game/Source/CoopRPG/Combat/CoopRPGAttackTarget.cpp)과 [검증 색인](../Validation/Index.md#v02-basic-attack) — 피해를 받는 ASC와 실행 결과를 대조한다.
 
-- [CoopRPG의 서버 권한과 ASC 배치](../Architecture.md#server-authority)는 왜 캐릭터 수명에 ASC를 맞췄는지 설명한다.
-- [Epic의 Gameplay Ability 안내](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-gameplay-abilities-in-unreal-engine)와 [Gameplay Effect 안내](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-effects-for-the-gameplay-ability-system-in-unreal-engine)는 기본 수명과 효과 구성의 선택지를 설명한다.
-- [Epic의 Lyra 능력 구성](https://dev.epicgames.com/documentation/en-us/unreal-engine/abilities-in-lyra-in-unreal-engine)은 장착 시 능력 부여와 PlayerState에 ASC를 두는 실전 예시다.
+### 직접 대조한 엔진 구현
+
+동작 설명은 프로젝트가 사용하는 **UE 5.8.4 소스**와 대조했다. 아래 경로는 엔진 루트의 `Engine/Plugins/Runtime/GameplayAbilities/Source/GameplayAbilities/`를 기준으로 한다. 엔진 소스는 이 저장소에 포함하지 않으며, 같은 버전 소스에서 파일과 심볼을 검색할 수 있다. 공식 웹 문서는 기본 표시 버전이 달라질 수 있으므로 개념 설명과 확장 참고로 사용한다.
+
+- **`Public/AttributeSet.h`** — 접근자 매크로, `GAMEPLAYATTRIBUTE_REPNOTIFY`의 실제 확장.
+- **`Public/GameplayAbilitySpec.h`** — 능력 등록 Spec의 기본 인수.
+- **`Private/AbilitySystemComponent_Abilities.cpp`** — `InitializeComponent`, `TryActivateAbilityByClass`, `TryActivateAbility`, `InternalServerTryActivateAbility`, `InternalTryActivateAbility`. AttributeSet 등록과 요청·활성화 경로.
+- **`Private/Abilities/GameplayAbility.cpp`** — `CanActivateAbility`, `CommitCheck`, `CommitExecute`, `CheckCost`, `ApplyCost`. 사전 검사·재검사·적용의 경계.
+- **`Public/AbilitySystemComponent.h`와 `Private/GameplayEffect.cpp`** — `SetBaseAttributeValueFromReplication`, `OnAttributeAggregatorDirty`, `CanApplyAttributeModifiers`. 복제 통지·계산 갱신과 Additive 비용 조건.
+
+### 공식 설명과 확장 참고
+
+- [Epic Gameplay Ability](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-gameplay-abilities-in-unreal-engine) — 능력 부여·실행·Commit·종료의 개념 확인.
+- [Epic Gameplay Effects](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-effects-for-the-gameplay-ability-system-in-unreal-engine) — GE 정의·Spec·Modifier와 효과 수명 확인.
+- [Epic Gameplay Attributes and Attribute Sets](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-attributes-and-attribute-sets-for-the-gameplay-ability-system-in-unreal-engine) — Base·Current와 AttributeSet 구성·복제 예시 확인.
+- [Epic Lyra 능력 구성](https://dev.epicgames.com/documentation/en-us/unreal-engine/abilities-in-lyra-in-unreal-engine) — PlayerState ASC와 장착별 능력 관리의 확장 사례. 현재 CoopRPG가 그대로 채택한 구조는 아니다.
