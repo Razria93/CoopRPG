@@ -22,21 +22,6 @@ ACoopRPGAttackTarget* ACoopRPGGameMode::GetAttackTarget() const
     return AttackTarget;
 }
 
-void ACoopRPGGameMode::BeginPlay()
-{
-    Super::BeginPlay();
-    if (GetWorld()->GetMapName().EndsWith(TEXT("L_Movement")))
-    {
-        // Fixed position on the movement map, outside the starting attack range.
-        AttackTarget = GetWorld()->SpawnActor<ACoopRPGAttackTarget>(FVector(350.0f, 35.0f, 60.0f), FRotator::ZeroRotator);
-        if (auto* State = GetGameState<ACoopRPGGameState>())
-        {
-            auto* Chest = GetWorld()->SpawnActor<ACoopRPGSharedChest>(FVector(300.0f, -95.0f, 28.0f), FRotator::ZeroRotator);
-            State->InitializeLootRound(Chest);
-        }
-    }
-}
-
 void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
 {
     int32 Players = 0;
@@ -52,6 +37,21 @@ void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
     if (auto* State = GetGameState<ACoopRPGGameState>())
     {
         State->SetRoundPlaying(Players == 2 && ReadyPlayers == 2);
+    }
+}
+
+void ACoopRPGGameMode::BeginPlay()
+{
+    Super::BeginPlay();
+    if (GetWorld()->GetMapName().EndsWith(TEXT("L_Movement")))
+    {
+        // Fixed position on the movement map, outside the starting attack range.
+        AttackTarget = GetWorld()->SpawnActor<ACoopRPGAttackTarget>(FVector(350.0f, 35.0f, 60.0f), FRotator::ZeroRotator);
+        if (auto* State = GetGameState<ACoopRPGGameState>())
+        {
+            auto* Chest = GetWorld()->SpawnActor<ACoopRPGSharedChest>(FVector(300.0f, -95.0f, 28.0f), FRotator::ZeroRotator);
+            State->InitializeLootRound(Chest);
+        }
     }
 }
 

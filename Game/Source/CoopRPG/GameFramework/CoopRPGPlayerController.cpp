@@ -86,6 +86,14 @@ bool ACoopRPGPlayerController::InputKey(const FInputKeyEventArgs& Params)
     return Super::InputKey(Params);
 }
 
+void ACoopRPGPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, OpenedChest, COND_OwnerOnly);
+    DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, RecoveryCount, COND_OwnerOnly);
+    DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, bRoundReady, COND_OwnerOnly);
+}
+
 void ACoopRPGPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
@@ -95,14 +103,6 @@ void ACoopRPGPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACoopRPGPlayerController::TakeRecoveryItem);
     InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ACoopRPGPlayerController::TakeMeleeWeapon);
     InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACoopRPGPlayerController::UseRecoveryItem);
-}
-
-void ACoopRPGPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, OpenedChest, COND_OwnerOnly);
-    DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, RecoveryCount, COND_OwnerOnly);
-    DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, bRoundReady, COND_OwnerOnly);
 }
 
 void ACoopRPGPlayerController::ReadyForRound()
@@ -150,6 +150,17 @@ void ACoopRPGPlayerController::TakeMeleeWeapon()
     RequestChestItem(ECoopRPGChestItem::MeleeWeapon);
 }
 
+void ACoopRPGPlayerController::UseRecoveryItem()
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (State && State->GetRoundId().IsValid())
+    {
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("RecoveryUseRequested Round=%s %s"),
+            *State->GetRoundId().ToString(), *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        ServerUseRecovery(State->GetRoundId());
+    }
+}
+
 void ACoopRPGPlayerController::RequestChestItem(ECoopRPGChestItem Item)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -180,36 +191,6 @@ void ACoopRPGPlayerController::ServerReadyForRound_Implementation(FGuid RoundId)
     {
         Mode->UpdateLootRoundPhase();
     }
-}
-
-const TCHAR* ACoopRPGPlayerController::GetChestRejection(const ACoopRPGSharedChest* Chest, FGuid RoundId) const
-{
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId)
-    {
-        return TEXT("WrongRound");
-    }
-    if (!State->IsRoundPlaying())
-    {
-        return TEXT("NotPlaying");
-    }
-    if (!IsValid(Chest) || State->GetSharedChest() != Chest)
-    {
-        return TEXT("InvalidChest");
-    }
-
-    const APawn* CurrentPawn = GetPawn();
-    const auto* AbilityPawn = Cast<ACoopRPGCharacter>(CurrentPawn);
-    const UAbilitySystemComponent* ASC = AbilityPawn ? AbilityPawn->GetAbilitySystemComponent() : nullptr;
-    if (!ASC || ASC->GetNumericAttribute(UCoopRPGCombatAttributes::GetHealthAttribute()) <= 0.f)
-    {
-        return TEXT("NotAlive");
-    }
-    if (FVector::DistSquared(CurrentPawn->GetActorLocation(), Chest->GetActorLocation()) > FMath::Square(220.f))
-    {
-        return TEXT("OutOfRange");
-    }
-    return nullptr;
 }
 
 void ACoopRPGPlayerController::ServerSetChestOpen_Implementation(ACoopRPGSharedChest* Chest, FGuid RoundId, bool bOpen)
@@ -326,17 +307,6 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
         *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
-void ACoopRPGPlayerController::UseRecoveryItem()
-{
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    if (State && State->GetRoundId().IsValid())
-    {
-        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("RecoveryUseRequested Round=%s %s"),
-            *State->GetRoundId().ToString(), *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
-        ServerUseRecovery(State->GetRoundId());
-    }
-}
-
 void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -397,6 +367,36 @@ void ACoopRPGPlayerController::LogRecoveryRejection(const TCHAR* Reason, FGuid R
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("RecoveryUseRejected Round=%s Reason=%s Recovery=%d %s"),
         *RoundId.ToString(), Reason, RecoveryCount,
         *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+const TCHAR* ACoopRPGPlayerController::GetChestRejection(const ACoopRPGSharedChest* Chest, FGuid RoundId) const
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId)
+    {
+        return TEXT("WrongRound");
+    }
+    if (!State->IsRoundPlaying())
+    {
+        return TEXT("NotPlaying");
+    }
+    if (!IsValid(Chest) || State->GetSharedChest() != Chest)
+    {
+        return TEXT("InvalidChest");
+    }
+
+    const APawn* CurrentPawn = GetPawn();
+    const auto* AbilityPawn = Cast<ACoopRPGCharacter>(CurrentPawn);
+    const UAbilitySystemComponent* ASC = AbilityPawn ? AbilityPawn->GetAbilitySystemComponent() : nullptr;
+    if (!ASC || ASC->GetNumericAttribute(UCoopRPGCombatAttributes::GetHealthAttribute()) <= 0.f)
+    {
+        return TEXT("NotAlive");
+    }
+    if (FVector::DistSquared(CurrentPawn->GetActorLocation(), Chest->GetActorLocation()) > FMath::Square(220.f))
+    {
+        return TEXT("OutOfRange");
+    }
+    return nullptr;
 }
 
 void ACoopRPGPlayerController::LogChestRejection(const TCHAR* Action, const TCHAR* Reason,
