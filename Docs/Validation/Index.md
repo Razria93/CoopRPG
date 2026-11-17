@@ -370,6 +370,38 @@ PR #1은 정리 전 본문의 전체 SHA 14개·Actions URL 7개·기존 artifac
 
 같은 PC3프로세스와 LAN·외부망 검증은 구분한다. 기존 엔진 자동 시험·StylusInput 진단은 미해결로 보존하며 관련 기능 영향이 나타나면 조사한다. 브라우저 렌더링·직접 링크 클릭·UE 실행·게임 시험·전체 CI 회귀 재실행·원격 게시/머지는 이번 확인 범위에 없다. 기존 검사기/워크플로를 바꾸지 않은 문서 작업이므로 관련 저장소6검사와 내용/보존 확인을 수행했다.
 
+<a id="l00-movement"></a>
+## 2026-11-07 · 최소 맵의 기본 이동
+
+**로컬 PIE 1인, 기본 속도 500 cm/s에서 통과.** 새 프로세스에서 기본 게임 모드와 저장본을 열고, 최종 맵을 다른 레벨로 전환했다 다시 불러온 뒤 실제 플레이어가 빙의한 `CoopRPGCharacter`를 확인했다. Enhanced Input의 `Input.+key`·`Input.-key`로 키 상태를 넣어 일반 매핑과 Pawn 입력 경로를 거쳤다. 원시 결과와 화면은 Git 제외 `Artifacts/Validation/l00-movement-20261107/`의 `movement-final.json`, `movement-final.png`, `verify-final.log`에 있다.
+
+| 조건 | 관찰 |
+|---|---|
+| W / S, D / A를 각각 0.75초 유지 | X +311.87 / −311.88 cm, Y +311.87 / −311.88 cm. 해당하지 않는 축과 높이 변화는 0이었다. |
+| W+D / W+S | 대각선은 X·Y 각각 +220.53 cm, 반대 키 동시 입력은 수평 변위 0이었다. |
+| 키 해제 / 경계에서 W 유지 | 감속 뒤 0.65초 동안 정지를 확인했다. 전방 벽에서 0.5초 더 유지해도 X 1545.90, Z 90.15 cm를 유지했다. |
+
+- **빌드와 재시도** · Windows SDK 버전 인수가 셸에서 분리된 첫 빌드는 실패했고 인수를 고정한 재빌드는 성공했다. 에셋 생성 도구는 저장 후 Python 플러그인 종료 중 예외로 코드 3을 반환했다. 최초 PIE 계측도 Python 바인딩 이름에서 중단했다. 조회 함수를 수정하고 새 에디터에서 에셋 재로드·이동·화면·정상 종료를 확인했다.
+- **설정 보존** · 에디터가 자동 작성한 AndroidFileServer 설정은 원본을 Git 제외 폴더에 보존했다. Windows 전용 프로젝트에서 해당 플러그인을 제외해 비공개 설정이 기본 맵 설정과 함께 추적되지 않게 했다.
+- **사용자 속도 비교 · 2026-11-07** · 기준 커밋 `5dd6669`와 작업 트리를 대조해 `MaxWalkSpeed`가 500.0f에서 300.0f로 바뀐 것을 확인했다. 사용자가 변경 후 빌드 성공과 플레이에서 속도 차이를 확인했다고 보고했다. 위 표의 시간·거리 수치는 500 cm/s 자동 시험에만 해당한다.
+- **실행 환경** · 최근 `Game/Saved/Logs/CoopRPG.log`에서 설치형 UE 5.8.4 (`C:/Program Files/Epic Games/UE_5.8`)의 `L_Movement` PIE 기동을 확인했다. 현재 `.uproject`의 `EngineAssociation`은 `5.8`이며 기준 커밋에서는 소스 엔진 등록 GUID였다. 별도 서버의 소유권·보정·상대 이동은 V01에서 확인한다.
+
+<a id="source-layout-build"></a>
+## 2026-11-07 · 캐릭터와 게임 모드 소스 이동 후 빌드
+
+`9bdd0a2`를 기준으로 [캐릭터](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)와 [게임 모드](../../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp)의 헤더·구현을 각각 옮겼다. 소스 수정은 게임 모드가 캐릭터 헤더를 참조하는 include 경로 한 줄이다.
+
+현재 `.uproject`에 연결된 설치형 UE 5.8.4에서 VS 2022 프로젝트 목록을 재생성해 네 파일의 새 경로를 확인했다. `CoopRPGEditor Win64 Development` 빌드는 SDK 10.0.26100.0에서 두 구현을 각각 컴파일하고 `UnrealEditor-CoopRPG.dll`을 링크했다. 총 10개 작업, 33.17초, 종료 코드 0. 이번 확인 범위는 Editor 빌드까지다. 로그는 로컬 `Artifacts/Validation/source-layout-20261107/project-files.log`와 `build.log`에 있다.
+
+저장소 검사 첫 실행은 실제 인덱스에 남은 이동 전 경로 네 개를 누락으로 보고했다(5/6). 네 이동만 표시한 임시 인덱스에서 재실행해 6/6을 확인했다. 두 결과는 같은 로컬 폴더의 `repository-final/result.json`과 `repository-relocated/result.json`에 보존했다. 실제 인덱스는 비어 있다.
+
+<a id="header-member-layout"></a>
+### 2026-11-07 · 캐릭터 헤더의 함수·필드 구획
+
+[캐릭터 헤더](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.h)에서 `Move()`를 함수 구획 끝으로 옮기고 `MoveAction`을 별도 `private:` 필드 구획에 두었다. 두 멤버의 접근 수준과 필드의 `UPROPERTY()`를 보존했고, 생성자 → `SetupPlayerInputComponent()` → `Move()`가 [구현](../../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)과 같은 순서임을 대조했다.
+
+설치형 UE 5.8.4에서 `CoopRPGEditor Win64 Development` 빌드를 실행했다. 캐릭터 소스 컴파일과 Editor 모듈 DLL 링크를 포함한 10개 작업, 32.21초, 종료 코드 0. 확인 범위는 헤더 대조와 Editor 빌드까지다. 로컬 로그는 `Artifacts/Validation/header-blocks-20261107005551056/build.log`에 있다.
+
 ## 현재 기록
 
 | 기록 | 종류·상태 | 한계 |
@@ -437,10 +469,10 @@ D05~D07의 ASC·공격 경계·세부 비용 선택은 해당 구현 전, D12의
 
 | 목적 | 제출할 최소 근거 | 현재 확보·후속 |
 |---|---|---|
-| GAS·DS | 별도 실행·권한·거절·취소·수명·네트워크 조건과 시험 | Editor 기반만 확보. V01~V03/V08 미실행 |
+| GAS·DS | 별도 실행·권한·거절·취소·수명·네트워크 조건과 시험 | 로컬 이동 기반 확보. V01~V03/V08 미실행 |
 | 스텔라 이후 확장 | 확인 가능한 이전 자체 구현과 GAS의 책임/제약 비교 | 비교 방향만 있음. 실제 코드와 본인 설명·작은 변경 확인 후 작성 |
-| AI 활용 | 문제 정의·위임 범위·본인 채택/수정 판단·실제 검증 결과 | 준비/환경 사례는 존재. 게임 구현 사례·본인 이해는 아직 없음 |
-| 학습 실행 | Part/차시→직접 설명·변형→적용→결과 | 37강 배정만 있음. 실제 진도/이해는 Development에 기록 |
+| AI 활용 | 문제 정의·위임 범위·본인 채택/수정 판단·실제 검증 결과 | AI 기본 이동 시험 / 사용자 속도 변경 후 빌드·플레이 확인 |
+| 학습 실행 | Part/차시→직접 설명·변형→적용→결과 | 사용자 500→300 cm/s 비교 확인 / 입력·이동 역할 설명은 미기록 |
 | 문서·전달 | README→실행·구조·검증·사례, PDF/웹/GitHub의 같은 빌드·기여 | 운영 문서 통합, 최종 매체는 미제작 |
 | MVP 통제 | 최초 기한과 실제, 추가/미달·대응·손실·후속 결과 | 초기 계획/준비 판단 보존. 개발 일정 대응 성과는 미확보 |
 

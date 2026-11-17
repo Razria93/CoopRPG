@@ -1,6 +1,6 @@
 # 진행 계획과 현재 상태
 
-갱신: 2026-11-05. 작업 상태·남은 확인/선택/검증 사항·결정의 원본. 목적·규칙은 [Project](Project.md), 실제 시험 결과는 [Validation](Validation/Index.md)에 둔다.
+갱신: 2026-11-07. 작업 상태·남은 확인/선택/검증 사항·결정의 원본. 목적·규칙은 [Project](Project.md), 실제 시험 결과는 [Validation](Validation/Index.md)에 둔다.
 
 ## 문서 사용 기준
 
@@ -11,14 +11,14 @@
 
 ## 현재 상태
 
-**현재 단계:** 최신 제출용 운영 기준 통합·검증 완료, L00 기초 진단과 첫 MVP 구현 착수 전. 최소 C++ 프로젝트의 Editor 빌드·모듈 로드·화면·정상 종료는 11월3일 확인했으며 게임·GAS·Server/Game 빌드·V01~V09는 미실행이다. [기동 근거·미해결 진단](Validation/Environment.md#cooprpg-프로젝트-editor-기동-확인--2026-11-03)을 보존한다.
+**현재 단계** · 최소 맵에서 기본 캐릭터 이동을 구현하고 로컬 PIE로 검증했다. 사용자가 500→300 cm/s 변경과 빌드·플레이 차이를 확인했다. 패키지 Server/Game·GAS·V01~V09는 미실행이다. [이동 검증](Validation/Index.md#l00-movement)
 
 - 기준: 로컬/PR #4 head 91683e7, main 492596f. 11월5일 재조회에서 PR #4는 draft/open·미병합이며 저장소 Actions 41591590970은 성공 상태였다. 과거 저장소 검사를 이번 문서 변경이나 게임 시험의 성공으로 승계하지 않는다.
-- 작업 브랜치: docs/mvp-operating-baseline. 미병합 chore/game-bootstrap의 91683e7에서 분기해 기존 프로젝트 입력을 보존했다. 후속 PR을 만들 때 이 의존성을 명시하며 main에 이미 반영된 것으로 표시하지 않는다.
+- 첫 이동 브랜치 `feat/minimal-character-movement`는 운영 기준과 부트스트랩을 포함하는 `docs/mvp-operating-baseline`의 `b3c33de`에서 분기했다. 후속 PR에서 이 기준 브랜치 의존성을 밝힌다.
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 현재 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 다음 작업: 아래 L00 기초 진단 → 필요한 강의 실습 → V01용 맵·입력·Server/Game 준비. 지원 자격·실제 이해/처리 속도·패키징/접속은 미확인이다.
+- 다음 단계는 [현행 카드](#next-work)를 따른다. V01에 사용할 소스 엔진 연결을 확인하고 독립 서버 첫 접속을 준비한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -53,7 +53,16 @@
 | 11/24 23:59 | 공식 접수 마감·예비일 | 접수 오류 대응. 신규 기능 시간으로 선사용하지 않음 |
 
 <a id="next-work"></a>
-## 다음 실행 카드 L00 — 기초 진단과 첫 학습
+## L00 속도 비교 결과와 V01 준비
+
+- **L00 결과** · 기준 커밋 `5dd6669`에서 AI가 기본 이동을 확인했고 사용자가 [캐릭터 생성자](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)의 속도를 500에서 300 cm/s로 바꿔 직접 빌드하고 플레이 차이를 확인했다. [시험 근거](Validation/Index.md#l00-movement)
+- **소스 정리 완료** · 속도 비교는 `9bdd0a2`에 보존했다. 캐릭터는 `Character/`, 게임 모드는 `GameFramework/`로 옮겼고 현재 설치형 UE 5.8.4에서 Editor 빌드를 확인했다. [빌드 근거](Validation/Index.md#source-layout-build)
+- **V01 착수 조건** · 최근 로컬 PIE는 설치형 UE 5.8.4에서 실행됐다. 독립 서버 빌드 전에 `CoopRPG.uproject`의 엔진 연결과 빌드 명령이 채택한 소스 엔진 `C:/UE/5.8.4`를 사용하는지 확인한다. 첫 목표는 Server 타깃·최소 맵 Cook·클라이언트 한 대 접속이다.
+
+<details>
+<summary>2026-11-05 최초 L00 계획 · 11월 7일 첫 이동 작업으로 통합</summary>
+
+### 최초 기초 진단과 첫 학습
 
 - 담당: 사용자 직접 설명·변형/조작, AI는 자료·진단 과제·검토·허용된 빌드/기록 지원.
 - 시간 한도: 기초 진단60분. 이후 첫날 학습/작업 예산 안에서 부족한 개념과 첫 수정에 배정.
@@ -62,6 +71,8 @@
 - 완료: 수강·본인 설명·직접 변경·실행 확인을 구분한 Development 첫 실적. 막힌 개념과 다음 학습/구현 한 일을 기록.
 - 다음: 11/7 입력/이동·최소 맵 → 11/8부터 Server 타깃·Cook/접속 → G1. 성공 명령을 확인한 후에만 실행 스크립트 검토.
 - 현재 미실행: 진단·수강·게임 코드/자산·빌드·조작. 문서 준비만으로 L00/G1 통과 처리하지 않는다.
+
+</details>
 
 ## 최소 C++ 프로젝트 부트스트랩 작업 카드 — 2026-11-03
 
@@ -206,7 +217,7 @@
 
 ## 다음 작업 카드 — 제안
 
-> 아래는 당시 환경 준비 작업 카드의 보존 기록이다. 현행 다음 작업은 [L00](#next-work)이다.
+> 아래는 당시 환경 준비 작업 카드의 보존 기록이다. 현행 다음 작업은 [현재 카드](#next-work)이다.
 
 **이전 후보 보존:** 아래는 첫 엔진 빌드 허용 전의 후보·당시 범위다. 현재 실행·허용 범위와 결과는 위 첫 엔진 빌드 작업 카드 및 환경 기록을 따른다.
 

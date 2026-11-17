@@ -3,6 +3,10 @@
   "EngineAssociation": "{3061ACC8-48F3-2013-39A6-6ABE89B36283}",
   "Category": "",
   "Description": "Cooperative RPG portfolio",
+  "Plugins": [
+    { "Name": "EnhancedInput", "Enabled": true },
+    { "Name": "AndroidFileServer", "Enabled": false }
+  ],
   "Modules": [
     {
       "Name": "CoopRPG",
