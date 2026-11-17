@@ -6,6 +6,7 @@
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
+#include "CoopRPG/GameFramework/CoopRPGExtractionZone.h"
 #include "CoopRPG/GameFramework/CoopRPGGameMode.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
@@ -128,6 +129,17 @@ namespace
             }
         }));
 
+    FAutoConsoleCommandWithWorldAndArgs ExtractionPositionCommand(TEXT("Coop.Test.ExtractionPosition"),
+        TEXT("Coop.Test.ExtractionPosition inside|outside: position the owned Pawn for the zone test."),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World);
+                Probe && Args.Num() == 1 && (Args[0] == TEXT("inside") || Args[0] == TEXT("outside")))
+            {
+                Probe->PositionForExtraction(Args[0] == TEXT("inside"));
+            }
+        }));
+
     FAutoConsoleCommandWithWorldAndArgs SnapshotCommand(TEXT("Coop.Test.Snapshot"),
         TEXT("Coop.Test.Snapshot <label>: log local and server HP/stamina/cooldown."),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
@@ -199,6 +211,14 @@ void UCoopRPGCombatProbeComponent::PositionForEnemyLoot(bool bNear)
     if (IsProbeEnabled(GetWorld()))
     {
         ServerPositionForEnemyLoot(bNear);
+    }
+}
+
+void UCoopRPGCombatProbeComponent::PositionForExtraction(bool bInside)
+{
+    if (IsProbeEnabled(GetWorld()))
+    {
+        ServerPositionForExtraction(bInside);
     }
 }
 
@@ -313,6 +333,34 @@ void UCoopRPGCombatProbeComponent::ServerPositionForEnemyLoot_Implementation(boo
         UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestEnemyLootPosition Position=%s DropId=%s Distance=%.2f %s"),
             bNear ? TEXT("Near") : TEXT("Far"), *Loot->GetDropId().ToString(),
             FVector::Dist(Character->GetActorLocation(), Origin),
+            *CoopRPG::Debug::DescribePlayerRequestContext(Character, ANSI_TO_TCHAR(__FUNCTION__)));
+    }
+}
+
+void UCoopRPGCombatProbeComponent::ServerPositionForExtraction_Implementation(bool bInside)
+{
+    if (!IsProbeEnabled(GetWorld()))
+    {
+        return;
+    }
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const ACoopRPGExtractionZone* Zone = State ? State->GetExtractionZone() : nullptr;
+    auto* Character = Cast<ACoopRPGCharacter>(GetOwner());
+    const APlayerState* PlayerState = Character ? Character->GetPlayerState() : nullptr;
+    if (!IsValid(Zone) || !PlayerState || Character->GetHealth() <= 0.0f)
+    {
+        return;
+    }
+
+    const float Side = PlayerState->GetPlayerId() % 2 == 0 ? -1.0f : 1.0f;
+    const FVector Origin = Zone->GetActorLocation();
+    const FVector Destination(Origin.X + (bInside ? 60.0f : 245.0f), Origin.Y + Side * 55.0f,
+        Character->GetActorLocation().Z);
+    if (Character->TeleportTo(Destination, Character->GetActorRotation()))
+    {
+        UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestExtractionPosition Inside=%d %s"),
+            Zone->ContainsPawn(*Character) ? 1 : 0,
             *CoopRPG::Debug::DescribePlayerRequestContext(Character, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }

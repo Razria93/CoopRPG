@@ -24,7 +24,7 @@ namespace
 {
     constexpr float DetectionRangeCm = 360.0f;
     constexpr float AttackRangeCm = 135.0f;
-    constexpr float WindupSeconds = 0.9f;
+    constexpr float EnemyWindupSeconds = 0.9f;
     constexpr float RecoverySeconds = 2.5f;
     constexpr float MovementObservationCm = 40.0f;
 
@@ -137,9 +137,9 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
     if (Now >= NextActionTime)
     {
         bAttackPending = true;
-        NextActionTime = Now + WindupSeconds;
+        NextActionTime = Now + EnemyWindupSeconds;
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackStarted Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f Windup=%.2f %s"),
-            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm, WindupSeconds,
+            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm, EnemyWindupSeconds,
             *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }

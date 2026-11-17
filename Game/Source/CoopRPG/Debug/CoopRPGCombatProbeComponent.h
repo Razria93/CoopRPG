@@ -19,6 +19,7 @@ public:
     void SetVitals(float TargetHealth, float AttackerHealth);
     void ConfirmTwice();
     void PositionForEnemyLoot(bool bNear);
+    void PositionForExtraction(bool bInside);
 
 protected:
     virtual void BeginPlay() override;
@@ -39,6 +40,9 @@ private:
 
     UFUNCTION(Server, Reliable)
     void ServerPositionForEnemyLoot(bool bNear);
+
+    UFUNCTION(Server, Reliable)
+    void ServerPositionForExtraction(bool bInside);
 
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);
     void WriteSnapshot(const FString& Label) const;
