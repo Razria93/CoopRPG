@@ -1,0 +1,13 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "{3061ACC8-48F3-2013-39A6-6ABE89B36283}",
+  "Category": "",
+  "Description": "Cooperative RPG portfolio",
+  "Modules": [
+    {
+      "Name": "CoopRPG",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}
