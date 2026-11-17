@@ -236,6 +236,19 @@ function ConvertTo-CombatLogEvent([string]$Line) {
         '^TeamLootCountReplicated$' {
             $label='팀 전리품 수량 복제';$detail="$($fields['Before']) → $($fields['After'])";$stage='복제 관찰';break
         }
+        '^RoundJoinRejected$' {
+            $label='서버 입장 거절';$stage='서버 판정';$outcome='거절';$reason=[string]$fields['Reason'];$detail="$reason · $($fields['Stage'])";break
+        }
+        '^RoundPlayerAdmitted$' {$label='서버 입장 승인';$detail="$($fields['Map']) · $($fields['Players'])/2";$stage='서버 판정';$outcome='승인';break}
+        '^RoundTravelSeatsReserved$' {$label='다음 맵 자리 예약';$detail="$($fields['Map']) · $($fields['Count'])석";break}
+        '^RoundTravelSeatJoined$' {$label='다음 맵 기존 참가자 도착';$detail="$($fields['Map']) · 남은 예약 $($fields['Remaining'])석";break}
+        '^ConnectionNotice(Queued|Displayed)$' {
+            $label=if($eventCode -eq 'ConnectionNoticeDisplayed'){'클라이언트 연결 안내 표시'}else{'클라이언트 연결 안내 수신'}
+            $stage='접속'
+            $note=[string]$fields['Reason']
+            $names=@{RoundFull='정원 초과';RoundInProgress='라운드 진행 중';RoundTravelReserved='기존 참가자 이동 중';RoundFinished='종료된 라운드';UnsupportedJoin='지원하지 않는 입장 방식';ConnectionEnded='서버 연결 종료';ConnectionFailed='서버 연결 실패'}
+            $detail=if($names[$note]){$names[$note]}else{$note};break
+        }
         '^RoundResultDisplayed$' {$label='라운드 결과 HUD 표시';$detail="라운드 $($fields['Round'])";break}
         '^RoundResultAcknowledged$' {
             $label='결과 표시 확인 수신';$detail="PlayerId $($fields['PlayerId']) · $($fields['Count'])/2";$stage='RPC 수신';$outcome='수신';break

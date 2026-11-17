@@ -1553,6 +1553,40 @@ AI는 뷰어 Excel의 240개 사건을 실행 ID·출처·바이트 위치로 �
 
 **근거** · 로컬 `Artifacts/Validation/v06-round-travel-20261116-181626/cooked-01/manual-20261116-185122-025/`의 `UserHUD/`, `Exports/`, `server.log`·`a.log`·`b.log`, `round-travel-user-audit.json`
 
+<a id="v06-round-admission"></a>
+## V06 입장 거절과 연결 종료 안내 · 2026-11-16
+
+Win64 Development 전용 서버와 별도 클라이언트 A·B를 사용했다. C는 같은 패키지의 접속 시도용 클라이언트다. 세 시험을 서로 다른 서버에서 실행했다.
+
+| 경로 | 관찰 결과 | 판정 |
+| --- | --- | --- |
+| 정원·진행 중 입장 | Waiting에 A·B가 연결된 상태에서 C를 `RoundFull`, Playing이 된 뒤 새 C를 `RoundInProgress`로 `PreLogin`에서 거절했다. C는 서버 Welcome을 받지 못했고 입장 인원은 2명으로 유지됐다. C 화면에서 두 사유를 확인했다. | 7개 통과 |
+| 실제 맵 이동 중 입장 | 기존 두 클라이언트가 다음 맵 접속을 시작한 시점에 시험의 UDP 중계가 두 연결을 잠시 지연시켰다. C가 먼저 도착해 `RoundTravelReserved`로 거절됐다. 서버가 A·B의 예약을 2석→1석→0석으로 소진했고, 두 클라이언트가 목적지에 들어와 두 번째 준비 뒤 300초 라운드를 시작했다. 정상 전환 중 연결 종료 안내는 발생하지 않았다. | 7개 통과 |
+| 실행 중 서버 종료 | 전용 서버를 정상 종료한 뒤 A·B가 각각 연결 종료 안내를 한 번 그렸고 창은 열려 있었다. 캡처로 문구를 확인했다. | 4개 통과 |
+| 참가자 B 종료 | 기존 검증 러너를 새 패키지로 재실행했다. 연결된 A에 중단·0점이 복제됐고 서버의 추가 맵 이동은 발생하지 않았다. | 7개 통과 |
+
+새 뷰포트 클래스의 인수 이름 충돌을 수정해 Server·Client 증분 빌드가 통과했다. 기존 Editor로 Cook할 때는 새 뷰포트 클래스를 로드하지 못했다. Cook 프로세스에만 엔진 기본 뷰포트를 지정했고, 실행 패키지에서는 프로젝트 뷰포트 클래스로 안내가 표시됐다. 초기 캡처에는 접속 실패 안내와 대기 HUD가 함께 보였고, 서버 정상 종료 때는 `FailureReceived`가 `ConnectionLost`보다 먼저 도착해 일반 연결 실패 안내가 표시됐다. 대기 HUD를 숨기고 이미 성립한 게임 연결의 종료 신호를 따로 해석한 뒤 재검증했다. 두 맵을 포함한 컨테이너의 해시를 대조하고 최신 실행 파일을 다시 스테이징했다.
+
+뷰어 검사 78개를 통과했다. UDP 중계 없이 공동 탈출 성공 뒤 다음 맵으로 이동하는 기존 시험도 16개 판정을 통과했다. 예약 경합 시험은 시험 모드에서 시간초과를 앞당겼다. 30초 예약 만료, LAN, 사용자 직접 조작은 이 실행의 미확인 범위다.
+
+**근거** · [입장과 월드 수명](../Architecture.md#round-admission-design) · [패키지 러너](../../Tools/Validation/Run-RoundAdmission.py) · [뷰어 필터](LogViewer.md#round-admission-logs) · 로컬 `Artifacts/Validation/v06-round-admission-20261116-190801/`의 `trials-final-02/summary.json`, 각 실행의 원본 로그와 안내 PNG, `disconnect-final/`, `travel-plain-final/`, `cooked-02/`, `final-02/stage-hashes.json`, `viewer-final/`
+
+<a id="v06-round-admission-user-result"></a>
+### 사용자 직접 재현 · C 입장 거절, A·B 맵 이동, 서버 정상 종료
+
+사용자가 수동 검증 창에서 C의 접속 시도 두 번을 실행하고 A·B를 직접 조작했다. 최종 패키지 `final-02/Stage`의 같은 서버에서 시험 명령 없이 진행했다. 초기 `RoundId`는 `2796BDE2…`, 목적지 `RoundId`는 `596CD595…`이다.
+
+| 조건 | 실측 · KST | 판정 |
+| --- | --- | --- |
+| 대기 중 정원 초과 | 19:47:34.160 서버 `RoundFull` → 19:47:34.389 C 안내 표시 | C의 정원 초과 화면과 일치 |
+| 진행 중 신규 접속 | 19:49:03.808 서버 `RoundInProgress` → 19:49:04.055 C 안내 표시 | C의 진행 중 화면과 일치. 두 거절 모두 C에 서버 입장 기록 없음 |
+| A 사망 뒤 맵 이동 | 19:49:59.211 사망·0점 확정 → 양쪽 표시 확인 → 19:50:02.305 이동 요청 1회 | 둘 다 `L_Movement_Round2`에 접속. 서버 예약 2석이 1석·0석으로 줄었다. 둘째 준비 뒤 19:50:45.454에 300초 타이머 시작 |
+| 서버 정상 종료 | 19:50:51.552 `ConsoleCtrl RequestExit` → B 19:50:51.811, A 19:50:51.856 안내 표시 → 19:50:51.964 서버 `Exiting` | A 화면과 A·B 원본 로그에서 `ConnectionEnded`를 확인했다. 정상 맵 이동 동안 양쪽에 종료 안내가 표시되지 않았다 |
+
+AI는 뷰어 Excel의 162개 사건을 실행 ID·출처·바이트 위치로 원본과 대조했다. Excel은 서버·A·B·정원 시험 C만 선택한 상태에서 저장됐다. 진행 중 접속 C의 결과는 별도 `c-playing.log`와 첨부 화면으로 확인했다. 서버 종료 화면은 A를 캡처했고 B는 원본 로그의 화면 표시 행으로 확인했다. 맵 이동 중 C 선접속과 예약 만료는 이번 수동 실행에서 시험하지 않았다. C 선접속은 [별도 자동 시험](#v06-round-admission)이 근거다.
+
+**근거** · 로컬 `Artifacts/Validation/v06-round-admission-20261116-190801/final-02/manual-20261116-194258-506/`의 `UserHUD/`, `Exports/`, `server.log`·`a.log`·`b.log`·`c-full.log`·`c-playing.log`, `round-admission-user-audit.json`
+
 <a id="active-tests"></a>
 ## 단계별 시험 기준 — 제출용 T1
 
@@ -1565,7 +1599,7 @@ AI는 뷰어 Excel의 240개 사건을 실행 ID·출처·바이트 위치로 �
 | V03 | 능력 수명 | 거절/명시 취소 후 재실행·자기 임시 상태 정리. 통합 후 사망/Result/재시작과 취소 경합 | [명시 취소·타이머 정리·재실행](#v03-attack-lifetime) 자동 시험 통과 · 피격·라운드 상태 연계는 미실행 |
 | V04 | 적 AI·사망·전리품 생성 | 서버의 탐지·추격·근접 공격과 피격, 적 사망 뒤 공격 중지, 겹친 마지막 타격에도 사망 확정·전리품 생성 1회 | [추격·피격 후 회복](#v04-enemy-first-combat)과 [사망·대기 공격 정리·전리품 생성](#v04-death-loot-once) 자동 통과. 팀 지급은 V05 후속. |
 | V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | [동시 열람·마지막 회복약 1개 지급](#v05-shared-chest-first) 및 [무기 장착·회복약 사용](#v05-equipment-recovery), [팀 전리품 지급·거리·중복 거절](#v05-enemy-loot-team) 통과. [사용자 버튼 실행](#v05-enemy-loot-user-result) 확인. [실제 라운드 이동 뒤 이전 상자 요청 거절](#v06-round-travel)을 확인했다. |
-| V06 | 한 판·점수·다음 라운드 | 준비·공동 탈출·사망/시간초과 실패·이탈 중단·결과/점수 1회 확정·다음 맵 도착과 초기화, 중도참가/정원 거절·연결 종료 안내 | [공동 탈출·이탈 초기화·양쪽 성공 1점](#v06-extraction-success) 통과. [사용자 직접 재현](#v06-extraction-user-result) 확인. [실패·중단·종료 경합](#v06-round-outcomes) 및 [세 사유 사용자 재현](#v06-round-outcomes-user-result) 확인. [다음 맵과 새 라운드 자동 3회](#v06-round-travel) 통과. [사용자 왕복 이동·재준비](#v06-round-travel-user-result) 확인. 중도참가·정원·복귀 안내는 후속. |
+| V06 | 한 판·점수·다음 라운드 | 준비·공동 탈출·사망/시간초과 실패·이탈 중단·결과/점수 1회 확정·다음 맵 도착과 초기화, 중도참가/정원 거절·연결 종료 안내 | [공동 탈출·이탈 초기화·양쪽 성공 1점](#v06-extraction-success) 통과. [사용자 직접 재현](#v06-extraction-user-result) 확인. [실패·중단·종료 경합](#v06-round-outcomes) 및 [세 사유 사용자 재현](#v06-round-outcomes-user-result) 확인. [다음 맵과 새 라운드 자동 3회](#v06-round-travel) 통과. [사용자 왕복 이동·재준비](#v06-round-travel-user-result) 확인. [입장 거절·정상 전환·종료 안내](#v06-round-admission) 자동 확인. [사용자 입장 거절·맵 이동·서버 종료 재현](#v06-round-admission-user-result) 확인. |
 | V07 | 진행 가능성·설정 | 두 플레이어의 무기 확보 경로, 획득 가능한 전리품 수량과 탈출 조건, 값/정의와 실행 상태 분리, 서버·클라이언트 패키지에 양쪽 맵 포함 | 미실행 |
 | V08 | 지연/손실·진단 | T1 조건에서 V02/V03/V05/V06 핵심 반복·수렴 확인. 별도 PC/LAN은 V08-LAN으로 분리 | 미실행; V08-LAN도 미실행 |
 | V09 | 제출 재현 | 안내만으로 패키지 실행/접속/종료·재시작, 최종 빌드/설명/근거 일치·남은 결함 공개 | 미실행 |
