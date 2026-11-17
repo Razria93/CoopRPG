@@ -1,7 +1,24 @@
 #include "CoopRPGLogContext.h"
 
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerState.h"
 #include "UObject/Package.h"
+
+namespace
+{
+    const TCHAR* GetLocalRoleLabel(ENetRole Role)
+    {
+        switch (Role)
+        {
+        case ROLE_Authority: return TEXT("Authority");
+        case ROLE_AutonomousProxy: return TEXT("AutonomousProxy");
+        case ROLE_SimulatedProxy: return TEXT("SimulatedProxy");
+        case ROLE_None: return TEXT("None");
+        default: return TEXT("Unknown");
+        }
+    }
+}
 
 namespace CoopRPG::Debug
 {
@@ -23,6 +40,33 @@ namespace CoopRPG::Debug
             PIEInstance = World->GetOutermost()->GetPIEInstanceID();
         }
 
-        return FString::Printf(TEXT("NetMode=%s PIE=%d Func=%s"), NetMode, PIEInstance, Function);
+        FString Context = FString::Printf(TEXT("NetMode=%s PIE=%d Func=%s"), NetMode, PIEInstance, Function);
+        const auto* Actor = Cast<AActor>(WorldContext);
+        if (Actor)
+        {
+            Context += FString::Printf(TEXT(" LocalRole=%s"), GetLocalRoleLabel(Actor->GetLocalRole()));
+        }
+        if (const auto* Pawn = Cast<APawn>(Actor); Pawn && Pawn->GetNetMode() == NM_Client && Pawn->IsLocallyControlled())
+        {
+            if (const APlayerState* PlayerState = Pawn->GetPlayerState(); PlayerState && PlayerState->GetPlayerId() > 0)
+            {
+                Context += FString::Printf(TEXT(" LocalPlayerId=%d"), PlayerState->GetPlayerId());
+            }
+        }
+        return Context;
+    }
+
+    FString DescribePlayerRequestContext(const AActor* Actor, const TCHAR* Function)
+    {
+        FString Context = DescribeLogContext(Actor, Function);
+        const auto* Pawn = Cast<APawn>(Actor);
+        if (Pawn && Pawn->HasAuthority() && Pawn->GetNetConnection())
+        {
+            if (const APlayerState* PlayerState = Pawn->GetPlayerState(); PlayerState && PlayerState->GetPlayerId() > 0)
+            {
+                Context += FString::Printf(TEXT(" RequesterPlayerId=%d"), PlayerState->GetPlayerId());
+            }
+        }
+        return Context;
     }
 }

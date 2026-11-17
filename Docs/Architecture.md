@@ -4,9 +4,18 @@ CoopRPG · 2026-11-15 · UE 5.8.4 · 기본 이동과 고정 표적 GAS 단타
 
 ## 한 번의 입력이 이동이 되기까지
 
-1. 기본 맵 `L_Movement`가 열리면 게임 모드가 `PlayerStart`에 기본 캐릭터를 생성하고 엔진의 플레이어 컨트롤러가 이를 조작한다. [게임 시작 설정](../Game/Config/DefaultEngine.ini) · [기본 Pawn 선택](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp)
+1. 기본 맵 `L_Movement`가 열리면 게임 모드가 `PlayerStart`에 기본 캐릭터를 생성하고 `APlayerController`를 상속한 `ACoopRPGPlayerController`가 이를 조작한다. [게임 시작 설정](../Game/Config/DefaultEngine.ini) · [기본 Pawn 선택](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp)
 2. 각 로컬 플레이어의 Enhanced Input 서브시스템이 프로젝트 기본 매핑인 `IMC_Player`를 적용한다. 이동과 공격 키를 이 에셋에서 관리한다. W/S는 `IA_Move`의 Y축, D/A는 X축에 각각 ±1을 더한다. [입력 설정](../Game/Config/DefaultInput.ini) · [키 매핑](../Game/Content/Input/IMC_Player.uasset)
 3. 빙의한 캐릭터의 `SetupPlayerInputComponent`가 액션을 `Move`에 연결한다. 고정 카메라를 기준으로 화면 위쪽은 월드 +X, 오른쪽은 +Y다. `Move`는 `AddMovementInput`으로 방향과 세기를 보낸다. `CharacterMovement`가 이를 소비해 가속·속도 제한·충돌을 처리한다. [캐릭터 구현](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)
+
+<a id="manual-validation-input"></a>
+### 수동 검증의 창과 입력 책임
+
+런처는 운영체제 창의 위치·전면 요청·선택적인 항상 위를 담당하고, `ACoopRPGPlayerController`는 로컬 입력 모드를 담당한다. `-CoopManualInput`을 준 개발 실행에서만 커서를 보이고 마우스 잠금을 해제한다. 이 플래그는 수동 런처가 클라이언트에만 전달하며 복제하거나 서버의 전투 규칙에 사용하지 않는다.
+
+포커스를 잃을 때 `UGameViewportClient`가 `FlushPressedKeys`를 호출하도록 명시한다. 엔진의 Enhanced Input 초기화 뒤 첫 왼쪽 누름과 대응하는 뗌을 소비해, 창을 선택한 클릭이 GAS 공격으로 연결되지 않게 한다. 다음 클릭은 기존 `IA_Attack → Character::Attack → ASC` 경로로 전달한다. 기본 실행과 Shipping/Test는 이 수동 분기를 사용하지 않는다. 현재 고정 카메라 검증을 위한 정책이며 향후 마우스 시점 조작의 제품 UX를 확정한 것은 아니다.
+
+**근거** · [플레이어 컨트롤러](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [런처](../Tools/Validation/Start-CombatManual.ps1) · [실제 창 전환 시험](Validation/Index.md#v02-manual-input)
 
 ## 멀티플레이를 고려해 분리한 책임
 
@@ -41,13 +50,19 @@ PIE 단일 플레이의 근거는 [이동 검증](Validation/Index.md#l00-moveme
 
 <a id="gas-basic-attack"></a>
 
-### 고정 표적 단타 구현
+### 고정 표적 단타와 서버 취소
 
 1. 소유 클라이언트에서 `IMC_Player`의 왼쪽 클릭이 Boolean 액션 `IA_Attack`을 시작한다. 캐릭터는 이동과 같은 에셋 참조 방식으로 액션을 읽고 `Started`를 `Attack`에 바인딩한다. 처음 누를 때 `ACoopRPGCharacter::Attack`이 Pawn의 ASC에 단타 실행을 요청한다. 서버가 Pawn 시작 시 `ServerOnly` Ability를 부여한다. Pawn을 기준으로 Owner와 Avatar를 초기화하고 컨트롤러가 바뀌면 ActorInfo를 갱신한다.
-2. 서버 게임 모드가 `L_Movement`에 고정 표적 하나를 생성한다. `UCoopRPGMeleeAbility::ActivateAbility`는 서버의 표적 유효성·HP와 공격자에서 표적까지의 수평 거리를 검사한다. 거리 250 cm를 초과하면 Commit 전에 종료한다.
-3. 승인되면 `CommitAbility`가 공격자의 스태미나를 10 차감하고 서버가 표적에 순간 피해 Effect를 한 번 적용한다. 표적 HP는 10 줄고 두 클라이언트에 복제된다. 공격자 스태미나 변경은 소유 클라이언트에 복제된다.
+2. 서버 게임 모드가 `L_Movement`에 고정 표적 하나를 생성한다. `UCoopRPGMeleeAbility::ActivateAbility`는 서버의 표적 유효성·HP와 공격자에서 표적까지의 수평 거리를 검사한다. 공격자 HP가 0이거나 표적이 유효하지 않거나 거리가 250 cm를 초과하면 Commit 전에 종료한다.
+3. GAS가 비용·쿨다운을 활성화 전에 검사하고 `CommitAbility`에서 다시 확인한다. Commit 성공 시 공격자에 2초 쿨다운 GE와 스태미나 10 비용을 적용하고 서버에서 0.65초 동안 피해 확정을 기다린다. 확정 시 공격자·표적의 상태와 사거리를 다시 검사한 뒤 표적에 순간 피해 GE를 한 번 적용한다. 표적의 HP는 두 클라이언트에, 공격자의 스태미나는 소유 클라이언트에 복제된다.
 
-250 cm, 스태미나 100·비용 10, HP 100·피해 10은 첫 실행을 위한 시험값이다. 현재 공격은 즉시 종료한다. 무기 장착·조준·충돌 기반 타격·쿨다운·피해 확정 전 취소는 이후 작업 범위다.
+4. 오른쪽 클릭은 소유 Pawn으로 서버 취소 RPC를 보낸다. 서버는 해당 Pawn의 활성 단타를 취소한다. `EndAbility`가 예약 타이머와 표적 참조를 정리한다. 이미 적용한 비용·쿨다운은 유지된다. 피해 확정 뒤 들어온 요청에는 활성 단타가 없다.
+
+0.65초는 취소를 관찰하기 위한 시험값이다. 기존 사거리 250cm·비용 10·피해 10과 사용자 채택 쿨다운 2초를 사용한다. 같은 공격에서 피해 확정을 두 번 요청해도 대기 상태는 한 번만 소비된다. 실제 충돌 기반 타격, 피격 자동 취소, 장착과 라운드 연계는 각 기능의 검증 단계에서 다룬다.
+
+**근거** · [공격 수명과 취소 시험](Validation/Index.md#v03-attack-lifetime)
+
+플레이어 ASC는 Mixed 복제를 사용한다. 소유자는 활성 GE를 받아 자신의 쿨다운을 확인하고, 관찰자는 태그·Cue 정보를 받는다. 고정 표적 ASC는 Minimal을 유지한다. 실제 첫 시험에서 Minimal의 소유자 쿨다운 정보 누락을 확인해 바꾼 선택이며 서버 판정·캐릭터 ASC 배치·속성의 소유자 복제 조건을 변경하지 않는다. 개발용 초기화와 직접 요청은 별도 `CombatProbe` 컴포넌트와 명시 실행 옵션에 제한한다. [실패와 재검증](Validation/Index.md#v02-cost-cooldown) · [Epic 복제 모드](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Plugins/GameplayAbilities/EGameplayEffectReplicationMode)
 
 **근거** · [공통 키 매핑](../Game/Content/Input/IMC_Player.uasset) · [공격 액션](../Game/Content/Input/IA_Attack.uasset) · [입력과 ASC 초기화](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp) · [서버 승인과 거절](../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [속성 복제](../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp) · [입력 통합 후 두 클라이언트 결과](Validation/Index.md#v02-attack-input-regression) · [Epic AttributeSet 설명](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-attributes-and-attribute-sets-for-the-gameplay-ability-system-in-unreal-engine)
 

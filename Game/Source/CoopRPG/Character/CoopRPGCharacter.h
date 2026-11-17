@@ -28,6 +28,10 @@ protected:
 private:
     void Move(const FInputActionValue& Value);
     void Attack();
+    void CancelAttack();
+
+    UFUNCTION(Server, Reliable)
+    void ServerCancelAttack();
 
 private:
     UPROPERTY()

@@ -20,3 +20,14 @@ class COOPRPG_API UCoopRPGMeleeCost : public UGameplayEffect
 public:
     UCoopRPGMeleeCost();
 };
+
+UCLASS()
+class COOPRPG_API UCoopRPGMeleeCooldown : public UGameplayEffect
+{
+    GENERATED_BODY()
+
+public:
+    UCoopRPGMeleeCooldown();
+
+    static FGameplayTag GetCooldownTag();
+};

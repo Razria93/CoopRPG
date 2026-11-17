@@ -2,16 +2,16 @@
 
 CoopRPG · 2026-11-15 · UE 5.8.4 · V02 학습·구현 기록
 
-**왼쪽 클릭 한 번을 서버가 승인하면, 공격자의 스태미나 10과 고정 표적의 체력 10이 각각 감소한다.** 이 문서는 입력부터 서버 판정·효과 적용·속성 복제까지를 실제 코드에 연결해 설명한다. Unreal의 Actor·Component와 C++ 함수 호출에 익숙하고, GAS와 CoopRPG는 처음 접하는 독자를 대상으로 한다.
+**서버가 공격을 Commit하면 스태미나 10이 줄고, 타격을 확정하면 표적 체력이 10 줄어든다.** 이 문서는 입력부터 서버 판정·효과 적용·속성 복제까지를 실제 코드에 연결해 설명한다. Unreal의 Actor·Component와 C++ 함수 호출에 익숙하고, GAS와 CoopRPG는 처음 접하는 독자를 대상으로 한다.
 
-현재 대상은 `L_Movement`의 **고정 표적 단타**다. 서버는 자신이 보유한 표적과 좌표로 공격을 판단한다. 클라이언트가 피해량이나 표적의 최종 체력을 지정하는 별도 RPC는 만들지 않았다. 무기 충돌·장착·쿨다운·피격 취소와 완성된 전투 시스템은 후속 범위다.
+현재 대상은 `L_Movement`의 **고정 표적 단타**다. 서버는 자신이 보유한 표적과 좌표로 공격을 판단한다. 클라이언트가 피해량이나 표적의 최종 체력을 지정하는 별도 RPC는 만들지 않았다. V02의 비용·쿨다운과 즉시 단타 흐름을 먼저 설명한다. 현재 코드의 명시 취소와 준비 구간은 아래 V03 절을 함께 참고한다.
 
 - **ASC · Ability System Component** — 능력을 등록하고 활성화 요청·GE 적용·속성 변경 통지를 연결한다. 공격자와 표적이 각각 갖는다.
 - **GA · Gameplay Ability** — 공격의 검사 → 비용 확정 → 피해 적용 → 종료 순서를 정의한다. 본체는 서버에서 실행한다.
 - **GE · Gameplay Effect** — 스태미나 또는 체력을 어떤 연산과 크기로 변경할지 정의한다.
 - **AttributeSet** — Health·Stamina 값을 보관하고 범위 제한과 복제 콜백을 구현한다. 전송은 언리얼 복제 시스템이 수행한다.
 
-**확인한 결과** · 11월 15일 같은 PC의 독립 전용 Server 1개·Client 2개에서 클릭 4회에 서버 요청 4건, 거리 밖 거절 2건과 안쪽 승인 2건을 확인했다. 표적 체력은 양쪽에서 `100 → 90 → 80`, 각 공격자의 스태미나는 소유 클라이언트에서 `100 → 90`이었다. 비용 부족·쿨다운의 실제 서버 거절은 아직 검증하지 않았다.
+**확인한 결과** · 11월 15일 같은 PC의 독립 전용 Server 1개·Client 2개에서 클릭 4회에 서버 요청 4건, 거리 밖 거절 2건과 안쪽 승인 2건을 확인했다. 표적 체력은 양쪽에서 `100 → 90 → 80`, 각 공격자의 스태미나는 소유 클라이언트에서 `100 → 90`이었다. 후속 독립 패키지에서는 비용 부족·쿨다운의 실제 서버 거절을 요청자별5회씩 확인했다. [최신 시험과 한계](../Validation/Index.md#v02-cost-cooldown)를 참조한다.
 
 **근거** · [패키지 입력 회귀의 조건과 결과](../Validation/Index.md#v02-attack-input-regression) · [현재 구현과 ASC 배치의 선택 이유](../Architecture.md#gas-basic-attack)
 
@@ -23,7 +23,8 @@ CoopRPG · 2026-11-15 · UE 5.8.4 · V02 학습·구현 기록
 4. [GE 정의·Modifier·Spec 적용](#effect-definition)
 5. [AttributeSet의 매크로와 복제](#attribute-replication)
 6. [실제 검증 범위와 로그 읽기](#verification-scope)
-7. [코드 읽는 순서와 근거](#engine-source)
+7. [V03의 준비·피해 확정·취소](#attack-cancellation)
+8. [코드 읽는 순서와 근거](#engine-source)
 
 <a id="attack-flow"></a>
 ## 1. 한 번의 클릭은 어디를 거치는가
@@ -72,7 +73,7 @@ flowchart TD
         Continue(("A"))
         Commit{"단타 GA<br/>CommitAbility / CommitCheck<br/>비용 등 재검사 통과?"}
         CommitStop["단타 GA · EndAbility<br/>Commit 실패 후 종료<br/>비용·피해 없음"]
-        Cost["단타 GA · Commit 내부<br/>CommitExecute → ApplyCost<br/>공격자 Stamina 100 → 90"]
+        Cost["단타 GA · Commit 내부<br/>CommitExecute → ApplyCooldown → ApplyCost<br/>2초 쿨다운 · Stamina 100 → 90"]
         Damage["단타 GA → 표적 ASC<br/>피해 Spec 생성·적용<br/>표적 Health 100 → 90"]
         Finish["단타 GA<br/>EndAbility<br/>실행 종료 · 등록 유지"]
         Continue --> Commit
@@ -100,7 +101,7 @@ flowchart TD
 
 1. 로컬 확인 실패면 서버에 요청하지 않는다. 서버 활성화 확인 실패면 GA 본체에 진입하지 않는다.
 2. 본체의 표적·거리 검사 또는 Commit 재검사 실패면 비용과 피해 없이 종료한다.
-3. Commit 성공 시 공격자에게 비용을 적용하고, 이어서 표적에게 피해를 적용한다.
+3. Commit 성공 시 공격자에게 쿨다운·비용을 적용하고, 이어서 표적에게 피해를 적용한다. 쿨다운 GE/태그 복제는 아래 AttributeSet의 Health/Stamina 복제와 별도 경로다.
 4. 각 속성이 해당 클라이언트에 도착하면 OnRep가 로컬 GAS의 계산·알림 경로에 연결한다.
 
 **근거** · [Commit·피해·종료의 실제 순서](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [속성별 복제 조건과 OnRep](../../Game/Source/CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.cpp)
@@ -110,11 +111,12 @@ flowchart TD
 
 ### 2-1. 클래스 기본값은 실행 방식을 정한다
 
-`UCoopRPGMeleeAbility` 생성자는 다음 세 가지를 설정한다.
+`UCoopRPGMeleeAbility` 생성자는 다음 네 가지를 설정한다.
 
 - **`InstancedPerActor`** — 이 ASC에 부여된 단타의 인스턴스를 실행 간 재사용한다. 클릭마다 새 능력을 부여하는 방식이 아니다.
 - **`ServerOnly`** — 능력 본체를 서버에서 실행한다. 현재 공격은 클라이언트의 피해 예측을 하지 않는다.
 - **`CostGameplayEffectClass`** — `UCoopRPGMeleeCost`를 비용 정의로 지정한다. 생성자에서 스태미나를 차감하는 것은 아니다.
+- **`CooldownGameplayEffectClass`** — `UCoopRPGMeleeCooldown`을 지정한다. 승인 시 2초 GE가 공격자에게 `Cooldown.CoopRPG.Melee` 태그를 부여한다.
 
 ### 2-2. ASC·AttributeSet 준비와 ActorInfo 연결
 
@@ -198,7 +200,7 @@ virtual void ActivateAbility(
 
 ### 3-2. Commit은 비용을 다시 검사한 뒤 사용을 확정한다
 
-기본 `CommitAbility`는 `CommitCheck`를 통과하면 `CommitExecute`에서 설정된 쿨다운과 비용을 적용한다. 현재 GA에는 **비용 GE만 설정**돼 있다. 승인 경로에서는 이 과정에서 공격자 스태미나를 10 소모한 뒤, GA 본체가 피해 Spec을 만들어 표적 ASC에 적용한다.
+기본 `CommitAbility`는 `CommitCheck`를 통과하면 `CommitExecute`에서 설정된 쿨다운과 비용을 적용한다. 현재 GA에는 **비용 GE와 2초 쿨다운 GE**가 설정돼 있다. 승인 경로에서는 이 과정에서 공격자 스태미나를 10 소모한 뒤, GA 본체가 피해 Spec을 만들어 표적 ASC에 적용한다.
 
 기본 Additive 비용 검사는 `CurrentValue + CostValue < 0`이면 실패한다. 비용이 `-10`인 현재 설정의 경계는 다음과 같다.
 
@@ -208,16 +210,16 @@ virtual void ActivateAbility(
 | 10 | 통과. 나머지 조건도 유효하면 비용 적용 뒤 0이 된다. |
 | 100 | 통과. 나머지 조건도 유효하면 비용 적용 뒤 90이 된다. |
 
-**9·10 경계는 엔진 코드에서 도출한 기대값이며 실행 검증 결과가 아니다.** 활성화 사전 검사에서 이미 거절될 수 있으므로 비용 부족이 항상 `CommitFailed`로 기록되지는 않는다. Commit 성공 뒤 피해 효과가 적용되지 않더라도 비용을 자동 환불하는 트랜잭션은 아니다.
+**9·10 경계는 후속 독립 패키지에서 두 요청자 모두 실행 확인했다.** 활성화 사전 검사에서 이미 거절될 수 있으므로 비용 부족이 항상 `CommitFailed`로 기록되지는 않는다. Commit 성공 뒤 피해 효과가 적용되지 않더라도 비용을 자동 환불하는 트랜잭션은 아니다.
 
-쿨다운을 기본 GAS 방식으로 추가하려면 지속 시간과 차단 태그를 가진 쿨다운 GE를 지정하고, 재사용 차단·만료·재실행을 시험해야 한다. 현재는 해당 GE와 실제 서버 거절 검증이 모두 남아 있다.
+쿨다운 GE는 `HasDuration`·2초이며 `UTargetTagsGameplayEffectComponent`로 차단 태그를 부여한다. `EndAbility` 뒤에도 효과는 유지되고 만료 후 다시 실행할 수 있다. 거절 요청은 새 효과를 적용하지 않으므로 기존 쿨다운을 연장하지 않는다. 플레이어 ASC는 Mixed로 소유자에게 활성 GE를 전달한다. Minimal이었던 첫 시험에서 소유자 쿨다운 태그가 누락된 결과와 수정 후 [재검증](../Validation/Index.md#v02-cost-cooldown)을 구분한다. 관찰 클라이언트는 해당 플레이어의 GE 전체를 받지 않으며, 속성 HP/Stamina의 복제 조건도 GE 복제 모드와 별개다.
 
 ### 3-3. 실패 위치를 로그로 구분한다
 
 | 실패 위치 | 현재 관찰할 수 있는 것 |
 |---|---|
-| 클라이언트 사전 확인 | `AttackInput`은 찍힐 수 있지만 서버 요청은 없을 수 있다. 입력 로그만으로 전송 성공을 판정하지 않는다. |
-| 서버 활성화 확인 | GA 본체 진입 전 실패다. 본체에 있는 `AttackRejected`가 없을 수 있어 서버 수신·활성화 실패를 별도로 확인해야 한다. |
+| 클라이언트 사전 확인 | 비용·쿨다운 실패는 `AttackBlocked Reason=Cost/Cooldown`, `AttackDispatch Submitted=0`이다. 입력 로그만으로 전송 성공을 판정하지 않는다. |
+| 서버 활성화 확인 | GA 본체 진입 전 비용·쿨다운 실패도 CheckCost/CheckCooldown의 `AttackRejected Reason=Cost/Cooldown`으로 기록한다. NetMode와 실제 GAS 요청을 함께 확인한다. |
 | 본체의 초기 권한·참조 확인 | `EndAbility` 후 반환한다. 현재 이 분기에는 별도 `AttackRejected` 로그가 없다. |
 | 본체의 표적·거리 확인 | 각각 `Reason=InvalidTarget`, `Reason=OutOfRange`다. Commit 전에 종료한다. |
 | 본체의 Commit 재검사 | 실패 시 `Reason=CommitFailed`다. 피해 Spec을 만들거나 적용하지 않는다. |
@@ -233,7 +235,7 @@ virtual void ActivateAbility(
 
 GA 등록에 쓰던 `FGameplayAbilitySpec`과도 구분해야 한다. Ability Spec은 **사용 가능한 능력의 등록 항목**, Effect Spec은 **적용할 효과의 실행 데이터**다.
 
-### 4-2. 현재 두 GE의 설정
+### 4-2. 수치를 바꾸는 두 GE의 설정
 
 | 항목 | 비용 GE | 피해 GE |
 |---|---|---|
@@ -244,11 +246,17 @@ GA 등록에 쓰던 `FGameplayAbilitySpec`과도 구분해야 한다. Ability Sp
 | 연산 | `Additive` | `Additive` |
 | 크기 | 고정 `-10` | 고정 `-10` |
 
-`DurationPolicy`는 GE 전체의 수명이다. `Modifiers`는 속성 변경 규칙의 목록이며 현재 각 GE에 하나씩 들어 있다. **Modifier 하나는 대상 속성(`Attribute`), 연산(`ModifierOp`), 크기와 계산 방식(`ModifierMagnitude`)을 묶는다.** 두 효과는 `FScalableFloat(-10.0f)`를 사용하며 레벨별 커브를 연결하지 않았다.
+`DurationPolicy`는 GE 전체의 수명이다. `Modifiers`는 속성 변경 규칙의 목록이며 위 두 수치 GE에 하나씩 들어 있다. 쿨다운 GE에는 수치 Modifier가 없다. **Modifier 하나는 대상 속성(`Attribute`), 연산(`ModifierOp`), 크기와 계산 방식(`ModifierMagnitude`)을 묶는다.** 두 효과는 `FScalableFloat(-10.0f)`를 사용하며 레벨별 커브를 연결하지 않았다.
 
 `FGameplayModifierInfo`에는 평가 채널과 소스·대상 태그 조건도 있지만 현재는 별도 설정이 없다. 효과를 늘릴 때는 GE 자체의 적용 조건과 개별 Modifier의 평가 조건을 구분해야 한다. 지금은 C++ 생성자에서 정의했으며 데이터 전용 GE Blueprint로 설정하는 방법도 있다.
 
-### 4-3. 피해 Spec을 표적 ASC에 적용한다
+### 4-3. 쿨다운 GE는 태그의 수명을 관리한다
+
+`UCoopRPGMeleeCooldown`은 수치 Modifier 없이 2초 동안 공격자에 태그를 부여한다. 현재는 C++ 기본 서브오브젝트인 `UTargetTagsGameplayEffectComponent`에 태그를 설정한다. GA의 기본 `CheckCooldown`은 이 효과의 부여 태그와 ASC가 가진 태그를 대조한다. 프로젝트의 override는 `Super` 판정을 유지하고 실패 위치만 기록한다.
+
+**근거** · [세 GE의 실제 정의](../../Game/Source/CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.cpp) · [검사와 적용](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp)
+
+### 4-4. 피해 Spec을 표적 ASC에 적용한다
 
 아래는 서버 GA의 실제 C++ 코드이며 줄바꿈만 조정했다.
 
@@ -262,7 +270,7 @@ Source->ApplyGameplayEffectSpecToTarget(
 
 `Source`는 공격자 ASC, 두 번째 인수는 표적 ASC다. 표적 ASC가 피해 정의를 실행하면서 **표적 AttributeSet의 Health**를 바꾼다. 공격자 Stamina는 앞선 Commit의 **별도 비용 GE**로 바뀐다. 비용과 피해를 분리한 이유는 수신 ASC와 적용 책임이 다르기 때문이다.
 
-현재는 다른 보정이 없고 두 GE 모두 `Instant`이므로 각 대상 속성의 BaseValue와 CurrentValue가 함께 감소한다. 피해 GE 하나가 Health와 Stamina를 동시에 깎는 구조가 아니다.
+현재는 다른 수치 보정이 없고 위 비용·피해 GE 모두 `Instant`이므로 각 대상 속성의 BaseValue와 CurrentValue가 함께 감소한다. 피해 GE 하나가 Health와 Stamina를 동시에 깎는 구조가 아니다.
 
 **근거** · [GE 생성자와 Modifier 구성](../../Game/Source/CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.cpp) · [Spec 생성·적용 코드](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp) · [Epic의 GE와 Spec 설명](https://dev.epicgames.com/documentation/en-us/unreal-engine/gameplay-effects-for-the-gameplay-ability-system-in-unreal-engine) · [Modifier API](https://dev.epicgames.com/documentation/unreal-engine/API/Plugins/GameplayAbilities/FGameplayModifierInfo)
 
@@ -355,12 +363,14 @@ Aggregator는 속성의 기준값과 Modifier를 평가하는 GAS 내부 계산 
 
 ### 6-1. 실행 조건별로 결과를 읽는다
 
-아래는 기존 시험 기록을 대조한 요약이다. **이번 문서 개정에서는 게임을 다시 실행하지 않았다.** 모든 시험을 하나의 최신 패키지 결과로 합치지 않는다.
+아래1~4는 기존 시험 이력이고5는 이번 구현 후 실행이다. 이전 사용자 PIE 확인을 새 쿨다운의 사람 확인으로 승계하지 않는다.
 
 1. **입력 통합 후 독립 패키지** — 같은 PC·루프백의 Server 1개와 Client 2개. AI의 입력 주입으로 이동, 클릭 4회·서버 요청 4건, 거절·승인 각 2건을 확인했다. [패키지 시험 근거](../Validation/Index.md#v02-attack-input-regression)
 2. **GAS 소스 이동 후 Editor 회귀** — 새 DLL로 Editor 실행 파일의 서버 1개·게임 2개를 기동했다. 거절·승인 각 2건과 동일한 속성 변화를 확인했다. 이동 후 독립 패키지 재빌드는 미실행이다. [소스 이동 회귀 근거](../Validation/Index.md#v02-gas-source-layout)
 3. **로그 문맥 검증** — 단일 프로세스 PIE의 서버·두 Client와 별도 Editor 프로세스 시험을 구분해 수행했다. 입력·서버 판정·OnRep의 NetMode·PIE·함수명을 확인했다. [로그 검증 근거](../Validation/Index.md#v02-log-context)
 4. **사용자 수동 PIE 확인** — 사용자가 두 창에서 조작한 Output Log를 대조했다. 입력 4건·서버 판정 4건, 거절·승인 각 2건을 확인했다. RPC 호출 수의 직접 근거는 앞선 자동 시험이다. [수동 확인 근거](../Validation/Index.md#v02-manual-attack-result)
+
+5. **비용·쿨다운 후 독립 패키지** — 비용9/10, 실제 서버 거절, 정상 입력의 로컬 차단, 만료·재사용·독립성과 정상3회 및 기존 이동·거리 회귀를 확인했다. 소유자 쿨다운 복제 실패와 Mixed 수정 후 통과를 별도 보존했다. Editor 갱신과 사용자 재현은 대기다. [최신 시험](../Validation/Index.md#v02-cost-cooldown)
 
 승인 두 건에서 **표적 Health는 양쪽에서** `100 → 90 → 80`, **각 요청자의 Stamina는 소유 클라이언트에서** `100 → 90`이었다. 거리 밖 두 거절에서는 체력과 비용이 변하지 않았다. 사용자 수동 확인의 거절 거리는 351.75cm·351.58cm, 승인 거리는 87.50cm·74.12cm였다. 각 시험의 입력 순서·빌드·실행 ID는 연결한 검증 기록에 둔다.
 
@@ -369,20 +379,29 @@ Aggregator는 속성의 기준값과 Modifier를 평가하는 GAS 내부 계산 
 | 로그 | 입증하는 지점 |
 |---|---|
 | `AttackInput` · Verbose | 로컬 `Attack()` 진입. 서버 수신이나 피해 승인을 단독으로 입증하지 않는다. |
-| `AttackRejected` / `AttackApproved` | 서버 GA 본체의 판정. 승인 로그의 HP·Stamina 전후와 복제 결과를 함께 확인한다. |
+| `AttackBlocked` / `AttackDispatch` | 로컬 비용·쿨다운 차단과 요청 제출 여부. Submitted=1은 서버 승인 보장이 아니다. |
+| `AttackRejected` / `AttackApproved` | 서버 GAS 검사 또는 GA 본체의 판정. Func·이유·승인 전후값과 복제 결과를 함께 확인한다. |
+| `CombatSnapshot` / `CooldownChanged` | 개발용 상태 스냅샷과 태그 수명. 실제 서버 요청·거절과 함께 읽는다. |
 | `HealthReplicated` / `StaminaReplicated` | 해당 클라이언트 AttributeSet의 OnRep 실행과 값. 어느 월드의 로그인지 함께 읽는다. |
 
 같은 액터 이름이 여러 PIE 월드에 나타날 수 있어 **실행 문맥**인 `NetMode`·`PIE`·`Func`를 함께 본다. 공격 입력은 `Log LogCoopRPGInput Verbose`, GAS 서버 활성화 호출은 `AbilitySystem.ServerRPCBatching.Log 1`로 관찰할 수 있다. 정확한 실행 순서와 필터는 기존 수동 가이드를 따른다.
 
 **근거** · [수동 실행과 로그 필터](../Validation/Index.md#v02-manual-attack-log) · [로그 문맥 구현](../../Game/Source/CoopRPG/Debug/CoopRPGLogContext.cpp)
 
-### 6-3. 다음 검증에서 분리할 경계
+### 6-3. 경계 검증을 분리하는 이유
 
-**비용 부족은 로컬 차단과 실제 서버 거절을 나눠 검증해야 한다.** `AttackInput` 뒤 서버 판정이 없다는 사실만으로 어느 단계가 거절했는지 확정할 수 없다. 서버 수신·활성화 실패, 서버 HP·Stamina 전후를 함께 남길 계측이 필요하다. Stamina 9·10 경계는 아직 기대값이다.
+비용 부족과 쿨다운은 로컬 차단·실제 서버 거절을 나눠 확인했다. 개발용 `Coop.Test.Request`는 소유 클라이언트에서 기존 GAS 활성화 RPC를 보내며 서버 검사를 끄지 않는다. 표적 사망이 비용 시험을 가리지 않도록 `Coop.Test.Prepare`로 표적을 살린 채 자원만9로 만든다. 두 명이 동시에 초기화하면 공용 표적 결과가 섞이므로 시험 준비를 순서대로 한다. [직접 재현 순서](../Validation/Index.md#v02-cost-cooldown-manual)를 따른다.
 
-쿨다운은 구현과 검증이 남아 있다. 무효 표적·중복 접촉·피격 취소·재실행, 지연·손실, 별도 PC 접속, 계획한 반복 횟수도 이 문서의 통과 주장에 포함하지 않는다. **첫 단타의 승인·거리 거절 통과와 V02/G2 전체 통과는 구분한다.**
+V03에서는 피해 확정 전 명시 취소와 재공격을 검증했다. 실제 물리 접촉 중복, 피격 자동 취소와 라운드 연계는 별도 확인 단계다.
 
 **근거** · [다음 작업](../Roadmap.md#next-work) · [V02 등 단계별 통과 기준](../Validation/Index.md#active-tests) · [계획한 반복·네트워크 조건](../Validation/Index.md#test-conditions)
+
+<a id="attack-cancellation"></a>
+## 7. V03의 준비·피해 확정·취소
+
+서버의 `CommitAbility`가 비용과 쿨다운을 적용한 뒤 0.65초를 기다린다. `ResolveHit`는 해당 공격의 대기 상태를 소비하고 표적·생존·사거리를 다시 검사한다. 조건이 유지될 때 표적 ASC에 피해 GE를 적용한다. 오른쪽 클릭으로 접수한 취소는 활성 단타의 `CancelAbilityHandle`을 거쳐 `EndAbility`에서 타이머와 표적 참조를 정리한다. 취소가 피해 확정 전에 수락되면 피해가 없으며 이미 적용한 비용과 쿨다운은 유지한다.
+
+**근거** · [서버 취소와 피해 확정 검증](../Validation/Index.md#v03-attack-lifetime) · [현재 단타 코드](../../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp)
 
 <a id="engine-source"></a>
 ## 근거 및 더 읽기
