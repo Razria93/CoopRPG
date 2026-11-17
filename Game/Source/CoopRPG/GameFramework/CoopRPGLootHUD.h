@@ -38,5 +38,6 @@ private:
     void DrawRoundResult(const ACoopRPGGameState& State, ACoopRPGPlayerController& Controller, int32 Stage);
     void DrawExtractionStatus(const ACoopRPGGameState& State, float HintY);
 
+private:
     TArray<FFeedbackEntry> FeedbackEntries;
 };

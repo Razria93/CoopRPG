@@ -28,6 +28,7 @@ struct FCoopRPGGameplayFeedback
     {
     }
 
+public:
     UPROPERTY()
     ECoopRPGFeedbackKind Kind = ECoopRPGFeedbackKind::Damage;
 

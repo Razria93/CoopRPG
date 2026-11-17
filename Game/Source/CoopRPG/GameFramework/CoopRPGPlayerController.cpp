@@ -106,23 +106,6 @@ bool ACoopRPGPlayerController::InputKey(const FInputKeyEventArgs& Params)
     return Super::InputKey(Params);
 }
 
-void ACoopRPGPlayerController::Tick(float DeltaSeconds)
-{
-    Super::Tick(DeltaSeconds);
-    if (!HasAuthority() || !IsValid(OpenedChest))
-    {
-        return;
-    }
-
-    if (const APawn* CurrentPawn = GetPawn(); CurrentPawn && !IsWithinChestRange(*CurrentPawn, *OpenedChest))
-    {
-        if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>())
-        {
-            CloseOpenedChest(State->GetRoundId(), TEXT("OutOfRange"));
-        }
-    }
-}
-
 void ACoopRPGPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -152,6 +135,23 @@ void ACoopRPGPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ACoopRPGPlayerController::TakeMeleeWeapon);
     InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACoopRPGPlayerController::UseRecoveryItem);
     InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ACoopRPGPlayerController::TakeEnemyLoot);
+}
+
+void ACoopRPGPlayerController::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    if (!HasAuthority() || !IsValid(OpenedChest))
+    {
+        return;
+    }
+
+    if (const APawn* CurrentPawn = GetPawn(); CurrentPawn && !IsWithinChestRange(*CurrentPawn, *OpenedChest))
+    {
+        if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>())
+        {
+            CloseOpenedChest(State->GetRoundId(), TEXT("OutOfRange"));
+        }
+    }
 }
 
 void ACoopRPGPlayerController::ReadyForRound()
@@ -195,6 +195,15 @@ void ACoopRPGPlayerController::CloseSharedChest()
             *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         ServerSetChestOpen(OpenedChest, State->GetRoundId(), false);
     }
+}
+
+void ACoopRPGPlayerController::CloseOpenedChest(FGuid RoundId, const TCHAR* Reason)
+{
+    const ACoopRPGSharedChest* Chest = OpenedChest.Get();
+    OpenedChest = nullptr;
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestClosed Chest=%s Round=%s Reason=%s %s"), *GetNameSafe(Chest),
+        *RoundId.ToString(), Reason, *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGPlayerController::TakeRecoveryItem()
@@ -288,15 +297,6 @@ void ACoopRPGPlayerController::ServerSetChestOpen_Implementation(ACoopRPGSharedC
             *GetNameSafe(Chest), *RoundId.ToString(), Chest->GetRecoveryStock(), Chest->GetWeaponStock(),
             *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
     }
-}
-
-void ACoopRPGPlayerController::CloseOpenedChest(FGuid RoundId, const TCHAR* Reason)
-{
-    const ACoopRPGSharedChest* Chest = OpenedChest.Get();
-    OpenedChest = nullptr;
-    ForceNetUpdate();
-    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestClosed Chest=%s Round=%s Reason=%s %s"), *GetNameSafe(Chest),
-        *RoundId.ToString(), Reason, *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGSharedChest* Chest, FGuid RoundId,

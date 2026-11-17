@@ -256,6 +256,25 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
     return Player;
 }
 
+void ACoopRPGGameMode::Logout(AController* Exiting)
+{
+    const auto* State = GetGameState<ACoopRPGGameState>();
+    if (bEnemyCombat && State && (State->IsRoundPlaying() || State->HasRoundResult())
+        && IsRoundParticipant(Exiting))
+    {
+        bParticipantDisconnected = true;
+    }
+    for (auto& Slot : PlayerSlots)
+    {
+        if (Slot.Get() == Exiting)
+        {
+            Slot.Reset();
+        }
+    }
+    Super::Logout(Exiting);
+    UpdateLootRoundPhase(Exiting);
+}
+
 void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
 {
     Super::RestartPlayer(NewPlayer);
@@ -274,25 +293,6 @@ void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
             }
         }
     }
-}
-
-void ACoopRPGGameMode::Logout(AController* Exiting)
-{
-    const auto* State = GetGameState<ACoopRPGGameState>();
-    if (bEnemyCombat && State && (State->IsRoundPlaying() || State->HasRoundResult())
-        && IsRoundParticipant(Exiting))
-    {
-        bParticipantDisconnected = true;
-    }
-    for (auto& Slot : PlayerSlots)
-    {
-        if (Slot.Get() == Exiting)
-        {
-            Slot.Reset();
-        }
-    }
-    Super::Logout(Exiting);
-    UpdateLootRoundPhase(Exiting);
 }
 
 void ACoopRPGGameMode::PublishReadySlots(ACoopRPGGameState& State) const

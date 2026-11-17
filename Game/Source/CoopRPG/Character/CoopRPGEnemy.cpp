@@ -177,6 +177,12 @@ void ACoopRPGEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
     DOREPLIFETIME(ACoopRPGEnemy, bDead);
 }
 
+void ACoopRPGEnemy::FlashPresentationHit()
+{
+    SetPresentationTint(true);
+    GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestorePresentationTint, 0.22f);
+}
+
 void ACoopRPGEnemy::BeginPlay()
 {
     Super::BeginPlay();
@@ -314,6 +320,12 @@ void ACoopRPGEnemy::SpawnDeathLoot(const FGuid& RoundId)
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
+void ACoopRPGEnemy::ApplyDeathPresentation()
+{
+    GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    EnemyVisual->SetVisibility(false);
+}
+
 void ACoopRPGEnemy::SetPresentationTint(bool bDarkened)
 {
     if (GetNetMode() == NM_DedicatedServer)
@@ -334,18 +346,6 @@ void ACoopRPGEnemy::SetPresentationTint(bool bDarkened)
 void ACoopRPGEnemy::RestorePresentationTint()
 {
     SetPresentationTint(false);
-}
-
-void ACoopRPGEnemy::FlashPresentationHit()
-{
-    SetPresentationTint(true);
-    GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestorePresentationTint, 0.22f);
-}
-
-void ACoopRPGEnemy::ApplyDeathPresentation()
-{
-    GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    EnemyVisual->SetVisibility(false);
 }
 
 void ACoopRPGEnemy::OnRep_Dead()

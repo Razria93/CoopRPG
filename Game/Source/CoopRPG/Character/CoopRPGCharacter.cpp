@@ -4,11 +4,11 @@
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Debug/CoopRPGCombatProbeComponent.h"
+#include "CoopRPG/GameFramework/CoopRPGGameplayFeedback.h"
 
 #include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "CoopRPG/GameFramework/CoopRPGGameplayFeedback.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TimerManager.h"
 #include "Engine/StaticMesh.h"
@@ -98,50 +98,6 @@ void ACoopRPGCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGCharacter, DisplaySlot);
 }
 
-void ACoopRPGCharacter::SetDisplaySlot(int32 Slot)
-{
-    check(HasAuthority());
-    DisplaySlot = Slot;
-    OnRep_DisplaySlot();
-    ForceNetUpdate();
-}
-
-void ACoopRPGCharacter::OnRep_DisplaySlot()
-{
-    RestorePresentationTint();
-    UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerDisplaySlot Actor=%s Slot=%d %s"),
-        *GetNameSafe(this), DisplaySlot, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
-}
-
-void ACoopRPGCharacter::SetPresentationTint(bool bDarkened)
-{
-    if (DisplaySlot == 0 || GetNetMode() == NM_DedicatedServer)
-    {
-        return;
-    }
-    if (!PresentationMaterial)
-    {
-        PresentationMaterial = BodyMesh->CreateDynamicMaterialInstance(0);
-        HeadMesh->SetMaterial(0, PresentationMaterial);
-    }
-    if (PresentationMaterial)
-    {
-        const FLinearColor Color = CoopRPG::Presentation::PlayerColor(DisplaySlot);
-        PresentationMaterial->SetVectorParameterValue(TEXT("Color"), bDarkened ? Color * 0.25f : Color);
-    }
-}
-
-void ACoopRPGCharacter::RestorePresentationTint()
-{
-    SetPresentationTint(false);
-}
-
-void ACoopRPGCharacter::FlashPresentationHit()
-{
-    SetPresentationTint(true);
-    GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestorePresentationTint, 0.22f);
-}
-
 float ACoopRPGCharacter::GetHealth() const
 {
     return CombatAttributes->GetHealth();
@@ -160,6 +116,20 @@ void ACoopRPGCharacter::EquipMeleeWeapon()
         WeaponMesh->SetVisibility(true);
         ForceNetUpdate();
     }
+}
+
+void ACoopRPGCharacter::SetDisplaySlot(int32 Slot)
+{
+    check(HasAuthority());
+    DisplaySlot = Slot;
+    OnRep_DisplaySlot();
+    ForceNetUpdate();
+}
+
+void ACoopRPGCharacter::FlashPresentationHit()
+{
+    SetPresentationTint(true);
+    GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestorePresentationTint, 0.22f);
 }
 
 void ACoopRPGCharacter::BeginPlay()
@@ -245,4 +215,34 @@ void ACoopRPGCharacter::OnRep_MeleeWeapon()
     UE_LOG(LogCoopRPGEquipment, Log, TEXT("MeleeWeaponReplicated Actor=%s Equipped=%d EquippedPlayerId=%d %s"),
         *GetNameSafe(this), bHasMeleeWeapon ? 1 : 0, State ? State->GetPlayerId() : INDEX_NONE,
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGCharacter::OnRep_DisplaySlot()
+{
+    RestorePresentationTint();
+    UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerDisplaySlot Actor=%s Slot=%d %s"),
+        *GetNameSafe(this), DisplaySlot, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGCharacter::SetPresentationTint(bool bDarkened)
+{
+    if (DisplaySlot == 0 || GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+    if (!PresentationMaterial)
+    {
+        PresentationMaterial = BodyMesh->CreateDynamicMaterialInstance(0);
+        HeadMesh->SetMaterial(0, PresentationMaterial);
+    }
+    if (PresentationMaterial)
+    {
+        const FLinearColor Color = CoopRPG::Presentation::PlayerColor(DisplaySlot);
+        PresentationMaterial->SetVectorParameterValue(TEXT("Color"), bDarkened ? Color * 0.25f : Color);
+    }
+}
+
+void ACoopRPGCharacter::RestorePresentationTint()
+{
+    SetPresentationTint(false);
 }
