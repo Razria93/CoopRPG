@@ -154,6 +154,7 @@
 - **1차 보완 진행** · 상자 거리 이탈과 재고 로그를 새 전용 Server·Client 실행 파일로 검증했다. 다음은 P1·P2·적 식별과 피격·회복·획득·사용 표시다. [상자 검증](Validation/Index.md#shared-chest-distance-close)
 - **플레이 화면 진행** · P1·P2·적 식별과 서버 확정 피해·회복·획득·사용 표시를 새 전용 패키지로 검증했다. 다음은 탈출·결과·준비 UI다. [화면과 검증](Validation/Index.md#v07-game-presentation)
 - **탈출·결과·준비 UI** · 전용 서버와 두 클라이언트에서 이탈·재진입, 성공·실패 뒤 재준비와 접속 종료 안내를 자동 검증했다. 사용자 실행의 성공·재준비·접속 중단을 원본과 대조했다. 다음은 최종 기동 안내와 V08 핵심 시험이다. [자동 검증](Validation/Index.md#v07-round-ui) · [사용자 실행](Validation/Index.md#v07-round-ui-user-result)
+- **제출 후보 확인** · 새 폴더에서 README 기동·종료·재실행과 기본 완주를 검증했다. 동일 후보의 V08 핵심 세 시나리오를 기본·수신 지연 100ms·수신 손실 1%에서 확인했다. [후보와 실제 결과](Validation/Index.md#submission-candidate)
 - **2차 후보** · 1차 결과를 보고 [후속 후보](Project.md#mvp-scope)의 범위와 순서를 정한다.
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬

@@ -88,6 +88,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Validation\Start
 
 런처가 출력하는 `manual-...` 폴더에 서버 `server.log`와 A·B의 `a.log`, `b.log`가 저장된다. 뷰어의 `창 캡처`와 `Excel 저장`은 그 아래 `Exports/`에 저장한다. [모니터 설정과 로그 도구](Docs/Validation/LogViewer.md#실행과-배치)
 
+**확인한 범위** · 새 폴더에서 기동·2인 접속·종료·재실행과 기본 완주를 검증했다. 후보의 파일 해시와 V08 핵심 시험 결과는 [제출 후보 검증 기록](Docs/Validation/Index.md#submission-candidate)에 있다.
+
 ### 에디터 첫 이동 실습
 
 아래는 첫 이동 실습 안내다. 두 클라이언트 전투·로그 확인은 [V02 수동 검증 안내](Docs/Validation/Index.md#v02-manual-attack-log)를 사용한다.
