@@ -4,7 +4,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 
 ## 현재 상태
 
-2026-11-07 · **최소 맵 `L_Movement`에서 기본 캐릭터의 WASD 이동과 정지를 로컬 PIE로 확인했다.** 사용자가 `MaxWalkSpeed`를 500에서 300 cm/s로 바꿔 빌드하고 플레이에서 차이를 확인했다. 다음 네트워크 목표는 V01의 독립 서버 접속이다. [현재 카드](Docs/Roadmap.md#next-work) · [이동 구조](Docs/Architecture.md) · [검증 결과](Docs/Validation/Index.md#l00-movement) · [35개 요구](Docs/Development.md#requirement-coverage)
+2026-11-07 · **최소 맵 `L_Movement`에서 기본 캐릭터의 WASD 이동과 정지를 로컬 PIE로 확인했다.** 사용자가 `MaxWalkSpeed`를 500에서 300 cm/s로 바꿔 빌드하고 플레이에서 차이를 확인했다. 소스 UE 5.8.4의 패키지 전용 서버와 전용 Client 2개로 접속·자기 캐릭터 조작·상대 이동·정상 종료를 확인했다. 서버 선종료 감지를 포함한 전체 흐름은 자동 검증 3회를 통과했다. 수동 1회에서도 사용자 이동 복제 관찰과 양쪽 종료 로그를 확인했다. [수동 결과](Docs/Validation/Index.md#v01-manual-result) [V01 반복 근거](Docs/Validation/Index.md#v01-server-shutdown) [현재 카드](Docs/Roadmap.md#next-work) · [이동 구조](Docs/Architecture.md) · [검증 결과](Docs/Validation/Index.md#l00-movement) · [35개 요구](Docs/Development.md#requirement-coverage)
 
 아래 날짜별 내용은 이전 실행 이력이다. 과거4주 목표·미실행 표시는 당시 시점으로 읽고 현재 납기는 Roadmap을 따른다.
 
@@ -31,6 +31,9 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 | [최초 계획 보존본](Docs/Planning/Baseline-20261105.md) | 최초 범위·19일 일정·37강 매핑·완료 기준. 현행 변경과 비교하는 기준 |
 | [검증 색인](Docs/Validation/Index.md) | 시험 기준안·결과와 증거 기록 방식 |
 | [환경 조사](Docs/Validation/Environment.md) | 확인된 도구·환경과 미검증 항목 |
+| [빌드 원리](Docs/Learning/UnrealBuildPipeline.md) · [소스 엔진 선택](Docs/Learning/SourceEngineDecision.md) | CoopRPG의 타깃·모듈·의존성 및 전용 실행물 준비 경로 |
+| [서버 권한과 신뢰 경계](Docs/Architecture.md#server-authority) | 현재 이동 확인 범위와 상자·GAS 판정 설계 |
+| [Windows SDK 혼용 사례](Docs/Cases/V01-WindowsSdkSelection.md) | V01 빌드 로그와 프로젝트별 SDK 관리안 |
 
 `Docs/Cases/`, `Docs/Evidence/`는 실제 구조·사례·증거가 생길 때 추가한다. 빈 자료나 완료 증거를 미리 만들지 않는다. `Docs/X`는 기존 임시 자료의 보관 경로였으며 현재 기준 문서가 아니다. 이번 문서 정비 시 해당 경로는 존재하지 않았고, 이동·삭제 경위는 확인하지 않았다.
 

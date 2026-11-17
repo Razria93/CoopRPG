@@ -1,6 +1,6 @@
 # 환경·기존 자료 조사
 
-갱신: 2026-11-03. **확인 사실과 미검증 범위**를 기록한다. UE 5.8.4의 구성안은 아래 D01-S 절, 노트북의 전체 환경 관측은 실행 환경 재확인 절을 따른다. 이전 시점의 기록은 보존하며 재확인하지 않은 항목을 현재 사실로 승계하지 않는다.
+갱신: 2026-11-07. **확인 사실과 미검증 범위**를 기록한다. UE 5.8.4의 구성안은 아래 D01-S 절, 노트북의 전체 환경 관측은 실행 환경 재확인 절을 따른다. 이전 시점의 기록은 보존하며 재확인하지 않은 항목을 현재 사실로 승계하지 않는다.
 
 ## 문서 사용 기준
 
@@ -8,6 +8,105 @@
 - **포함·경계:** 실제 관측한 도구·장비·경로·자료 검토 범위, 미검증 사항, 향후 검증된 공통 빌드/실행 명령을 관리한다. 환경 채택 결정은 Roadmap, 개별 게임 시험 결과는 해당 검증 기록에 둔다.
 - **최소 양식:** 조사·검토의 기본 순서는 AGENTS를 따르며 관측 날짜·대상·방법·결과·판정 한계를 기존 표나 짧은 기록으로 남긴다. 후속 선택·작업은 Roadmap의 해당 항목을 참조한다. 공통 명령을 추가할 때는 작업 경로·도구/구성·사전 조건·명령·실행 결과를 함께 남기고 후보와 검증된 명령을 구분한다.
 - **검증:** 이관 기록과 이번 관측, 파일 존재와 실행 성공, 조사한 범위와 미확인 범위를 구분한다. 변동 가능한 정보는 사용 전에 필요한 항목만 재확인하며 문서 편집일을 재측정일로 쓰지 않는다. 읽기 조사 결과 확인을 이유로 설치·빌드를 실행하지 않는다.
+
+<a id="v01-source-build"></a>
+## 2026-11-07 · V01용 소스 엔진 패키지 빌드
+
+소스 UE 5.8.4의 Editor·ShaderCompileWorker·UnrealPak·Server·Game 빌드와 Windows/WindowsServer 쿠킹·스테이징을 완료했다. 엔진 경로·입력 해시·실행 검증 및 실패 이력은 [첫 클라이언트 시험](Index.md#v01-first-client)을 따른다.
+
+| 타깃·단계 | 실제 결과 |
+|---|---|
+| CoopRPGEditor | 종료 0 · 3703.87초 |
+| ShaderCompileWorker | 종료 0 · 146.78초 |
+| UnrealPak | 종료 0 · 155.25초 |
+| CoopRPGServer | 종료 0 · 1369.85초 |
+| CoopRPG | 종료 0 · 1397.72초 |
+| Cook·Stage | 종료 0 · BuildCookRun 170.63초 |
+
+이번 빌드는 SDK 10.0.26100.0·최대 4작업·NoUBA를 각 타깃에 지정했다. 약 60분 점검에서 Editor 2711/3724작업, 디스크 여유 307.19GiB, 가용 가상 메모리 62.01GiB를 확인하고 계속했다. 시작/종료 볼륨 여유는 323.66/264.48GiB였으며 전체 볼륨 관측값이다.
+
+### 검증한 빌드 명령
+
+아래 `Input`은 실행 당일 프로젝트의 `.uproject`·Source·Config·Content를 복사하고 원본과 해시를 대조한 폴더다. 이 복사는 열린 설치형 에디터의 DLL 잠금을 피하기 위한 로컬 빌드 입력이다. 다른 실행에서는 새 근거 폴더와 그날의 입력을 사용한다.
+
+```powershell
+$Run = 'C:/CoopRPG/Artifacts/Validation/v01-20261107-100941'
+$Project = "$Run/Input/CoopRPG.uproject"
+$Build = 'C:/UE/5.8.4/Engine/Build/BatchFiles/Build.bat'
+foreach ($Target in @('CoopRPGEditor', 'ShaderCompileWorker', 'UnrealPak', 'CoopRPGServer', 'CoopRPG')) {
+    & $Build $Target Win64 Development "-Project=$Project" -WaitMutex "-WindowsSDKVersion=10.0.26100.0" -MaxParallelActions=4 -NoUBA "-Log=$Run/$Target-ubt.log"
+    if ($LASTEXITCODE -ne 0) { throw "$Target build failed" }
+}
+& 'C:/UE/5.8.4/Engine/Build/BatchFiles/RunUAT.bat' BuildCookRun "-project=$Project" -nop4 -unattended -utf8output -platform=Win64 -serverplatform=Win64 -clientconfig=Development -serverconfig=Development -server -cook -map=/Game/Maps/L_Movement -stage -pak "-stagingdirectory=$Run/Stage" -skipbuildeditor -nodebuginfo
+if ($LASTEXITCODE -ne 0) { throw 'Cook/Stage failed' }
+```
+
+타깃별 실제 인자·빌드 로그·종료 코드는 근거 폴더의 `*-args.json`, `*-build.log`, `*-exit.txt`에 있다. UAT 실제 인자는 `cook-stage-args.json`, 결과는 `cook-stage.log`에 있다. 소스 Editor 기동 중 발생한 로그는 패키지 Server/Game의 결과와 분리했다.
+
+### 검증한 독립 실행
+
+`Stage/WindowsServer/CoopRPG/Binaries/Win64/CoopRPGServer.exe`와 `Stage/Windows/CoopRPG/Binaries/Win64/CoopRPG.exe`를 별도 프로세스로 실행했다. 서버는 기본 서버 맵으로 기동하고 `-MULTIHOME=127.0.0.1 -port=61437`, 클라이언트는 `127.0.0.1:61437`을 사용했다. 각 로그는 `-ABSLOG`로 분리하고 `-LogCmds="LogNetPlayerMovement VeryVerbose"`로 이동 표본을 수집했다.
+
+이번 실행용 `test-deferred-client.ps1`은 프레임 150/180에 W 입력/해제, 130/220에 화면 저장, 270에 클라이언트 종료를 예약했다. 서버 종료는 프레임 1200이다. `measure-movement.ps1`은 접속·지도·서버/클라이언트 변위·최종 XY 차이 10cm 이내·종료 코드 0을 함께 검사한다. 스크립트는 로컬 근거 폴더에 보존했으며 최종 실행의 전체 인자는 `packaged-attempt-3/processes.json`이 원본이다.
+
+<a id="v01-client-build"></a>
+## 2026-11-07 · Client 전용 빌드와 쿠킹
+
+[Client 타깃](../../Game/Source/CoopRPGClient.Target.cs)은 기존 CoopRPG 모듈을 Win64 Development Client로 빌드한다. SDK 10.0.26100.0·최대 4작업·NoUBA로 Client 타깃만 컴파일했다. 1,016개 작업, 1511.61초, 종료 코드 0이며 빌드 receipt의 타깃은 `Client`다. 기존 격리 입력 `Artifacts/Validation/v01-20261107-100941/Input/`의 16개 파일을 저장소와 해시 대조하고 Client 타깃 한 파일을 추가했다.
+
+빌드 완료 후 `RunUAT.bat BuildCookRun`에 `-client -skipbuild -skipbuildeditor -cook -map=/Game/Maps/L_Movement -stage -pak`을 적용했다. WindowsClient Cook·Stage는 62.53초, 종료 코드 0이다. Editor·보조 도구·Game·Server 빌드와 전체 Clean/Rebuild를 실행하지 않았다. 새 `CoopRPGClient.exe`는 해시가 이전 기록과 같은 서버 실행 파일에 접속했다.
+
+명령 전체와 원시 근거는 로컬 `Artifacts/Validation/v01-client-2p-20261107-190037/`의 `build-info.json`, `Client-build.log`, `cook-stage-args.json`, `cook-stage.log`, `test-inputs.json`에 있다. [2클라이언트 시험](Index.md#v01-two-clients)에서 동작을 확인했다.
+
+<a id="source-editor-module-recovery"></a>
+
+## 2026-11-07 · 소스 Editor 모듈 불일치 복구
+
+바로가기는 CoopRPG를 소스 Editor에 전달했다. 소스 Editor의 Build ID는 `2267c8f2-a3ab-43d2-b1c6-c35da9f66378`이고, 기존 프로젝트 Editor 모듈의 Build ID `55116800`은 Launcher 설치본과 일치했다. 로드가 거부되면서 **Missing Modules**가 표시됐다.
+
+`CoopRPGEditor Win64 Development`의 엔진 변경 제한 빌드는 SDK `10.0.26100.0`을 지정한 경우와 `-Module=CoopRPG`로 좁힌 경우 모두 `FailedDueToEngineChange`로 끝났다. 기존 V01 소스 Editor 산출물의 입력 파일 17개와 현재 입력을 SHA-256으로 비교했다. 모두 일치해 Launcher용 산출물 4개를 백업하고 해당 소스 Editor용 DLL·PDB·모듈 매니페스트·빌드 영수증을 복사했다. 새 컴파일은 완료되지 않았으며 C++ 변경 후 빌드는 별도 확인 대상이다.
+
+소스 Editor 직접 기동에서 `L_Movement` 로드와 초기화 19.36초를 확인했다. 자동 종료 명령으로 닫히지 않아 그 시험 프로세스만 제한 시간에 종료했다. 이후 Windows의 기본 `.uproject` 파일 연결로 열어 `C:/UE/5.8.4`의 Editor가 `L_Movement`를 로드하고 12.19초에 초기화를 마친 것을 확인했다. 이 기동에서 CoopRPG 모듈 불일치는 다시 발생하지 않았다.
+
+**근거** · 로컬 `Artifacts/Validation/editor-source-reconnect-20261107-224711/`의 `before-editor.log`, `build.log`, `module-build.log`, `module-reuse.json`, `source-editor-smoke.log`, `association-launch.json`, `association-editor.log`
+
+**관련 문서** · [V01 에디터 실행 안내](Index.md#pie-설정과-프로젝트-엔진-연결)
+
+<a id="explorer-engine-association"></a>
+
+## 2026-11-07 · 탐색기 더블클릭의 엔진 연결 복구
+
+기존 ID는 Windows 사용자 레지스트리에서 조회됐고 같은 Launcher 버전 선택기를 PowerShell에서 호출하면 소스 Editor가 열렸다. 실제 탐색기에서 더블클릭하면 Launcher 선택기가 `/editor`와 올바른 프로젝트 경로를 받아도 버전 선택 창을 띄웠다. 창에 Launcher 버전만 나왔고 기존 등록을 이 경로에서 해석하지 못한 세부 이유는 확인하지 못했다.
+
+그 창의 `…`에서 `C:/UE/5.8.4`를 지정하자 선택기가 새 사용자 등록 ID `{48AED0D4-4E85-6E47-D090-0DB56ECEC04A}`를 생성했다. 프로젝트에는 `EngineAssociation` 한 줄만 남겼다. 탐색기에서 다시 더블클릭해 선택 창 없이 소스 Editor가 `L_Movement`를 열고 초기화한 것을 확인했다. 시험한 사용자 파일 연결과 경로 표기 변경은 원복했다.
+
+**근거** · 로컬 `Artifacts/Validation/editor-explorer-20261107-231247/`의 `before.json`, `result.json`, `explorer-editor.log`
+
+**근거 및 더 읽기** · [V01 에디터 실행 안내](Index.md#pie-설정과-프로젝트-엔진-연결) · [Epic의 Windows 엔진 연결 설명](https://forums.unrealengine.com/t/engine-association-issue/2651662/2)
+
+<a id="editor-incremental-preflight"></a>
+
+## 2026-11-07 · V02 착수 전 Editor 증분 빌드 확인
+
+`C:/UE/5.8.4`에서 `CoopRPGEditor Win64 Development`를 SDK 26100·최대 4작업·NoUBA로 요청했다. `-NoEngineChanges`에서 4.08초에 종료 코드 5(`FailedDueToEngineChange`)를 반환했다. 이후 UBT가 내보낸 계획에는 3,724개 작업이 있다. 엔진 3,716개(컴파일 1,792·링크 1,923·메타데이터 1)와 프로젝트 8개(컴파일 5·링크 2·메타데이터 1)다. 같은 설정과 작업 수의 V01 실측은 3,703.87초(약 62분)였다. 이번에는 **60~90분**을 작업 예산으로 추정하며 빌드 실측은 없다.
+
+`-WriteOutdatedActions`는 컴파일을 실행하지 않았지만, UBT가 계획을 내보내기 전에 기존 `.lib`·`.pdb`·`.tlh` 1,926개를 정리했다. 이 옵션은 기존 산출물 보존이 필요한 확인에 그대로 쓰면 안 된다. 기존 소스 Editor는 `-NullRHI` 시험에서 `L_Movement`를 로드하고 초기화 10.59초 뒤 정상 종료 코드 0을 반환했다. 다음 C++ 빌드에서 링크용 파일과 디버그 심볼을 재생성해야 한다.
+
+**근거** · 로컬 `Artifacts/Validation/editor-incremental-20261107-232852/`의 `guard.log`, `plan-ubt.log`, `outdated-actions.json`, `editor-smoke.log` · [V01 빌드 실측](#v01-source-build)
+
+<a id="editor-build-with-engine-dependencies"></a>
+
+## 2026-11-08 · 엔진 의존 작업 포함 Editor 빌드 완료
+
+`C:/UE/5.8.4`에서 `CoopRPGEditor Win64 Development`를 SDK 26100·최대 4작업·NoUBA로 실행했다. 11월 7일 23:45:28부터 11월 8일 00:45:18까지 3,590.25초(59분 50초)가 걸렸고, 3,724개 작업을 완료해 종료 코드 0을 반환했다. 새 프로젝트 DLL·PDB·빌드 영수증을 확인했고, 프로젝트 모듈과 엔진 매니페스트의 Build ID가 일치했다. 같은 조건에 `-NoEngineChanges`를 추가한 재실행은 4.88초에 추가 작업 0개로 종료 코드 0을 반환했다.
+
+착수 때 커밋된 엔진 ID가 Windows 등록에서 사라져 있었다. Unreal의 설치 목록 조회 코드가 같은 경로의 중복 등록을 정리하는 동작을 확인했다. 이전 등록을 백업한 뒤 소스 엔진 경로를 현재 프로젝트 ID에 한 번만 등록했다. 조사한 경로에서 이전 ID를 참조하는 파일은 보관된 통합 작업 스냅샷에서 확인됐다. 프로젝트 파일은 커밋된 ID를 사용했다.
+
+빌드 뒤 탐색기에서 `.uproject`를 더블클릭했다. 버전 선택 창 없이 소스 Editor가 열렸고, 새 `UnrealEditor-CoopRPG.dll`이 로드된 상태로 `L_Movement`를 열어 초기화 47.87초와 에디터 창 응답을 확인했다. PIE나 패키지 시험은 이 빌드의 판정 범위와 구분한다.
+
+**근거** · 로컬 `Artifacts/Validation/editor-build-20261107-234528/`의 `result.json`, `build.log`, `built-artifacts.json`, `incremental.log`, `explorer-result.json`, `explorer-editor.log`, `registration.json`
+
+**관련 문서** · [V02 착수 전 빌드 확인](#editor-incremental-preflight) · [탐색기 엔진 연결 복구](#explorer-engine-association)
 
 ## CoopRPG 프로젝트 Editor 기동 확인 — 2026-11-03
 
