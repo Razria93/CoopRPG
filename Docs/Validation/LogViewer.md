@@ -321,6 +321,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · [공동 탈출 패키지 시험과 HUD](Index.md#v06-extraction-success)
 
+<a id="round-outcome-logs"></a>
+### 라운드 실패와 중단 로그
+
+서버의 `라운드 실패 확정`은 사망이나 시간초과, `라운드 중단 확정`은 참가자 접속 종료를 표시한다. 두 경우의 팀 점수는 0점이다. 연결이 유지된 클라이언트의 복제 행을 같은 라운드 ID로 대조한다. 서버 판정의 원문에서 `Frame`, `Reason`과 `Disconnect`·`Death`·`Timeout`·`Extraction` 후보 비트를 확인한다.
+
+**근거** · [종료 사유와 우선순위 시험](Index.md#v06-round-outcomes)
+
 <a id="health-subject-labels"></a>
 ### 체력 복제 행의 소유자
 

@@ -15,7 +15,8 @@
 ACoopRPGGameMode::ACoopRPGGameMode()
 {
     PrimaryActorTick.bCanEverTick = true;
-    PrimaryActorTick.TickGroup = TG_PostPhysics;
+    // Evaluate after combat timers and movement have updated the authoritative facts.
+    PrimaryActorTick.TickGroup = TG_PostUpdateWork;
     DefaultPawnClass = ACoopRPGCharacter::StaticClass();
     PlayerControllerClass = ACoopRPGPlayerController::StaticClass();
     GameStateClass = ACoopRPGGameState::StaticClass();
@@ -39,20 +40,32 @@ AActor* ACoopRPGGameMode::GetMeleeTarget() const
 
 void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
 {
+    auto* State = GetGameState<ACoopRPGGameState>();
+    if (!State || State->HasRoundResult() || (bEnemyCombat && State->IsRoundPlaying()))
+    {
+        return;
+    }
+
     int32 Players = 0;
-    int32 ReadyPlayers = 0;
+    TArray<TWeakObjectPtr<ACoopRPGPlayerController>> ReadyPlayers;
     for (auto It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
-        if (const auto* Player = Cast<ACoopRPGPlayerController>(It->Get()); Player && Player != Leaving && Player->GetPawn())
+        if (auto* Player = Cast<ACoopRPGPlayerController>(It->Get()); Player && Player != Leaving && Player->GetPawn())
         {
             ++Players;
-            ReadyPlayers += Player->IsRoundReady() ? 1 : 0;
+            if (Player->IsRoundReady())
+            {
+                ReadyPlayers.Add(Player);
+            }
         }
     }
-    if (auto* State = GetGameState<ACoopRPGGameState>())
+    const bool bAllReady = Players == 2 && ReadyPlayers.Num() == 2;
+    if (bEnemyCombat && bAllReady)
     {
-        State->SetRoundPlaying(Players == 2 && ReadyPlayers == 2);
+        RoundPlayers = MoveTemp(ReadyPlayers);
+        bParticipantDisconnected = false;
     }
+    State->SetRoundPlaying(bAllReady);
 }
 
 void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
@@ -89,32 +102,42 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
     Super::Tick(DeltaSeconds);
 
     auto* State = GetGameState<ACoopRPGGameState>();
-    const ACoopRPGExtractionZone* Zone = State ? State->GetExtractionZone() : nullptr;
-    if (!IsValid(Zone) || !State->IsRoundPlaying() || State->GetTeamLootCount() < 1)
+    if (!bEnemyCombat || !State || !State->IsRoundPlaying())
     {
         return;
     }
 
+    const ACoopRPGExtractionZone* Zone = State->GetExtractionZone();
+    const bool bCanUseZone = IsValid(Zone) && State->GetTeamLootCount() >= 1;
+    bool bDeath = false;
     int32 PlayersInside = 0;
-    int32 Players = 0;
-    for (auto It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    for (const TWeakObjectPtr<ACoopRPGPlayerController>& Participant : RoundPlayers)
     {
-        const auto* Player = Cast<ACoopRPGPlayerController>(It->Get());
-        if (Player)
+        const ACoopRPGPlayerController* Player = Participant.Get();
+        if (!Player)
         {
-            ++Players;
-            const auto* Pawn = Cast<ACoopRPGCharacter>(Player->GetPawn());
-            if (Pawn && Pawn->GetHealth() > 0.0f && Zone->ContainsPawn(*Pawn))
-            {
-                ++PlayersInside;
-            }
+            bParticipantDisconnected = true;
+            continue;
+        }
+
+        const auto* Pawn = Cast<ACoopRPGCharacter>(Player->GetPawn());
+        bDeath |= !Pawn || Pawn->GetHealth() <= 0.0f;
+        if (bCanUseZone && Pawn && Zone->ContainsPawn(*Pawn))
+        {
+            ++PlayersInside;
         }
     }
-    State->UpdateExtraction(Players == 2 && PlayersInside == 2);
+    State->EvaluateRound(bParticipantDisconnected, bDeath, PlayersInside == 2);
 }
 
 void ACoopRPGGameMode::Logout(AController* Exiting)
 {
+    const auto* State = GetGameState<ACoopRPGGameState>();
+    if (bEnemyCombat && State && State->IsRoundPlaying()
+        && RoundPlayers.ContainsByPredicate([Exiting](const auto& Player) { return Player.Get() == Exiting; }))
+    {
+        bParticipantDisconnected = true;
+    }
     Super::Logout(Exiting);
     UpdateLootRoundPhase(Exiting);
 }

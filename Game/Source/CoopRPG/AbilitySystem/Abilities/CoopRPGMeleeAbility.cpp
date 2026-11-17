@@ -5,6 +5,7 @@
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGGameMode.h"
+#include "CoopRPG/GameFramework/CoopRPGGameState.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -93,6 +94,13 @@ void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
         return;
     }
 
+    if (const auto* State = Attacker->GetWorld()->GetGameState<ACoopRPGGameState>(); State && State->HasRoundResult())
+    {
+        LogFailedCheck(ActorInfo, TEXT("NotPlaying"), ANSI_TO_TCHAR(__FUNCTION__));
+        EndAbility(Handle, ActorInfo, ActivationInfo, false, true);
+        return;
+    }
+
     auto* GameMode = Attacker->GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
     AActor* Target = GameMode ? GameMode->GetMeleeTarget() : nullptr;
     const UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target, false);
@@ -173,12 +181,18 @@ void UCoopRPGMeleeAbility::ResolveHit()
     const FGameplayAttribute HealthAttribute = UCoopRPGCombatAttributes::GetHealthAttribute();
     const auto* GameMode = IsValid(Attacker) ? Attacker->GetWorld()->GetAuthGameMode<ACoopRPGGameMode>() : nullptr;
 
+    const auto* State = IsValid(Attacker) ? Attacker->GetWorld()->GetGameState<ACoopRPGGameState>() : nullptr;
+
     const TCHAR* MissReason = nullptr;
     float Distance = 0.0f;
     if (!IsValid(Attacker) || !IsValid(Source)
         || Source->GetNumericAttribute(UCoopRPGCombatAttributes::GetHealthAttribute()) <= 0.0f)
     {
         MissReason = TEXT("AttackerDead");
+    }
+    else if (State && State->HasRoundResult())
+    {
+        MissReason = TEXT("NotPlaying");
     }
     else if (!IsValid(TargetASC) || !GameMode || GameMode->GetMeleeTarget() != Target
         || TargetASC->GetNumericAttribute(HealthAttribute) <= 0.0f)

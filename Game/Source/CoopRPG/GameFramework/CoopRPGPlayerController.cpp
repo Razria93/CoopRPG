@@ -181,7 +181,7 @@ void ACoopRPGPlayerController::RequestChestItem(ECoopRPGChestItem Item)
 void ACoopRPGPlayerController::ServerReadyForRound_Implementation(FGuid RoundId)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    if (bRoundReady || !GetPawn() || !State || !RoundId.IsValid() || State->GetRoundId() != RoundId)
+    if (bRoundReady || !GetPawn() || !State || State->HasRoundResult() || !RoundId.IsValid() || State->GetRoundId() != RoundId)
     {
         return;
     }

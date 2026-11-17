@@ -13,6 +13,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "CoreGlobals.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
@@ -140,6 +141,16 @@ namespace
             }
         }));
 
+    FAutoConsoleCommandWithWorldAndArgs RoundEndCommand(TEXT("Coop.Test.RoundEnd"),
+        TEXT("Coop.Test.RoundEnd timeout|death-timeout|timeout-extraction|death-on-logout"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World); Probe && Args.Num() == 1)
+            {
+                Probe->PrepareRoundEnd(FName(*Args[0]));
+            }
+        }));
+
     FAutoConsoleCommandWithWorldAndArgs SnapshotCommand(TEXT("Coop.Test.Snapshot"),
         TEXT("Coop.Test.Snapshot <label>: log local and server HP/stamina/cooldown."),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
@@ -222,6 +233,14 @@ void UCoopRPGCombatProbeComponent::PositionForExtraction(bool bInside)
     }
 }
 
+void UCoopRPGCombatProbeComponent::PrepareRoundEnd(FName Scenario)
+{
+    if (IsProbeEnabled(GetWorld()))
+    {
+        ServerPrepareRoundEnd(Scenario);
+    }
+}
+
 void UCoopRPGCombatProbeComponent::BeginPlay()
 {
     Super::BeginPlay();
@@ -234,6 +253,9 @@ void UCoopRPGCombatProbeComponent::BeginPlay()
 
 void UCoopRPGCombatProbeComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+    FGameModeEvents::OnGameModeLogoutEvent().RemoveAll(this);
+#endif
     if (UAbilitySystemComponent* Source = GetSource(this))
     {
         Source->RegisterGameplayTagEvent(UCoopRPGMeleeCooldown::GetCooldownTag(), EGameplayTagEventType::NewOrRemoved).RemoveAll(this);
@@ -364,6 +386,75 @@ void UCoopRPGCombatProbeComponent::ServerPositionForExtraction_Implementation(bo
             *CoopRPG::Debug::DescribePlayerRequestContext(Character, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }
+
+void UCoopRPGCombatProbeComponent::ServerPrepareRoundEnd_Implementation(FName Scenario)
+{
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+    if (!IsProbeEnabled(GetWorld()))
+    {
+        return;
+    }
+    auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    UAbilitySystemComponent* Source = GetSource(this);
+    if (!State || !State->IsRoundPlaying() || !IsValid(State->GetExtractionZone()) || !Source)
+    {
+        return;
+    }
+
+    if (Scenario == TEXT("timeout"))
+    {
+        const double Now = State->GetServerWorldTimeSeconds();
+        if (State->RoundStatus.RoundDeadline - Now <= 0.6)
+        {
+            return;
+        }
+        State->RoundStatus.RoundDeadline = Now + 0.6;
+        State->ForceNetUpdate();
+    }
+    else if (Scenario == TEXT("death-timeout"))
+    {
+        State->RoundStatus.RoundDeadline = State->GetServerWorldTimeSeconds();
+        Source->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetHealthAttribute(), 0.0f);
+    }
+    else if (Scenario == TEXT("timeout-extraction") && State->IsExtractionInProgress())
+    {
+        State->RoundStatus.RoundDeadline = State->RoundStatus.ExtractionDeadline;
+        State->ForceNetUpdate();
+    }
+    else if (Scenario == TEXT("death-on-logout"))
+    {
+        auto& Logout = FGameModeEvents::OnGameModeLogoutEvent();
+        Logout.RemoveAll(this);
+        Logout.AddUObject(this, &UCoopRPGCombatProbeComponent::OnPeerLogout);
+    }
+    else
+    {
+        return;
+    }
+
+    UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestRoundEndPrepared Scenario=%s Round=%s Frame=%llu Deadline=%.3f"),
+        *Scenario.ToString().ToLower(), *State->GetRoundId().ToString(), static_cast<unsigned long long>(GFrameCounter),
+        State->RoundStatus.RoundDeadline);
+#endif
+}
+
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+void UCoopRPGCombatProbeComponent::OnPeerLogout(AGameModeBase* Mode, AController* Exiting)
+{
+    const auto* Character = Cast<ACoopRPGCharacter>(GetOwner());
+    const auto* State = Mode && Mode->GetWorld() == GetWorld() ? Mode->GetGameState<ACoopRPGGameState>() : nullptr;
+    if (Character && State && State->IsRoundPlaying() && Exiting != Character->GetController())
+    {
+        FGameModeEvents::OnGameModeLogoutEvent().RemoveAll(this);
+        if (UAbilitySystemComponent* Source = GetSource(this))
+        {
+            Source->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetHealthAttribute(), 0.0f);
+            UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestPeerLogoutDeath Round=%s Frame=%llu"),
+                *State->GetRoundId().ToString(), static_cast<unsigned long long>(GFrameCounter));
+        }
+    }
+}
+#endif
 
 void UCoopRPGCombatProbeComponent::OnCooldownChanged(FGameplayTag Tag, int32 Count)
 {

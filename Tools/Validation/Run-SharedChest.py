@@ -39,6 +39,7 @@ class Case:
         self.macros = path / "Binaries"
         self.macros.mkdir(parents=True)
         self.processes = {}
+        self.expected_exits = set()
         self.checks = []
 
     def start(self, role, args, fps, commands=()):
@@ -74,7 +75,8 @@ class Case:
         while time.monotonic() < limit:
             if predicate():
                 return
-            exited = [role for role, process in self.processes.items() if process.poll() is not None]
+            exited = [role for role, process in self.processes.items()
+                      if process.poll() is not None and (role not in self.expected_exits or process.returncode != 0)]
             if exited:
                 raise RuntimeError(f"Early process exit {exited}: {description}")
             time.sleep(0.02)
