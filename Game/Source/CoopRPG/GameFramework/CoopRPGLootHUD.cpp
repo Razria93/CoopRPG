@@ -3,6 +3,7 @@
 #include "CoopRPGGameState.h"
 #include "CoopRPGPlayerController.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
+#include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
 #include "Engine/Canvas.h"
@@ -28,7 +29,7 @@ void ACoopRPGLootHUD::DrawHUD()
     const bool bShowStock = bPlaying && Chest;
     const int32 RecoveryCount = Controller->GetRecoveryCount();
 
-    DrawRect(FLinearColor(0.02f, 0.04f, 0.08f, 0.90f), Pad, Pad, 306.0f, bShowStock ? 142.0f : 106.0f);
+    DrawRect(FLinearColor(0.02f, 0.04f, 0.08f, 0.90f), Pad, Pad, 306.0f, bShowStock ? 162.0f : 126.0f);
     DrawText(TEXT("SHARED CHEST"), Accent, TextX, Pad + 8.0f, nullptr, 1.15f);
     if (Character)
     {
@@ -38,10 +39,13 @@ void ACoopRPGLootHUD::DrawHUD()
     DrawText(FString::Printf(TEXT("Your recovery items: %d%s"), RecoveryCount,
         RecoveryCount > 0 && bPlaying ? TEXT("   [H] Use") : TEXT("")), FLinearColor::White, TextX, Pad + 51.0f);
 
+    DrawText(FString::Printf(TEXT("Team loot: %d"), State->GetTeamLootCount()),
+        FLinearColor::White, TextX, Pad + 71.0f);
+
     if (!bPlaying)
     {
         DrawText(Controller->IsRoundReady() ? TEXT("Waiting for the other player") : TEXT("R  Ready"),
-            Accent, TextX, Pad + 78.0f);
+            Accent, TextX, Pad + 98.0f);
         return;
     }
 
@@ -51,20 +55,24 @@ void ACoopRPGLootHUD::DrawHUD()
         const int32 Medicines = Chest->GetRecoveryStock();
         DrawText(FString::Printf(TEXT("Melee weapons: %d%s"), Weapons,
             Weapons > 0 && Character && !Character->HasMeleeWeapon() ? TEXT("   [G] Equip") : TEXT("")),
-            FLinearColor::White, TextX, Pad + 76.0f);
+            FLinearColor::White, TextX, Pad + 96.0f);
         DrawText(FString::Printf(TEXT("Recovery items: %d%s"), Medicines,
             Medicines > 0 ? TEXT("   [F] Take") : TEXT("")),
-            FLinearColor::White, TextX, Pad + 96.0f);
+            FLinearColor::White, TextX, Pad + 116.0f);
         DrawText(Weapons == 0 && Medicines == 0 ? TEXT("Chest empty   |   Q  Close") : TEXT("Q  Close"),
-            Accent, TextX, Pad + 116.0f);
+            Accent, TextX, Pad + 136.0f);
         return;
     }
 
-    DrawText(TEXT("Approach the chest and press E"), Accent, TextX, Pad + 78.0f);
-    const FVector Screen = Project(State->GetSharedChest()->GetActorLocation() + FVector(0, 0, 40.0f));
+    const ACoopRPGEnemyLoot* Drop = State->GetEnemyLoot();
+    const bool bShowDrop = IsValid(Drop) && !Drop->IsClaimed();
+    DrawText(bShowDrop ? TEXT("Approach enemy loot and press T") : TEXT("Approach the chest and press E"),
+        Accent, TextX, Pad + 98.0f);
+    const FVector Location = bShowDrop ? Drop->GetActorLocation() : State->GetSharedChest()->GetActorLocation();
+    const FVector Screen = Project(Location + FVector(0, 0, 40.0f));
     if (Screen.Z > 0.0f && Screen.X >= 0.0f && Screen.X < Canvas->ClipX - 60.0f
         && Screen.Y >= 0.0f && Screen.Y < Canvas->ClipY)
     {
-        DrawText(TEXT("Chest"), Accent, Screen.X, Screen.Y);
+        DrawText(bShowDrop ? TEXT("Enemy loot") : TEXT("Chest"), Accent, Screen.X, Screen.Y);
     }
 }

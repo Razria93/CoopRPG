@@ -54,6 +54,13 @@ private:
     UFUNCTION(Server, Reliable)
     void ServerUseRecovery(FGuid RoundId);
 
+    void TakeEnemyLoot();
+
+    UFUNCTION(Server, Reliable)
+    void ServerTakeEnemyLoot(FGuid RoundId, FGuid DropId);
+
+    const TCHAR* GetEnemyLootRejection(FGuid RoundId, FGuid DropId) const;
+
     void LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId) const;
 
     const TCHAR* GetChestRejection(const ACoopRPGSharedChest* Chest, FGuid RoundId) const;

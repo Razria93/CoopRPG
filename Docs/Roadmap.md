@@ -18,7 +18,7 @@
 - 도구: 사용자 채택 UE5.8.4 공식 소스 f45729c0b6f097038e72b52d366a62baeca3275b, 기존 VS2022 17.14.14·MSVC14.44.35216·SDK26100·UE 동봉 .NET10.0.203. 새 Server/Game 빌드 전 공간·도구 재확인.
 - 운영 원본: [Development](Development.md). 최초 계획은 [Baseline](Planning/Baseline-20261105.md), 목적·게임 규칙은 [Project](Project.md#mvp-scope), 시험은 [Validation](Validation/Index.md#active-tests).
 - 11월5일 운영 검증: 저장소 검사6개와 요구/이력 보존 대조13개 통과. 세부 결과·한계는 [U4 결과](Validation/Index.md#operating-integration)와 [R004](Development.md#integration-result)를 따른다.
-- 현재 기능 결과는 [V04 현행 카드](#v04-current-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
+- 현재 기능 결과는 [V05 팀 전리품 카드](#v05-team-loot-card)와 실제 시험을 따른다. V02 비용·쿨다운·로그 도구의 로컬 기준점은 `9a7f8cd`다. 지연·손실과 실제 충돌 중복, 라운드 연계는 후속 범위다. 사용자가 정한 7단계 목표는 [구현 순서](#mvp-implementation-order)에서 확인한다.
 
 <a id="integration-decision"></a>
 ## 2026-11-05 운영 기준 통합 결정
@@ -91,13 +91,13 @@
 - **다음:** [사용자가 두 Client에서 취소와 재공격을 재현했다](Validation/Index.md#v03-user-manual-result). 공용 상자의 동시 열람과 마지막 회복약 단일 지급을 다음 게임 기능으로 연결한다. 적 피격·사망 및 라운드가 들어올 때 취소 경합과 상태 정리를 확인한다. [7단계 구현 순서](#mvp-implementation-order)
 
 <a id="v04-current-card"></a>
-### 현재 작업 · V04 적 전투 · 2026-11-16
+### 이전 작업 · V04 적 전투 · 2026-11-16
 
 - **확인:** 같은 맵의 전용 서버와 두 클라이언트에서 적 탐지·추격·이동 복제, 사거리 이탈 무피해, 실제 피격과 회복약 소모, 장착 플레이어의 반격을 확인했다. [자동 시험](Validation/Index.md#v04-enemy-first-combat)
 - **사용자 확인:** 사거리 밖 무피해와 실제 피격 뒤 HP `60→90`·회복약 `1→0`을 재현했다. [수동 검증](Validation/Index.md#v04-enemy-combat-user-result)
 - **표시 보완:** 체력 복제 행의 소유자를 표시하고 새 패키지의 두 클라이언트에서 실제 PlayerId를 확인했다. [Before/After와 자동 검증](Validation/Index.md#v04-health-subject-attribution) · [사용자 양쪽 표시 확인](Validation/Index.md#v04-health-subject-user-result)
 - **확인:** 두 플레이어의 마지막 타격이 겹친 두 회차에서 사망·전리품 생성이 각각 1회였다. 사망 뒤 추가 피해가 없고 양쪽의 전리품 ID가 일치했다. [자동 시험](Validation/Index.md#v04-death-loot-once) · [버튼 실행 사용자 확인](Validation/Index.md#v04-death-loot-button-user-result)
-- **다음:** V05 적 전리품 획득을 연결한다. 두 클라이언트가 같은 전리품을 요청할 때 한 건만 유효하게 처리하고 팀 수량이 양쪽에 한 번 반영되는지 확인한다.
+- **연계:** [V05 적 전리품 팀 지급](#v05-team-loot-card)에서 획득과 양쪽 팀 수량 복제를 확인했다.
 
 <a id="v05-current-card"></a>
 ### 이전 작업 · V05 공용 상자·장착·회복 · 2026-11-16
@@ -107,6 +107,14 @@
 - **완료:** 전용 서버와 두 클라이언트에서 각자 무기 지급·장착, 미장착 공격 거절, 장착 후 적중, 회복약 사용·소모와 최대 HP·소진 거절을 확인했다. [자동 실행 근거](Validation/Index.md#v05-equipment-recovery)
 - **사용자 확인:** 각자 무기 1개·장착 후 적중과 회복약 HP `70→100`·소지량 `1→0`을 수동 재현했다. [수동 실행 근거](Validation/Index.md#v05-equipment-recovery-user-result)
 - **연계:** [V04 적 전투](#v04-current-card)에 장착과 회복약을 연결했다. 라운드 교체·재전달은 후속 통합 시험이다.
+
+<a id="v05-team-loot-card"></a>
+### 현재 작업 · V05 적 전리품 팀 지급 · 2026-11-16
+
+- **확인:** 전용 서버가 같은 드롭을 요청한 두 클라이언트 중 먼저 처리한 유효 요청에서 팀 수량을 1로 올렸다. 거리 거절과 같은 전리품 재요청은 수량을 바꾸지 않았고 양쪽이 팀 수량 1을 받았다. [자동 결과와 버튼](Validation/Index.md#v05-enemy-loot-team)
+- **사용자 확인:** 버튼으로 경합을 실행하고 뷰어 근거를 저장했다. Excel·원본 로그에서 서버 지급 1회와 양쪽 수량 1을 확인했다. [사용자 재현](Validation/Index.md#v05-enemy-loot-user-result)
+- **남은 확인:** 새 라운드로 넘어갈 때 전리품·팀 수량 초기화와 이전 라운드 요청 거절은 V06 연계 시험으로 확인한다.
+- **다음:** 팀 수량을 공동 탈출 조건에 연결한다. 두 사람이 생존한 채 탈출 구역을 유지하면 서버가 성공·점수를 한 번 확정하고 두 클라이언트에 전달하는 것부터 시험한다. [구현 순서](#mvp-implementation-order) · [게임 규칙](Project.md#game-rules)
 
 ### 이전 작업 · OPS-PLAN-01 · 작업 판단 가이드와 계획 스킬
 

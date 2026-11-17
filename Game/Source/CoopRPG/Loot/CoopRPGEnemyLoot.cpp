@@ -25,6 +25,20 @@ void ACoopRPGEnemyLoot::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGEnemyLoot, DropId);
+    DOREPLIFETIME(ACoopRPGEnemyLoot, bClaimed);
+}
+
+bool ACoopRPGEnemyLoot::TryClaim()
+{
+    if (!HasAuthority() || bClaimed)
+    {
+        return false;
+    }
+
+    bClaimed = true;
+    ApplyClaimPresentation();
+    ForceNetUpdate();
+    return true;
 }
 
 void ACoopRPGEnemyLoot::BeginPlay()
@@ -40,4 +54,16 @@ void ACoopRPGEnemyLoot::OnRep_DropId()
 {
     UE_LOG(LogCoopRPGEnemyLoot, Log, TEXT("EnemyLootReplicated Actor=%s DropId=%s %s"),
         *GetName(), *DropId.ToString(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGEnemyLoot::OnRep_Claimed()
+{
+    ApplyClaimPresentation();
+    UE_LOG(LogCoopRPGEnemyLoot, Log, TEXT("EnemyLootClaimReplicated DropId=%s Claimed=%d %s"),
+        *DropId.ToString(), bClaimed ? 1 : 0, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGEnemyLoot::ApplyClaimPresentation()
+{
+    GetRootComponent()->SetVisibility(!bClaimed, true);
 }

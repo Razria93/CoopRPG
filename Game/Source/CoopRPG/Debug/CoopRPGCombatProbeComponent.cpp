@@ -5,14 +5,17 @@
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
-#include "CoopRPG/GameFramework/CoopRPGGameMode.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
+#include "CoopRPG/GameFramework/CoopRPGGameMode.h"
+#include "CoopRPG/GameFramework/CoopRPGGameState.h"
+#include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 #include "InputKeyEventArgs.h"
@@ -114,6 +117,17 @@ namespace
             }
         }));
 
+    FAutoConsoleCommandWithWorldAndArgs LootPositionCommand(TEXT("Coop.Test.LootPosition"),
+        TEXT("Coop.Test.LootPosition near|far: place the owned Pawn for an enemy loot range test."),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World);
+                Probe && Args.Num() == 1 && (Args[0] == TEXT("near") || Args[0] == TEXT("far")))
+            {
+                Probe->PositionForEnemyLoot(Args[0] == TEXT("near"));
+            }
+        }));
+
     FAutoConsoleCommandWithWorldAndArgs SnapshotCommand(TEXT("Coop.Test.Snapshot"),
         TEXT("Coop.Test.Snapshot <label>: log local and server HP/stamina/cooldown."),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
@@ -177,6 +191,14 @@ void UCoopRPGCombatProbeComponent::ConfirmTwice()
     if (IsProbeEnabled(GetWorld()))
     {
         ServerConfirmTwice();
+    }
+}
+
+void UCoopRPGCombatProbeComponent::PositionForEnemyLoot(bool bNear)
+{
+    if (IsProbeEnabled(GetWorld()))
+    {
+        ServerPositionForEnemyLoot(bNear);
     }
 }
 
@@ -264,6 +286,34 @@ void UCoopRPGCombatProbeComponent::ServerConfirmTwice_Implementation()
         UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestDuplicateConfirmation Actor=%s Attempts=2"), *GetNameSafe(GetOwner()));
         Melee->ResolveHit();
         Melee->ResolveHit();
+    }
+}
+
+void UCoopRPGCombatProbeComponent::ServerPositionForEnemyLoot_Implementation(bool bNear)
+{
+    if (!IsProbeEnabled(GetWorld()))
+    {
+        return;
+    }
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const ACoopRPGEnemyLoot* Loot = State ? State->GetEnemyLoot() : nullptr;
+    auto* Character = Cast<ACoopRPGCharacter>(GetOwner());
+    const APlayerState* PlayerState = Character ? Character->GetPlayerState() : nullptr;
+    if (!IsValid(Loot) || !PlayerState || Character->GetHealth() <= 0.0f)
+    {
+        return;
+    }
+
+    const float Side = PlayerState->GetPlayerId() % 2 == 0 ? -1.0f : 1.0f;
+    const FVector Origin = Loot->GetActorLocation();
+    const FVector Destination(Origin.X, Origin.Y + Side * (bNear ? 120.0f : 450.0f), Character->GetActorLocation().Z);
+    if (Character->TeleportTo(Destination, Character->GetActorRotation()))
+    {
+        UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestEnemyLootPosition Position=%s DropId=%s Distance=%.2f %s"),
+            bNear ? TEXT("Near") : TEXT("Far"), *Loot->GetDropId().ToString(),
+            FVector::Dist(Character->GetActorLocation(), Origin),
+            *CoopRPG::Debug::DescribePlayerRequestContext(Character, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }
 

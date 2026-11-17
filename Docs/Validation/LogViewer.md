@@ -305,6 +305,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Valida
 
 **근거** · [두 타격 경합 원본 결과](Index.md#v04-death-loot-once) · [전리품 ID OnRep](../../Game/Source/CoopRPG/Loot/CoopRPGEnemyLoot.cpp)
 
+<a id="enemy-loot-team-logs"></a>
+### 적 전리품 팀 지급 로그
+
+클라이언트의 `적 전리품 획득 RPC 호출`에서 ID를 확인한다. 서버의 `적 전리품 팀 지급`은 요청자와 팀 수량 `0 → 1`을 보여준다. `적 전리품 획득 거절`은 `거리 초과` 또는 `이미 지급됨`과 판정 당시의 팀 수량을 표시한다.
+
+양쪽 클라이언트에서 `적 전리품 획득 상태 복제`의 ID를 서버와 대조한다. `팀 전리품 수량 복제`는 GameState에서 관찰한 팀 전체 수량 변화다. 전리품 상태와 팀 수량은 서로 다른 Actor에서 관찰되므로 각 행의 도착 순서가 달라질 수 있다.
+
+**근거** · [자동·버튼 검증 안내](Index.md#v05-enemy-loot-team) · [뷰어 파서](../../Tools/Validation/CombatLogReader.psm1)
+
 <a id="health-subject-labels"></a>
 ### 체력 복제 행의 소유자
 

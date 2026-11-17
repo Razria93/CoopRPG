@@ -4,6 +4,7 @@
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGRecoveryEffect.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
+#include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 #include "CoopRPGGameMode.h"
 #include "CoopRPGGameState.h"
@@ -22,6 +23,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGManualInput, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGChestRequest, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundReady, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEnemyLootRequest, Log, All);
 
 void ACoopRPGPlayerController::ReceivedPlayer()
 {
@@ -103,6 +105,7 @@ void ACoopRPGPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACoopRPGPlayerController::TakeRecoveryItem);
     InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ACoopRPGPlayerController::TakeMeleeWeapon);
     InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACoopRPGPlayerController::UseRecoveryItem);
+    InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ACoopRPGPlayerController::TakeEnemyLoot);
 }
 
 void ACoopRPGPlayerController::ReadyForRound()
@@ -360,6 +363,67 @@ void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId)
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("RecoveryUsed Round=%s HP=%.2f->%.2f Recovery=%d->%d %s"),
         *RoundId.ToString(), HealthBefore, HealthAfter, CountBefore, RecoveryCount,
         *CoopRPG::Debug::DescribePlayerRequestContext(CurrentCharacter, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::TakeEnemyLoot()
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const ACoopRPGEnemyLoot* Drop = State ? State->GetEnemyLoot() : nullptr;
+    if (IsValid(Drop) && State->GetRoundId().IsValid() && Drop->GetDropId().IsValid())
+    {
+        UE_LOG(LogCoopRPGEnemyLootRequest, Log, TEXT("EnemyLootTakeRequested Round=%s DropId=%s %s"),
+            *State->GetRoundId().ToString(), *Drop->GetDropId().ToString(),
+            *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        ServerTakeEnemyLoot(State->GetRoundId(), Drop->GetDropId());
+    }
+}
+
+void ACoopRPGPlayerController::ServerTakeEnemyLoot_Implementation(FGuid RoundId, FGuid DropId)
+{
+    auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const int32 Before = State ? State->GetTeamLootCount() : 0;
+    const FString Context = CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__));
+    const TCHAR* Failure = GetEnemyLootRejection(RoundId, DropId);
+    if (!Failure && State->TryGrantEnemyLoot(State->GetEnemyLoot()))
+    {
+        UE_LOG(LogCoopRPGEnemyLootRequest, Log, TEXT("EnemyLootGranted Round=%s DropId=%s TeamLoot=%d->%d %s"),
+            *RoundId.ToString(), *DropId.ToString(), Before, State->GetTeamLootCount(), *Context);
+        return;
+    }
+
+    UE_LOG(LogCoopRPGEnemyLootRequest, Log, TEXT("EnemyLootRejected Round=%s DropId=%s Reason=%s TeamLoot=%d %s"),
+        *RoundId.ToString(), *DropId.ToString(), Failure ? Failure : TEXT("AlreadyClaimed"), Before, *Context);
+}
+
+const TCHAR* ACoopRPGPlayerController::GetEnemyLootRejection(FGuid RoundId, FGuid DropId) const
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId)
+    {
+        return TEXT("WrongRound");
+    }
+    if (!State->IsRoundPlaying())
+    {
+        return TEXT("NotPlaying");
+    }
+
+    const ACoopRPGEnemyLoot* Drop = State->GetEnemyLoot();
+    if (!IsValid(Drop) || !DropId.IsValid() || Drop->GetDropId() != DropId)
+    {
+        return TEXT("InvalidDrop");
+    }
+
+    const auto* CurrentCharacter = Cast<ACoopRPGCharacter>(GetPawn());
+    if (!CurrentCharacter || CurrentCharacter->GetHealth() <= 0.0f)
+    {
+        return TEXT("NotAlive");
+    }
+    if (FVector::DistSquared(CurrentCharacter->GetActorLocation(), Drop->GetActorLocation())
+        > FMath::Square(ACoopRPGEnemyLoot::PickupRangeCm))
+    {
+        return TEXT("OutOfRange");
+    }
+    return Drop->IsClaimed() ? TEXT("AlreadyClaimed") : nullptr;
 }
 
 void ACoopRPGPlayerController::LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId) const
