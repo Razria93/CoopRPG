@@ -13,6 +13,7 @@ public:
     UCoopRPGCombatAttributes();
 
     static constexpr float MaxHealth = 100.0f;
+    static constexpr float MaxStamina = 100.0f;
 
     GAMEPLAYATTRIBUTE_PROPERTY_GETTER(UCoopRPGCombatAttributes, Health)
     GAMEPLAYATTRIBUTE_VALUE_GETTER(Health)

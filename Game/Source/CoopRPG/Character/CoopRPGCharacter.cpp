@@ -147,6 +147,11 @@ float ACoopRPGCharacter::GetHealth() const
     return CombatAttributes->GetHealth();
 }
 
+float ACoopRPGCharacter::GetStamina() const
+{
+    return CombatAttributes->GetStamina();
+}
+
 void ACoopRPGCharacter::EquipMeleeWeapon()
 {
     if (HasAuthority() && !bHasMeleeWeapon)

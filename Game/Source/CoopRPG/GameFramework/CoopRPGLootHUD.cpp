@@ -338,20 +338,25 @@ void ACoopRPGLootHUD::DrawHUD()
 
     const ACoopRPGExtractionZone* Zone = State->GetExtractionZone();
     const bool bShowExtraction = IsValid(Zone) && State->GetTeamLootCount() > 0;
-    const float PanelHeight = bShowStock ? (bShowExtraction ? 182.0f : 162.0f) : 126.0f;
+    constexpr float MeleeRowHeight = 20.0f;
+    const float PanelHeight = (bShowStock ? (bShowExtraction ? 182.0f : 162.0f) : 126.0f) + MeleeRowHeight;
+    const float InventoryY = Pad + MeleeRowHeight;
     const bool bShowRoundClock = IsValid(Zone);
     DrawRect(PanelBackground, Pad, Pad, 306.0f, PanelHeight + (bShowRoundClock ? 20.0f : 0.0f));
     DrawText(TEXT("SHARED CHEST"), Accent, TextX, Pad + 8.0f, nullptr, 1.15f);
     if (Character)
     {
-        DrawText(FString::Printf(TEXT("HP: %.0f   |   Melee: %s"), Character->GetHealth(),
-            Character->HasMeleeWeapon() ? TEXT("Equipped") : TEXT("Unarmed")), FLinearColor::White, TextX, Pad + 31.0f);
+        DrawText(FString::Printf(TEXT("HP: %d/%d | SP: %d/%d"), FMath::CeilToInt(Character->GetHealth()),
+            static_cast<int32>(UCoopRPGCombatAttributes::MaxHealth), FMath::CeilToInt(Character->GetStamina()),
+            static_cast<int32>(UCoopRPGCombatAttributes::MaxStamina)), FLinearColor::White, TextX, Pad + 31.0f);
+        DrawText(Character->HasMeleeWeapon() ? TEXT("Melee: Equipped") : TEXT("Melee: Unarmed"),
+            FLinearColor::White, TextX, Pad + 51.0f);
     }
     DrawText(FString::Printf(TEXT("Your recovery items: %d%s"), RecoveryCount,
-        RecoveryCount > 0 ? TEXT("   [H] Use") : TEXT("")), FLinearColor::White, TextX, Pad + 51.0f);
+        RecoveryCount > 0 ? TEXT("   [H] Use") : TEXT("")), FLinearColor::White, TextX, InventoryY + 51.0f);
 
     DrawText(FString::Printf(TEXT("Team loot: %d"), State->GetTeamLootCount()),
-        FLinearColor::White, TextX, Pad + 71.0f);
+        FLinearColor::White, TextX, InventoryY + 71.0f);
 
     if (bShowRoundClock)
     {
@@ -360,7 +365,7 @@ void ACoopRPGLootHUD::DrawHUD()
             FLinearColor::White, TextX, Pad + PanelHeight - 4.0f);
     }
 
-    DrawExtractionStatus(*State, Pad + (bShowStock ? 156.0f : 98.0f));
+    DrawExtractionStatus(*State, InventoryY + (bShowStock ? 156.0f : 98.0f));
 
     if (bShowStock)
     {
@@ -368,12 +373,12 @@ void ACoopRPGLootHUD::DrawHUD()
         const int32 Medicines = Chest->GetRecoveryStock();
         DrawText(FString::Printf(TEXT("Melee weapons: %d%s"), Weapons,
             Weapons > 0 && Character && !Character->HasMeleeWeapon() ? TEXT("   [G] Equip") : TEXT("")),
-            FLinearColor::White, TextX, Pad + 96.0f);
+            FLinearColor::White, TextX, InventoryY + 96.0f);
         DrawText(FString::Printf(TEXT("Recovery items: %d%s"), Medicines,
             Medicines > 0 ? TEXT("   [F] Take") : TEXT("")),
-            FLinearColor::White, TextX, Pad + 116.0f);
+            FLinearColor::White, TextX, InventoryY + 116.0f);
         DrawText(Weapons == 0 && Medicines == 0 ? TEXT("Chest empty   |   Q  Close") : TEXT("Q  Close"),
-            Accent, TextX, Pad + 136.0f);
+            Accent, TextX, InventoryY + 136.0f);
         return;
     }
 
@@ -385,7 +390,7 @@ void ACoopRPGLootHUD::DrawHUD()
     const ACoopRPGEnemyLoot* Drop = State->GetEnemyLoot();
     const bool bShowDrop = IsValid(Drop) && !Drop->IsClaimed();
     DrawText(bShowDrop ? TEXT("Approach enemy loot and press T") : TEXT("Approach the chest and press E"),
-        Accent, TextX, Pad + 98.0f);
+        Accent, TextX, InventoryY + 98.0f);
     const FVector Location = bShowDrop ? Drop->GetActorLocation() : State->GetSharedChest()->GetActorLocation();
     const FVector Screen = Project(Location + FVector(0, 0, 40.0f));
     if (Screen.Z > 0.0f && Screen.X >= 0.0f && Screen.X < Canvas->ClipX - 60.0f

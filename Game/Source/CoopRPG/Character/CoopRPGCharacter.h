@@ -24,6 +24,7 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     float GetHealth() const;
+    float GetStamina() const;
     bool HasMeleeWeapon() const { return bHasMeleeWeapon; }
     void EquipMeleeWeapon();
     int32 GetDisplaySlot() const { return DisplaySlot; }
