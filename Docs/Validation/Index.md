@@ -1797,6 +1797,151 @@ Win64 Development 전용 서버 38.67초, 클라이언트 39.23초 증분 빌드
 - `delay` · chest `v08/delay/chest-isolated/` · cancel `v08/delay/cancel-recheck/` · extraction `v08/delay/extraction-recheck/` · rtt `v08/delay/rtt/`
 - `loss` · chest `v08/loss/chest-isolated/` · cancel `v08/loss/cancel/` · extraction `v08/loss/extraction/` · rtt `v08/loss/rtt/`
 
+<a id="v08-delay-chest-sequential"></a>
+### 100ms 수신 지연 경합 5회 순차 재검증 · 2026-11-17
+
+동일 제출 후보 `62ce6ae`에서 전용 서버 1개와 클라이언트 2개를 회차마다 새로 실행했다. 한 회차가 종료된 뒤 다음 회차를 시작했다. 두 클라이언트의 `PktIncomingLagMin`과 `PktIncomingLagMax`는 100ms, 서버는 기본 설정이었다. 모든 회차의 로그는 `LogCoopRPGInput Verbose`를 사용하고 패킷 단위 `LogNet VeryVerbose`는 끄는 동일 설정을 사용했다. 이전 판정은 [제출 후보 첫 검증](#submission-candidate)에 있다.
+
+각 회차에서 두 사람이 같은 상자를 열고 마지막 회복약을 요청했다. 서버는 먼저 처리한 유효 요청에만 1개 지급했다. 서버 지급 로그에서 각 재고·수령자 수량 복제 로그까지 같은 PC 시각으로 계산했다. 요청 경합 간격은 서버의 두 판정 사이 시간이다.
+
+| 회차 | 수령자 | 요청 경합 간격 | A 재고 0 | B 재고 0 | 수령자 수량 1 |
+| --- | --- | --- | --- | --- | --- |
+| `01-a` | A | 100ms | 0.122초 | 0.111초 | 0.111초 |
+| `02-b` | B | 101ms | 0.109초 | 0.120초 | 0.109초 |
+| `03-a` | A | 109ms | 0.161초 | 0.135초 | 0.150초 |
+| `04-b` | B | 100ms | 0.111초 | 0.174초 | 0.163초 |
+| `05-a` | A | 101ms | 0.147초 | 0.139초 | 0.136초 |
+
+5회 모두 한 명만 수령했고 양쪽 상자 재고는 0이었다. 최대 수렴 시간은 0.174초로 3초 기준을 충족했다. 각 회차의 서버와 두 클라이언트는 정상 종료했다. 제출 후보의 게임 실행 파일과 쿠킹 콘텐츠 해시를 시험 전후 확인했다. 사용자에게는 README로 직접 기동한 뒤 사망·0점과 다음 맵 재준비를 확인하는 절차를 별도로 안내했다.
+
+**근거** · 로컬 `Artifacts/Validation/v07-submission-20261117-090155/v08/delay/chest-isolated-final-01/`의 `summary.json`과 각 회차의 `server.log`·`a.log`·`b.log`, `convergence.json`, `network.json`, `processes.json`.
+
+<a id="v07-hp-nameplates-final"></a>
+## P1·P2·Enemy HP 이름표와 최종 후보 재검증 · 2026-11-17
+
+### 플레이 화면과 채택 기준
+
+P1·P2와 살아 있는 적의 이름표에 `현재 HP/최대 HP`를 표시한다. 현재 HP는 각 클라이언트에 복제된 GAS 속성에서 읽고 최대 HP는 공용 기준값 100을 사용한다. P1·P2 이름표를 왼쪽으로 10px 옮겨, 같은 플레이어의 `Recovery item used` 알림이 HP 끝을 가리던 화면을 보완했다. 간격 변경은 이름표에 적용했고 아이템 알림은 캐릭터 오른쪽 32px에 표시한다.
+
+두 캐릭터가 나란히 붙은 시작 지점과 근접 교전에서 서로 다른 객체의 이름표나 일시적인 전투 문구가 일부 겹쳤다. 라운드 초기화는 양쪽 화면을 함께 대조했다. 조정 전 후보의 자동 조작은 돌아온 맵에서 B 창에 포커스를 잡지 못해 중단됐고, 최종 후보를 재실행할 때 전면 전환을 재시도한 뒤 두 명의 준비까지 완료했다.
+
+| 항목 | 전용 서버와 두 클라이언트에서 확인한 결과 | 증거 |
+| --- | --- | --- |
+| P1·P2 피격과 회복 | P1과 P2를 각각 피격 대상으로 실행했다. 두 화면에서 해당 플레이어가 `100/100 → 90/100 → 100/100`으로 바뀌었다. 반대편 플레이어의 HP는 해당 피격·회복에 따라 변하지 않았다. | `hp-target-a/`, `hp-target-b/`의 `damaged-*.png`·`recovered-*.png`와 `HealthReplicated` |
+| 적 피격·사망 | `Enemy 100/100 → 90/100`을 양쪽에서 관찰했다. 기본 완주에서 적 사망이 양쪽에 복제됐고 적 이름표가 사라졌다. | `hp-target-a/`, `hp-target-b/`의 `initial-*.png`·`enemy-damaged-*.png`, `fresh/manual-20261117-101522-744/enemy-defeated-*.png`와 `EnemyDeathReplicated` |
+| 플레이어 사망·초기화 | 적에게 피격된 P1의 HP가 `0/100`이 되고 사망·0점이 양쪽에 표시됐다. 새 맵에서 플레이어 HP가 `100/100`으로 초기화되고 두 명이 `R`로 다시 준비했다. | `fresh/manual-20261117-101522-744/death-result-*.png`·`next-waiting-*.png`·`ready-again-*.png`, `HealthReplicated`, `RoundResultReplicated`, `RoundReadySlotsReplicated` |
+
+### README 기동과 기본 완주
+
+Git `d9d4989` 위 HP 이름표 소스 3개 변경으로 UE 5.8.4 Win64 Development 전용 서버(31.59초)와 클라이언트(34.75초)를 빌드했다. 기존 쿠킹 콘텐츠를 재사용했다. `fresh/Stage` 복사본 127개의 SHA-256을 실행 전에 원본과 대조했다. 실행 후 다르게 기록된 값은 클라이언트 설정의 `CachedClientID`였다. 게임 실행 파일과 패키지 콘텐츠 해시는 일치했다. 후보 식별은 `candidate-manifest.json`과 `hp-submission-audit.json`에서 확인한다.
+
+새 폴더에서 [README 기동 명령](../../README.md#submission-start)을 실행했다. 전용 서버·두 클라·뷰어가 열린 첫 세션을 종료하고 같은 명령으로 새 포트에 재접속했다. 일반 키·마우스 입력으로 두 사람의 무기 획득, 적 처치, 팀 전리품 1회 획득, 탈출 3.002초·1점, 다음 맵 재준비를 확인했다. 두 번째 회차에서 적의 공격으로 사망·0점을 확정한 뒤 세 번째 회차에서 다시 준비했다. 마지막에 이번 네 프로세스를 종료했다.
+
+### V08 핵심 세 시나리오
+
+같은 후보를 루프백에서 사용했다. 기본 조건의 서버에 클라이언트 A·B를 연결하고, 두 클라이언트의 수신에만 `PktIncomingLagMin=100` 및 `PktIncomingLagMax=100`, 또는 `PktIncomingLoss=1`을 적용했다. RTT는 같은 조건의 별도 접속에서 A·B의 NetPing `Current` 중앙값을 썼다. 엔진 지연·드롭 수는 패킷 로그를 활성화한 회차에서 관찰한 수다.
+
+| 조건 | 마지막 회복약 경합 | 타격 직전 취소 | 탈출 직전 이탈·재진입 | RTT와 패킷 계측(A / B) |
+| --- | --- | --- | --- | --- |
+| 기본 | 5/5 · A 3, B 2 | 10/10 | 2.209초에 초기화 · 새 3.009초 뒤 성공 1점 | 41.7 / 42.66ms · 기본 |
+| 수신 지연 100ms | 5/5 · A 3, B 2 | 10/10 | 2.252초에 초기화 · 새 3.013초 뒤 성공 1점 | 153.45 / 155.21ms · 기록된 지연 1,688 / 1,759개 |
+| 수신 손실 1% | 5/5 · A 3, B 2 | 10/10 | 2.289초에 초기화 · 새 3.008초 뒤 성공 1점 | 45.02 / 42.85ms · 기록된 드롭 12 / 20개 |
+
+경합에서 한 명에게 1개 지급하고 양쪽 상자 재고가 0으로 수렴했다. 취소 후 피해는 0이었고 스태미나 비용 10과 쿨다운은 유지됐다. 이후 정상 공격의 표적 HP가 양쪽에 복제됐다. 탈출은 이탈 시 진행을 초기화하고 재진입 후 새 카운트가 끝나 성공 1점을 확정했다. 세 조건에서 상자 재고·수령 수량과 탈출 결과의 최대 관찰 수렴 시간은 0.194초였다. [이전 후보의 병렬 경합 3회와 기존 결과](#submission-candidate)
+
+100ms 지연 탈출의 첫 실행은 두 클라이언트의 진행 표시를 받은 뒤 고정 시간만큼 기다려 이동했다. 서버가 이탈을 받기 전에 3초 유지가 끝났으므로 요구한 이탈 시험을 재현하지 못했다. 첫 실행은 `v08/delay/extraction/`에 남겼다. 재시험은 서버 탈출 시작 로그를 기준으로 키 입력을 예약하고, 서버에서 2초 이상 3초 미만에 실제 이탈로 진행을 초기화했는지 확인했다.
+
+#### 수신 지연 100ms 경합 5회 순차 실행
+
+직전 회차를 종료한 뒤 서버 1개와 클라이언트 2개를 새로 띄웠다. 모든 회차가 `LogCoopRPGInput Verbose`를 사용했다. 패킷 단위 `LogNet VeryVerbose`는 껐다. 서버 지급 로그 이후 두 재고 0과 수령자 수량 1을 각 클라 로그에서 대조했다.
+
+| 회차 | 수령자 | A 재고 0 | B 재고 0 | 수령자 수량 1 |
+| --- | --- | --- | --- | --- |
+| `01-a` | A | 0.162초 | 0.158초 | 0.148초 |
+| `02-b` | B | 0.131초 | 0.133초 | 0.120초 |
+| `03-a` | A | 0.154초 | 0.131초 | 0.143초 |
+| `04-b` | B | 0.138초 | 0.194초 | 0.182초 |
+| `05-a` | A | 0.191초 | 0.144초 | 0.178초 |
+
+5회 모두 정상 종료했다. 최대 0.194초로 3초 기준을 충족했다. 이번 검증 범위는 동일 PC의 V08 핵심 세 시나리오다. T1 전체와 별도 PC LAN은 별도 시험으로 추적한다.
+
+**원본과 화면** · 로컬 `Artifacts/Validation/v07-health-nameplates-20261117-101256/`의 `candidate-manifest.json`, `hp-submission-audit.json`, `first-launch.json`, `basic-playthrough.json`, `second-shutdown.json`. 두 `fresh/manual-*/` 폴더에 README 실행 원본 로그와 화면이 있다.
+
+- `base` · chest `v08/base/chest-isolated-final-01/` · cancel `v08/base/cancel/` · extraction `v08/base/extraction/` · rtt `v08/base/rtt/`
+- `delay` · chest `v08/delay/chest-isolated-final-01/` · cancel `v08/delay/cancel/` · extraction `v08/delay/extraction-recheck/` · rtt `v08/delay/rtt/`
+- `loss` · chest `v08/loss/chest-isolated-final-01/` · cancel `v08/loss/cancel/` · extraction `v08/loss/extraction/` · rtt `v08/loss/rtt/`
+
+<a id="v07-hp-nameplates-two-lines"></a>
+### HP 이름표 두 줄 가운데 정렬 · 2026-11-17
+
+사용자가 한 줄 이름표의 왼쪽 치우침을 확인하고 `[이름]` 위, `현재 HP/최대 HP` 아래의 두 줄 구성을 지정했다. 각 텍스트의 너비를 기준으로 두 줄을 캡슐 중심의 동일 화면 좌표에 맞췄다. 두 줄은 배경 하나를 쓰며, 피해·회복으로 떠오르는 문구의 시작 높이를 한 줄 올렸다. 아이템 문구는 캐릭터 오른쪽 32px에서 시작한다.
+
+별도 Win64 Development 패키지에서 전용 서버와 클라이언트 두 개로 14개 판정을 통과했다. P1·P2·Enemy의 중심 정렬과 피격·회복 수치를 양쪽 PNG와 HP 복제 로그로 대조했다. 근접 교전의 일부 장면에서 서로 다른 객체의 이름표는 부분적으로 겹쳤다. 같은 패키지로 별도 사용자 세션에서 양쪽 접속과 실시간 뷰어 준비를 확인했다. [앞선 한 줄 후보의 V08 결과](#v07-hp-nameplates-final)
+
+**근거** · 로컬 `Artifacts/Validation/v07-hp-stacked-20261117-105319/`의 `candidate-manifest.json`, `hp-target-a/`의 `initial-*.png`, `damaged-*.png`, `recovered-*.png`, `enemy-damaged-*.png`, `result.json`, `server.log`·`a.log`·`b.log`, `fresh/manual-20261117-105448-495/processes.json`.
+
+<a id="v07-hp-nameplates-two-lines-user"></a>
+#### 사용자 직접 확인 · 두 줄 HP와 두 판 완주
+
+사용자가 전용 서버와 두 클라이언트에서 `[이름]`과 HP 두 줄의 가운데 정렬, 피격·회복·사망, 다음 맵의 `100/100`과 재준비를 직접 확인했다. AI는 11월 17일 11:03:44(KST)에 내보낸 Excel 848행을 서버 179행, A 336행, B 333행으로 대조했다. 사건 ID와 바이트 위치에서 원문이 모두 일치했고, 실행 파일·쿠킹 파일 12개의 해시는 두 줄 후보 manifest와 일치했다. PNG는 통합 로그 뷰어 화면이다. 이름표의 배치와 맵 이동 직후의 `100/100` 화면은 사용자 관찰로 기록한다. [두 줄 자동 검증 캡처](#v07-hp-nameplates-two-lines)
+
+| 구간 | 원본 로그에서 확인한 결과 |
+| --- | --- |
+| 1라운드 · `L_Movement` | P2(B)가 6회 피격돼 `100→40`, 회복약 1개를 써 `40→70`이 됐다. 양쪽에서 HP 갱신이 일치했다. 적의 `10→0`과 사망이 양쪽에 복제됐다. 팀 전리품 1회 지급 뒤 3.029초 공동 체류로 양쪽 성공·1점이 표시됐다. |
+| 2라운드 · `L_Movement_Round2` | 두 창에 준비 대기가 복제됐다. P1만 준비한 상태와 둘 다 준비한 상태를 거쳐 새 300초 타이머가 시작됐다. P1(A)의 첫 피격은 `100→90`, 7회 피격 뒤 회복약 사용은 `30→60`이었다. 양쪽 HP 갱신과 적 사망이 일치했고, 3.000초 공동 체류 뒤 다시 양쪽 성공·1점이 표시됐다. |
+| 3라운드 · `L_Movement` | 서버가 새 라운드를 열고 두 클라이언트가 재접속했다. 내보낸 시점에는 양쪽에 준비 대기가 복제됐다. |
+
+이번 실행에서 원본으로 확인된 사망 주체는 두 라운드의 적이다. 플레이어 사망·0점과 그 결과의 맵 이동·재준비는 두 줄 후보에서 따로 재현할 항목으로 남겼다. 성공 경로는 두 줄 후보의 이 수동 근거를 사용한다.
+
+**근거** · 로컬 `Artifacts/Validation/v07-hp-stacked-20261117-105319/fresh/manual-20261117-105448-495/`의 `hp-stacked-user-audit.json`, `server.log`·`a.log`·`b.log`, `Exports/`의 PNG·상태 JSON·Excel. [최종 후보의 V08 시험 기준](#pre-submission-v08)
+
+<a id="v07-hp-stacked-submission"></a>
+## 두 줄 HP 패키지 제출 후보 확정 · 2026-11-17
+
+### 패키지 고정과 기본 실행
+
+Git 기준 `d9d4989` 위 두 줄 HP 소스 4개를 포함한 Win64 Development 전용 서버·클라이언트 패키지를 `fresh/Stage`에 복사했다. 원본과 새 폴더의 SHA-256 127개를 대조했다. 실행 파일·쿠킹 파일 12개가 사용자 수동 실행과 일치해 성공·1점과 다음 맵 재준비 근거를 재사용했다. 시험 후 클라이언트 설정의 `CachedClientID`가 실행 중 갱신됐다. 게임 실행 파일과 쿠킹 파일의 해시는 일치했다. [사용자 직접 완주](#v07-hp-nameplates-two-lines-user) · [README 기동 안내](../../README.md#submission-start)
+
+[README 명령](../../README.md#submission-start)으로 서버 1개·클라이언트 2개·실시간 뷰어를 기동했다. 게임 창과 뷰어를 닫고 해당 서버 PID를 종료한 뒤 같은 명령을 실행했다. 새 포트에서 양쪽 접속과 뷰어 준비를 확인했다. 재실행 세션도 이 실행의 네 프로세스를 종료했다.
+
+### 플레이어 사망과 다음 맵 재준비
+
+일반 키 입력으로 두 사람이 준비한 뒤 A(P1)가 적에게 접근했다. P1의 `10→0`과 실패·0점이 양쪽에 복제됐고 서버는 결과를 한 번 확정했다. `L_Movement`에서 `L_Movement_Round2`로 한 번 이동했다. 양쪽 화면에서 P1·P2의 `100/100`과 준비 대기를 확인했다. P1만 준비한 뒤 P2가 준비하자 서버가 300초 타이머를 시작했다. P1의 새 라운드 첫 피격 `100→90`을 양쪽 원본에서 대조했다.
+
+**화면과 원본** · `fresh/manual-20261117-111602-368/`의 `death-result-*.png`, `next-waiting-*.png`, `ready-again-*.png`, `server.log`·`a.log`·`b.log`. `first-launch.json`, `basic-playthrough.json`, `second-shutdown.json`에서 포트와 라운드별 결과를 확인한다.
+
+### 동일 후보의 V08 핵심 시험
+
+서버는 기본 조건으로 두고 같은 PC에서 두 클라이언트의 수신에만 지연 100ms 또는 손실 1%를 개별 적용했다. RTT는 같은 조건의 별도 접속에서 A·B의 NetPing `Current` 중앙값으로 기록했다. 패킷 지연·드롭 수는 해당 로그를 켠 회차에서 관찰한 수다.
+
+| 조건 | 마지막 회복약 경합 | 타격 전 취소 | 탈출 직전 이탈·재진입 | RTT와 패킷 계측(A / B) |
+| --- | --- | --- | --- | --- |
+| 기본 | 5/5 · A 3, B 2 | 10/10 | 2.314초에 초기화 · 새 3.008초 뒤 성공 1점 | 43.5 / 43.73ms · 기본 |
+| 수신 지연 100ms | 5/5 · A 3, B 2 | 10/10 | 2.329초에 초기화 · 새 3.017초 뒤 성공 1점 | 158.56 / 157.69ms · 기록된 지연 1,714 / 1,773개 |
+| 수신 손실 1% | 5/5 · A 3, B 2 | 10/10 | 2.243초에 초기화 · 새 3.013초 뒤 성공 1점 | 44.15 / 45.43ms · 기록된 드롭 12 / 15개 |
+
+경합마다 한 명에게 1개 지급했고 양쪽 재고는 0으로 수렴했다. 취소 뒤 피해는 0, 스태미나 비용 10과 쿨다운은 유지됐다. 탈출 이탈 시 진행이 초기화됐고 재진입 이후 새 유지 시간으로 성공·1점을 한 번 확정했다. 상자 재고·수령 수량과 최종 탈출 결과의 최대 관찰 수렴은 0.216초였다.
+
+#### 수신 지연 100ms 경합 5회 순차 실행
+
+한 회차의 서버와 두 클라이언트가 종료된 뒤 다음 회차를 기동했다. 이전 순차 시험과 동일하게 `LogCoopRPGInput Verbose`를 썼으며 `LogNet VeryVerbose`를 껐다. 서버 지급 로그에서 각 클라이언트의 재고 0과 수령자 수량 1까지 걸린 시간이다.
+
+| 회차 | 수령자 | A 재고 0 | B 재고 0 | 수령자 수량 1 |
+| --- | --- | --- | --- | --- |
+| `01-a` | A | 0.171초 | 0.186초 | 0.157초 |
+| `02-b` | B | 0.170초 | 0.216초 | 0.202초 |
+| `03-a` | A | 0.187초 | 0.172초 | 0.173초 |
+| `04-b` | B | 0.174초 | 0.203초 | 0.187초 |
+| `05-a` | A | 0.186초 | 0.172초 | 0.170초 |
+
+5회 최대 0.216초로 3초 기준을 충족했다. 이 결과로 동일 PC V08 핵심 세 시나리오와 1차 MVP 제출 후보 기동 범위를 확인했다. [전체 T1 및 별도 PC 시험 범위](#test-conditions)
+
+**후보와 근거** · 로컬 `Artifacts/Validation/v07-submission-stacked-20261117-111509/`의 `candidate-manifest.json`, `stacked-submission-audit.json`과 조건별 원본.
+
+- `base` · chest `v08/base/chest-isolated-final-01/` · cancel `v08/base/cancel/` · extraction `v08/base/extraction/` · rtt `v08/base/rtt/`
+- `delay` · chest `v08/delay/chest-isolated-final-01/` · cancel `v08/delay/cancel/` · extraction `v08/delay/extraction/` · rtt `v08/delay/rtt/`
+- `loss` · chest `v08/loss/chest-isolated-final-01/` · cancel `v08/loss/cancel/` · extraction `v08/loss/extraction/` · rtt `v08/loss/rtt/`
+
 <a id="active-tests"></a>
 ## 단계별 시험 기준 — 제출용 T1
 
@@ -1811,8 +1956,8 @@ Win64 Development 전용 서버 38.67초, 클라이언트 39.23초 증분 빌드
 | V05 | 공용 상자·적 전리품 획득 | 동시 열람, 무기 장착과 회복약 사용, 마지막 회복약 개인 지급 1회, 전리품 팀 지급 1회, 거절·재전달·이전 라운드 요청 | [동시 열람·마지막 회복약 1개 지급](#v05-shared-chest-first) 및 [무기 장착·회복약 사용](#v05-equipment-recovery), [팀 전리품 지급·거리·중복 거절](#v05-enemy-loot-team) 통과. [사용자 버튼 실행](#v05-enemy-loot-user-result) 확인. [실제 라운드 이동 뒤 이전 상자 요청 거절](#v06-round-travel)을 확인했다. |
 | V06 | 한 판·점수·다음 라운드 | 준비·공동 탈출·사망/시간초과 실패·이탈 중단·결과/점수 1회 확정·다음 맵 도착과 초기화, 중도참가/정원 거절·연결 종료 안내 | [공동 탈출·이탈 초기화·양쪽 성공 1점](#v06-extraction-success) 통과. [사용자 직접 재현](#v06-extraction-user-result) 확인. [실패·중단·종료 경합](#v06-round-outcomes) 및 [세 사유 사용자 재현](#v06-round-outcomes-user-result) 확인. [다음 맵과 새 라운드 자동 3회](#v06-round-travel) 통과. [사용자 왕복 이동·재준비](#v06-round-travel-user-result) 확인. [입장 거절·정상 전환·종료 안내](#v06-round-admission) 자동 확인. [사용자 입장 거절·맵 이동·서버 종료 재현](#v06-round-admission-user-result) 확인. |
 | V07 | 진행 가능성·설정 | 두 플레이어의 무기 확보 경로, 획득 가능한 전리품 수량과 탈출 조건, 값/정의와 실행 상태 분리, 서버·클라이언트 패키지에 양쪽 맵 포함 | [기본 설정 완주·다음 맵 재준비](#v07-default-playthrough) 확인. 기본값·실행 상태와 두 맵 기동을 대조했다. [사용자 직접 완주·재준비](#v07-default-playthrough-user-result) 확인. |
-| V08 | 지연/손실·진단 | T1 조건에서 V02/V03/V05/V06 핵심 반복·수렴 확인. 별도 PC/LAN은 V08-LAN으로 분리 | [제출 후보 핵심 세 시나리오](#submission-candidate) 기본·수신 지연·손실 통과. 전체 T1·V08-LAN은 별도. |
-| V09 | 제출 재현 | 안내만으로 패키지 실행/접속/종료·재시작, 최종 빌드/설명/근거 일치·남은 결함 공개 | [후보의 새 폴더 기동·종료·재실행](#submission-candidate) 확인. |
+| V08 | 지연/손실·진단 | T1 조건에서 V02/V03/V05/V06 핵심 반복·수렴 확인. 별도 PC/LAN은 V08-LAN으로 분리 | [두 줄 HP 후보 핵심 세 시나리오](#v07-hp-stacked-submission) 기본·수신 지연·손실 통과. 전체 T1·V08-LAN은 별도. |
+| V09 | 제출 재현 | 안내만으로 패키지 실행/접속/종료·재시작, 최종 빌드/설명/근거 일치·남은 결함 공개 | [두 줄 HP 후보의 새 폴더 기동·종료·재실행](#v07-hp-stacked-submission) 확인. |
 
 G1은 V01, G2는 V02/V03의 실제 거절·명시 취소, G3는 V03의 사망/Result 연계와 V04~V07, G4는 V08/V09를 확인한다. 일부 경로만 확인하면 해당 범위만 통과로 적고 V-ID 전체를 통과시키지 않는다. V08-LAN을 수행하지 않았다면 로컬3프로세스 검증으로만 표현한다. 공용 상자의 개인 지급과 적 전리품의 팀 지급은 각각 판정한다.
 
@@ -1834,7 +1979,7 @@ D05~D07의 ASC·공격 경계·세부 비용 선택은 해당 구현 전, D12의
 
 | 목적 | 제출할 최소 근거 | 현재 확보·후속 |
 |---|---|---|
-| GAS·DS | 별도 실행·권한·거절·취소·수명·네트워크 조건과 시험 | [V01 패키지 반복 검증](#v01-server-shutdown) · [V02 첫 승인·거리 거절 패키지 시험](#v02-basic-attack). V03/V08 미실행 |
+| GAS·DS | 별도 실행·권한·거절·취소·수명·네트워크 조건과 시험 | [V01 패키지 반복 검증](#v01-server-shutdown) · [V02 첫 승인·거리 거절 패키지 시험](#v02-basic-attack) · [V03 명시 취소와 재실행](#v03-attack-lifetime) · [V08 동일 PC 핵심 세 시나리오](#v07-hp-stacked-submission) |
 | 스텔라 이후 확장 | 확인 가능한 이전 자체 구현과 GAS의 책임/제약 비교 | 비교 방향만 있음. 실제 코드와 본인 설명·작은 변경 확인 후 작성 |
 | AI 활용 | 문제 정의·위임 범위·본인 채택/수정 판단·실제 검증 결과 | AI 기본 이동 시험 / 사용자 속도 변경 후 빌드·플레이 확인 |
 | 학습 실행 | Part/차시→직접 설명·변형→적용→결과 | 사용자 500→300 cm/s 비교 확인 / 입력·이동 역할 설명은 미기록 |

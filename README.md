@@ -88,7 +88,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\Validation\Start
 
 런처가 출력하는 `manual-...` 폴더에 서버 `server.log`와 A·B의 `a.log`, `b.log`가 저장된다. 뷰어의 `창 캡처`와 `Excel 저장`은 그 아래 `Exports/`에 저장한다. [모니터 설정과 로그 도구](Docs/Validation/LogViewer.md#실행과-배치)
 
-**확인한 범위** · 새 폴더에서 기동·2인 접속·종료·재실행과 기본 완주를 검증했다. 후보의 파일 해시와 V08 핵심 시험 결과는 [제출 후보 검증 기록](Docs/Validation/Index.md#submission-candidate)에 있다.
+**확인한 범위** · P1·P2·Enemy의 이름과 현재/최대 HP가 두 줄로 표시된다. 확정 후보에서 2인 기동·종료·재실행, 기본 완주, 플레이어 사망 뒤 다음 맵 HP 초기화와 재준비를 확인했다. [후보 해시와 V08 핵심 시험 결과](Docs/Validation/Index.md#v07-hp-stacked-submission)
 
 ### 에디터 첫 이동 실습
 
