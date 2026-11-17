@@ -273,6 +273,14 @@ function Show-PaneDetail($Pane){
         $e.Raw
     )
 }
+function Set-PaneSplitterDistance($Split,[int]$Distance) {
+    if($Split.Panel2Collapsed){return}
+    $minimum=$Split.Panel1MinSize
+    $maximum=$Split.ClientSize.Height-$Split.Panel2MinSize-$Split.SplitterWidth
+    if($minimum -gt $maximum){return}
+    $distanceInBounds=[Math]::Max($minimum,[Math]::Min($Distance,$maximum))
+    if($Split.SplitterDistance -ne $distanceInBounds){$Split.SplitterDistance=$distanceInBounds}
+}
 function New-LogPane([int]$Index,[string]$SourceId){
     $container=New-Object Windows.Forms.Panel;$container.Font=$form.Font;$container.Dock='Fill';$container.Margin=New-Object Windows.Forms.Padding(2,0,4,0)
     $head=New-Object Windows.Forms.TableLayoutPanel;$head.Dock='Top';$head.Height=38;$head.ColumnCount=2;$head.RowCount=3
@@ -284,6 +292,7 @@ function New-LogPane([int]$Index,[string]$SourceId){
     $label=New-Object Windows.Forms.Label;$label.AutoSize=$false;$label.AutoEllipsis=$true;$label.TextAlign='MiddleLeft';$label.Dock='Fill'
     $head.Controls.Add($selector,0,1);$head.Controls.Add($label,1,1)
     $split=New-Object Windows.Forms.SplitContainer;$split.Size=New-Object Drawing.Size(600,600);$split.Dock='Fill';$split.Orientation='Horizontal';$split.Panel1MinSize=55;$split.Panel2MinSize=60;$split.SplitterWidth=6;$split.BackColor=[Drawing.Color]::FromArgb(61,69,82)
+    $split.MinimumSize=[Drawing.Size]::new(0,($split.Panel1MinSize+$split.Panel2MinSize+$split.SplitterWidth))
     $grid=New-Object Windows.Forms.DataGridView;$grid.Dock='Fill';$grid.VirtualMode=$true;$grid.ReadOnly=$true;$grid.AllowUserToAddRows=$false;$grid.AllowUserToDeleteRows=$false;$grid.AllowUserToResizeRows=$false;$grid.AllowUserToOrderColumns=$false;$grid.RowHeadersVisible=$false;$grid.MultiSelect=$false;$grid.SelectionMode='FullRowSelect';$grid.AutoGenerateColumns=$false;$grid.BackgroundColor=$form.BackColor;$grid.BorderStyle='None';$grid.EnableHeadersVisualStyles=$false;$grid.ScrollBars='Both'
     $grid.ColumnHeadersDefaultCellStyle.BackColor=[Drawing.Color]::FromArgb(40,47,60);$grid.ColumnHeadersDefaultCellStyle.ForeColor=[Drawing.Color]::Gainsboro
     $grid.DefaultCellStyle.BackColor=[Drawing.Color]::FromArgb(27,32,42);$grid.DefaultCellStyle.ForeColor=[Drawing.Color]::Gainsboro;$grid.DefaultCellStyle.SelectionBackColor=[Drawing.Color]::FromArgb(49,68,95);$grid.DefaultCellStyle.SelectionForeColor=[Drawing.Color]::White
@@ -337,7 +346,7 @@ function New-LogPane([int]$Index,[string]$SourceId){
     $split.Add_SplitterMoved({param($sender,$e)
         if($script:layoutBusy -or $script:splitSync -or !(Test-Aligned) -or $sender.Panel2Collapsed){return}
         $script:splitRatio=[double]$sender.SplitterDistance/[Math]::Max(1,$sender.Height);$script:splitSync=$true
-        try{foreach($p in $script:activePanes){if($p.Split -ne $sender -and !$p.Split.Panel2Collapsed){$p.Split.SplitterDistance=[Math]::Max(55,[Math]::Min($sender.SplitterDistance,$p.Split.Height-66))}}}finally{$script:splitSync=$false}
+        try{foreach($p in $script:activePanes){if($p.Split -ne $sender){Set-PaneSplitterDistance $p.Split $sender.SplitterDistance}}}finally{$script:splitSync=$false}
     })
     return $pane
 }
@@ -366,21 +375,28 @@ function Resize-Panes {
                 $p.Selector.Width = [int](160 * $scale)
                 $p.Header.ColumnStyles[0].Width = [int](170 * $scale)
             }
-            if(!$p.Split.Panel2Collapsed -and $p.Split.Height -gt 150){$p.Split.SplitterDistance=[Math]::Max(55,[Math]::Min([int]($p.Split.Height*$script:splitRatio),$p.Split.Height-66))}
+            Set-PaneSplitterDistance $p.Split ([int]($p.Split.ClientSize.Height*$script:splitRatio))
         }
     }finally{$script:layoutBusy=$false}
 }
 function Set-PaneLayout {
-    $table.SuspendLayout();$table.Controls.Clear();$table.ColumnStyles.Clear()
-    $parallel=$viewChoice.SelectedIndex -eq 1
-    $script:activePanes=@(if($parallel){$script:panes | Select-Object -Skip 1 -First ([int]$countChoice.SelectedItem)}else{$script:panes[0]})
-    $table.ColumnCount=$script:activePanes.Count
-    for($i=0;$i -lt $script:activePanes.Count;$i++){
-        [void]$table.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle('Absolute',560)))
-        $p=$script:activePanes[$i];$p.Header.Visible=$parallel;$table.Controls.Add($p.Container,$i,0)
+    $script:layoutBusy=$true
+    $table.SuspendLayout()
+    try{
+        $table.Controls.Clear();$table.ColumnStyles.Clear()
+        $parallel=$viewChoice.SelectedIndex -eq 1
+        $script:activePanes=@(if($parallel){$script:panes | Select-Object -Skip 1 -First ([int]$countChoice.SelectedItem)}else{$script:panes[0]})
+        $table.ColumnCount=$script:activePanes.Count
+        for($i=0;$i -lt $script:activePanes.Count;$i++){
+            [void]$table.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle('Absolute',560)))
+            $p=$script:activePanes[$i];$p.Header.Visible=$parallel;$table.Controls.Add($p.Container,$i,0)
+        }
+        $tabs.Visible=!$parallel;$countChoice.Enabled=$parallel -and !$pause.Checked;$displayChoice.Enabled=$parallel -and !$pause.Checked
+        $script:activePane=$script:activePanes[0]
+    }finally{
+        try{$table.ResumeLayout()}finally{$script:layoutBusy=$false}
     }
-    $tabs.Visible=!$parallel;$countChoice.Enabled=$parallel -and !$pause.Checked;$displayChoice.Enabled=$parallel -and !$pause.Checked
-    $script:activePane=$script:activePanes[0];$table.ResumeLayout();Resize-Panes;$script:renderDirty=$true
+    Resize-Panes;$script:renderDirty=$true
 }
 function Refresh-Events {
     if($pause.Checked){return}
@@ -433,7 +449,11 @@ $latest.Add_Click({$pause.Checked=$false;$follow.Checked=$true;$script:renderDir
 $pin.Add_CheckedChanged({$form.TopMost=$pin.Checked})
 $folder.Add_Click({[Windows.Forms.Clipboard]::SetText($logRoot)})
 $copy.Add_Click({if($script:activePane -and $script:activePane.Detail.Text){[Windows.Forms.Clipboard]::SetText($script:activePane.Detail.Text)}})
-$detailToggle.Add_CheckedChanged({foreach($p in $script:panes){$p.Split.Panel2Collapsed=!$detailToggle.Checked};Resize-Panes})
+$detailToggle.Add_CheckedChanged({
+    $script:splitSync=$true
+    try{foreach($p in $script:panes){$p.Split.Panel2Collapsed=!$detailToggle.Checked}}finally{$script:splitSync=$false}
+    Resize-Panes
+})
 $fontControl.Add_ValueChanged({
     $newFont=New-Object Drawing.Font('Malgun Gothic',[float]$fontControl.Value);$oldFormFont=$form.Font;$form.Font=$newFont
     foreach($p in $script:panes){

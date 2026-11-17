@@ -73,6 +73,29 @@ $timer.Add_Tick({
                 $topicPresets['전체 선택'].PerformClick()
                 $outcome.SelectedItem='전체';$tabs.SelectedIndex=2;Refresh-Events
                 Check-UI 'single source tabs still filter client 1' ($script:activePanes.Count -eq 1 -and $script:activePanes[0].SourceId -eq 'a' -and @($script:activePanes[0].Rows | Where-Object {$_.Event.SourceId -ne 'a'}).Count -eq 0)
+                $fontControl.Value=11;$countChoice.SelectedItem='4';$displayChoice.SelectedIndex=1
+                $viewChoice.SelectedIndex=1;Refresh-Events
+                Check-UI 'initial switch from single directly to saved four-pane layout' ($script:activePanes.Count -eq 4 -and $script:activePanes[3].Rows.Count -eq $script:common.Count)
+                $viewChoice.SelectedIndex=0
+                $form.WindowState='Normal';$form.Size=[Drawing.Size]::new(900,480);$fontControl.Value=18
+                foreach($count in @('2','3','4')){
+                    $countChoice.SelectedItem=$count;$detailToggle.Checked=$false;$viewChoice.SelectedIndex=1
+                    $detailToggle.Checked=$true;Refresh-Events
+                    $invalid=@($script:activePanes | Where-Object {
+                        $_.Split.Panel2Collapsed -or $_.Split.SplitterDistance -lt $_.Split.Panel1MinSize -or
+                        $_.Split.SplitterDistance -gt ($_.Split.ClientSize.Height-$_.Split.Panel2MinSize-$_.Split.SplitterWidth)
+                    })
+                    Check-UI "short window single to $count panes and detail reopen" ($script:activePanes.Count -eq [int]$count -and !$invalid.Count)
+                    $viewChoice.SelectedIndex=0
+                }
+                $probe=New-LogPane 99 'server'
+                try{
+                    $probe.Container.Size=[Drawing.Size]::new(450,80)
+                    $probe.Container.PerformLayout()
+                    $requiredHeight=$probe.Split.Panel1MinSize+$probe.Split.Panel2MinSize+$probe.Split.SplitterWidth
+                    Check-UI 'split keeps the combined minimum while its container is short' ($probe.Split.ClientSize.Height -ge $requiredHeight)
+                }finally{$probe.Container.Dispose()}
+                $form.Size=[Drawing.Size]::new(1920,1000);$fontControl.Value=12
                 $viewChoice.SelectedIndex=1;$countChoice.SelectedItem='3';$displayChoice.SelectedIndex=1;Refresh-Events
                 Check-UI 'three independent list and detail pairs' ($script:activePanes.Count -eq 3 -and @($script:activePanes | Where-Object {$_.Grid -eq $null -or $_.Detail -eq $null}).Count -eq 0)
                 Check-UI 'source selectors visible and inside distinct header cells' (@($script:activePanes | Where-Object {!$_.Selector.Visible -or $_.Selector.Right -gt $_.Header.ColumnStyles[0].Width}).Count -eq 0)
