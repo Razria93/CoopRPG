@@ -27,6 +27,9 @@
 /Game/Plugins/**/Saved/
 /Game/Plugins/**/DerivedDataCache/
 
+# Local licensed source content, supplied separately for playable builds.
+/Game/Content/RPGTinyFantasyForest/
+
 # Local packages, large raw evidence and retired temporary documents
 /Artifacts/
 /Docs/X/

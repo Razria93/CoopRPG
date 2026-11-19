@@ -24,8 +24,15 @@ namespace
 {
     constexpr TCHAR FirstMapPackage[] = TEXT("/Game/Maps/L_Movement");
     constexpr TCHAR SecondMapPackage[] = TEXT("/Game/Maps/L_Movement_Round2");
+    constexpr TCHAR ForestMapName[] = TEXT("L_ForestExpedition");
+    constexpr TCHAR RoundOneMapName[] = TEXT("L_Round_01");
     constexpr double ResultDisplaySeconds = 3.0;
     constexpr int32 RoundCapacity = 2;
+
+    bool UsesPlacedRoundActors(const FString& MapName)
+    {
+        return MapName == ForestMapName || MapName == RoundOneMapName;
+    }
 
     void LogAdmissionRejection(const TCHAR* Stage, const FString& Reason)
     {
@@ -129,13 +136,33 @@ void ACoopRPGGameMode::AcknowledgeRoundResult(ACoopRPGPlayerController* Player, 
 void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
     Super::InitGame(MapName, Options, ErrorMessage);
-    bEnemyCombat = UGameplayStatics::HasOption(Options, TEXT("EnemyCombat"));
+    bEnemyCombat = UGameplayStatics::HasOption(Options, TEXT("EnemyCombat"))
+        || UsesPlacedRoundActors(UGameplayStatics::GetCurrentLevelName(this));
 }
 
 void ACoopRPGGameMode::BeginPlay()
 {
     Super::BeginPlay();
     const FString MapName = UGameplayStatics::GetCurrentLevelName(this);
+    if (UsesPlacedRoundActors(MapName))
+    {
+        auto* Chest = Cast<ACoopRPGSharedChest>(UGameplayStatics::GetActorOfClass(this, ACoopRPGSharedChest::StaticClass()));
+        auto* Zone = Cast<ACoopRPGExtractionZone>(UGameplayStatics::GetActorOfClass(this, ACoopRPGExtractionZone::StaticClass()));
+        Enemy = Cast<ACoopRPGEnemy>(UGameplayStatics::GetActorOfClass(this, ACoopRPGEnemy::StaticClass()));
+        auto* State = GetGameState<ACoopRPGGameState>();
+        if (ensureMsgf(Chest && Zone && IsValid(Enemy.Get()) && State,
+            TEXT("Round map %s requires a shared chest, enemy, and extraction zone."), *MapName))
+        {
+            State->InitializeLootRound(Chest, Zone);
+            PublishReadySlots(*State);
+            const TCHAR* Event = MapName == ForestMapName ? TEXT("ForestStageReady") : TEXT("RoundStageReady");
+            UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("%s Map=%s Chest=%s Enemy=%s Extraction=%s"),
+                Event, *MapName, *Chest->GetActorLocation().ToString(), *Enemy->GetActorLocation().ToString(),
+                *Zone->GetActorLocation().ToString());
+        }
+        return;
+    }
+
     if (MapName == TEXT("L_Movement") || MapName == TEXT("L_Movement_Round2"))
     {
         ACoopRPGExtractionZone* Zone = nullptr;

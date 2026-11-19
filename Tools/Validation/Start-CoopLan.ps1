@@ -8,7 +8,8 @@ param(
     [string]$PackageRoot,
     [string]$LogRoot,
     [switch]$AllowLoopback,
-    [switch]$PassThru
+    [switch]$PassThru,
+    [ValidateSet('L_Movement', 'L_ForestExpedition', 'L_Round_01')][string]$Map = 'L_Movement'
 )
 
 Set-StrictMode -Version Latest
@@ -46,7 +47,7 @@ $log = Join-Path $logDirectory.FullName $logName
 $common = @('-NoSplash', '-forcelogflush', ('-ABSLOG="{0}"' -f $log))
 
 if ($Role -eq 'Server') {
-    $gameArguments = @('/Game/Maps/L_Movement?EnemyCombat', "-port=$Port", "-MULTIHOME=$Address", '-unattended', '-nullrhi', '-nosound', '-log')
+    $gameArguments = @("/Game/Maps/${Map}?EnemyCombat", "-port=$Port", "-MULTIHOME=$Address", '-unattended', '-nullrhi', '-nosound', '-log')
     $windowStyle = 'Hidden'
 } else {
     $gameArguments = @("${Address}:${Port}?CoopValidationLabel=$($ClientLabel.ToUpperInvariant())", '-CoopManualInput', '-windowed', '-ResX=1280', '-ResY=720')
