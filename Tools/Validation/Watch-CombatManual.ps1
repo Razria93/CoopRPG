@@ -7,7 +7,8 @@
     [ValidateSet('Single','Parallel')][string]$ViewMode='Single',
     [ValidateRange(2,4)][int]$PaneCount=3,
     [ValidateSet('Compact','Aligned')][string]$DisplayMode='Compact',
-    [ValidateRange(100,20000)][int]$Capacity=3000
+    [ValidateRange(100,20000)][int]$Capacity=3000,
+    [string]$SettingsPath
 )
 $ErrorActionPreference='Stop'
 Import-Module (Join-Path $PSScriptRoot 'CombatLogReader.psm1') -Force
@@ -19,7 +20,8 @@ Add-Type -AssemblyName System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 $logRoot=[IO.Path]::GetFullPath($LogDirectory)
 if(!(Test-Path -LiteralPath $logRoot -PathType Container)){throw "Missing log directory: $logRoot"}
-$settings=Read-CombatViewerSettings
+if(!$SettingsPath){$SettingsPath=Get-CombatViewerSettingsPath}
+$settings=Read-CombatViewerSettings -Path $SettingsPath
 $monitors=@(Get-CombatMonitors)
 $choice=if($Monitor){$Monitor}elseif($settings.LogMonitor){$settings.LogMonitor}else{''}
 $chosen=Find-CombatMonitor $monitors $choice
@@ -469,7 +471,7 @@ $fontControl.Add_ValueChanged({
 $move.Add_Click({
     $fresh=@(Get-CombatMonitors);$selected=$monitors[$monitorChoice.SelectedIndex];$target=Find-CombatMonitor $fresh $selected.DeviceName;if(!$target){$target=$fresh[0]}
     $form.WindowState='Normal';$form.Bounds=New-Object Drawing.Rectangle($target.Left,$target.Top,$target.Width,$target.Height);$form.WindowState='Maximized'
-    try{Save-CombatViewerSettings @{LogMonitor=$target.DeviceName}}catch{$script:settingsError=$_.Exception.Message}
+    try{Save-CombatViewerSettings @{LogMonitor=$target.DeviceName} -Path $SettingsPath}catch{$script:settingsError=$_.Exception.Message}
 })
 $hostPanel.Add_Resize({Resize-Panes})
 function New-ViewerExportSnapshot {
@@ -606,7 +608,7 @@ $timer.Add_Tick({
 
 $form.Add_Shown({$form.Hide();$form.Show();Align-Toolbars;Resize-Panes;$timer.Start()})
 $form.Add_FormClosing({
-    try{Save-CombatViewerSettings @{FontSize=[double]$fontControl.Value;LogMonitor=[Windows.Forms.Screen]::FromControl($form).DeviceName;ViewMode=$(if($viewChoice.SelectedIndex -eq 1){'Parallel'}else{'Single'});PaneCount=[int]$countChoice.SelectedItem;DisplayMode=$(if($displayChoice.SelectedIndex -eq 1){'Aligned'}else{'Compact'});PaneSources=@($script:panes | Select-Object -Skip 1 | ForEach-Object SourceId)}}catch{Write-Warning $_.Exception.Message}
+    try{Save-CombatViewerSettings @{FontSize=[double]$fontControl.Value;LogMonitor=[Windows.Forms.Screen]::FromControl($form).DeviceName;ViewMode=$(if($viewChoice.SelectedIndex -eq 1){'Parallel'}else{'Single'});PaneCount=[int]$countChoice.SelectedItem;DisplayMode=$(if($displayChoice.SelectedIndex -eq 1){'Aligned'}else{'Compact'});PaneSources=@($script:panes | Select-Object -Skip 1 | ForEach-Object SourceId)} -Path $SettingsPath}catch{Write-Warning $_.Exception.Message}
 })
 $form.Add_FormClosed({$timer.Stop();$timer.Dispose();$exportTooltip.Dispose();$topicMenu.Dispose();$topicTooltip.Dispose()})
 try{[void]$form.ShowDialog()}finally{foreach($p in $script:panes){$p.Container.Dispose()};$form.Dispose()}
