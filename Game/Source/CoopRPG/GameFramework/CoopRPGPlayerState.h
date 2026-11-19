@@ -27,6 +27,7 @@ private:
     UFUNCTION()
     void OnRep_SelectedHero();
 
+private:
     UPROPERTY(ReplicatedUsing = OnRep_SelectedHero)
     ECoopRPGHero SelectedHero = ECoopRPGHero::Unassigned;
 };

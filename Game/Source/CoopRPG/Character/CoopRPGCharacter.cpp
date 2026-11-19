@@ -141,49 +141,6 @@ void ACoopRPGCharacter::FlashPresentationHit()
     GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestorePresentationTint, 0.22f);
 }
 
-void ACoopRPGCharacter::BeginPlay()
-{
-    Super::BeginPlay();
-    if (GetNetMode() != NM_DedicatedServer)
-    {
-        OnCharacterMovementUpdated.AddDynamic(this, &ThisClass::UpdateLocomotion);
-    }
-    AbilitySystem->InitAbilityActorInfo(this, this);
-    if (HasAuthority())
-    {
-        AbilitySystem->GiveAbility(FGameplayAbilitySpec(UCoopRPGMeleeAbility::StaticClass()));
-    }
-}
-
-void ACoopRPGCharacter::UpdateLocomotion(float, FVector, FVector)
-{
-    UAnimSingleNodeInstance* Animation = GetMesh()->GetSingleNodeInstance();
-    if (!Animation)
-    {
-        return;
-    }
-
-    // The owner and simulated proxies both have movement velocity after collision resolution.
-    const float GroundSpeed = GetCharacterMovement()->Velocity.Size2D();
-    Animation->SetBlendSpacePosition(FVector(GroundSpeed, 0.0f, 0.0f));
-
-    if (UE_LOG_ACTIVE(LogCoopRPGLocomotion, VeryVerbose))
-    {
-        FVector Input, Filtered;
-        Animation->GetBlendSpaceState(Input, Filtered);
-        UE_LOG(LogCoopRPGLocomotion, VeryVerbose,
-            TEXT("HeroLocomotion Slot=%d Role=%s Asset=%s Speed=%.2f Blend=%.2f Time=%.3f Yaw=%.1f"),
-            DisplaySlot, *UEnum::GetValueAsString(GetLocalRole()), *GetNameSafe(Animation->GetCurrentAsset()),
-            GroundSpeed, Filtered.X, Animation->GetCurrentTime(), GetActorRotation().Yaw);
-    }
-}
-
-void ACoopRPGCharacter::OnPlayerStateChanged(APlayerState* NewPlayerState, APlayerState* OldPlayerState)
-{
-    Super::OnPlayerStateChanged(NewPlayerState, OldPlayerState);
-    RefreshHeroAppearance();
-}
-
 void ACoopRPGCharacter::RefreshHeroAppearance()
 {
     const auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
@@ -233,6 +190,26 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
     UE_LOG(LogCoopRPGEquipment, Log, TEXT("HeroAppearance PlayerId=%d Hero=%s Mesh=%s Role=%s"),
         Identity->GetPlayerId(), *UEnum::GetValueAsString(Identity->GetSelectedHero()), *GetNameSafe(HeroMesh),
         *UEnum::GetValueAsString(GetLocalRole()));
+}
+
+void ACoopRPGCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        OnCharacterMovementUpdated.AddDynamic(this, &ThisClass::UpdateLocomotion);
+    }
+    AbilitySystem->InitAbilityActorInfo(this, this);
+    if (HasAuthority())
+    {
+        AbilitySystem->GiveAbility(FGameplayAbilitySpec(UCoopRPGMeleeAbility::StaticClass()));
+    }
+}
+
+void ACoopRPGCharacter::OnPlayerStateChanged(APlayerState* NewPlayerState, APlayerState* OldPlayerState)
+{
+    Super::OnPlayerStateChanged(NewPlayerState, OldPlayerState);
+    RefreshHeroAppearance();
 }
 
 void ACoopRPGCharacter::NotifyControllerChanged()
@@ -308,6 +285,29 @@ void ACoopRPGCharacter::OnRep_MeleeWeapon()
     UE_LOG(LogCoopRPGEquipment, Log, TEXT("MeleeWeaponReplicated Actor=%s Equipped=%d EquippedPlayerId=%d %s"),
         *GetNameSafe(this), bHasMeleeWeapon ? 1 : 0, State ? State->GetPlayerId() : INDEX_NONE,
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGCharacter::UpdateLocomotion(float, FVector, FVector)
+{
+    UAnimSingleNodeInstance* Animation = GetMesh()->GetSingleNodeInstance();
+    if (!Animation)
+    {
+        return;
+    }
+
+    // The owner and simulated proxies both have movement velocity after collision resolution.
+    const float GroundSpeed = GetCharacterMovement()->Velocity.Size2D();
+    Animation->SetBlendSpacePosition(FVector(GroundSpeed, 0.0f, 0.0f));
+
+    if (UE_LOG_ACTIVE(LogCoopRPGLocomotion, VeryVerbose))
+    {
+        FVector Input, Filtered;
+        Animation->GetBlendSpaceState(Input, Filtered);
+        UE_LOG(LogCoopRPGLocomotion, VeryVerbose,
+            TEXT("HeroLocomotion Slot=%d Role=%s Asset=%s Speed=%.2f Blend=%.2f Time=%.3f Yaw=%.1f"),
+            DisplaySlot, *UEnum::GetValueAsString(GetLocalRole()), *GetNameSafe(Animation->GetCurrentAsset()),
+            GroundSpeed, Filtered.X, Animation->GetCurrentTime(), GetActorRotation().Yaw);
+    }
 }
 
 void ACoopRPGCharacter::OnRep_DisplaySlot()
