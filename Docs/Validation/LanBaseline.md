@@ -282,7 +282,7 @@ IPv4 입력칸은 **직접 입력**일 때 수정할 수 있다. UDP 포트는 �
 <a id="validation-launcher-client-lifecycle"></a>
 #### 클라이언트 정상 종료·중복 접속 보완 · 2026-11-19
 
-사용자가 이전 `CoopRPG-2PC-Roster`로 두 PC에서 참가자와 준비 상태를 확인한 뒤 두 문제를 제보했다. B를 종료해도 P2가 남았고, B의 접속을 두 번 눌러 둘째 확인을 취소하자 초록색이어야 할 성공 상태가 빨갛게 표시됐다.
+사용자가 이전 `CoopRPG-2PC-Roster`로 두 PC에서 참가자와 준비 상태를 확인한 뒤 두 문제를 제보했다. B를 종료해도 P2가 남았고, B의 접속을 두 번 눌러 둘째 확인을 취소하자 초록색이어야 할 성공 상태가 빨갛게 표시됐다. [증상과 원인](../Cases/ValidationLauncher.md#client-lifecycle-troubleshooting)
 
 | 조건 | 확인한 결과 |
 |---|---|
