@@ -30,9 +30,11 @@ public:
     int32 GetDisplaySlot() const { return DisplaySlot; }
     void SetDisplaySlot(int32 Slot);
     void FlashPresentationHit();
+    void RefreshHeroAppearance();
 
 protected:
     virtual void BeginPlay() override;
+    virtual void OnPlayerStateChanged(APlayerState* NewPlayerState, APlayerState* OldPlayerState) override;
     virtual void NotifyControllerChanged() override;
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
@@ -46,6 +48,9 @@ private:
 
     UFUNCTION()
     void OnRep_MeleeWeapon();
+
+    UFUNCTION()
+    void UpdateLocomotion(float DeltaSeconds, FVector OldLocation, FVector OldVelocity);
 
     UFUNCTION()
     void OnRep_DisplaySlot();

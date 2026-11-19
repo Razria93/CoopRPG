@@ -9,6 +9,7 @@
 #include "CoopRPGLootHUD.h"
 #include "CoopRPGPlayerController.h"
 #include "CoopRPGRoundTravelSeats.h"
+#include "CoopRPGPlayerState.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -53,6 +54,7 @@ ACoopRPGGameMode::ACoopRPGGameMode()
     DefaultPawnClass = ACoopRPGCharacter::StaticClass();
     PlayerControllerClass = ACoopRPGPlayerController::StaticClass();
     GameStateClass = ACoopRPGGameState::StaticClass();
+    PlayerStateClass = ACoopRPGPlayerState::StaticClass();
     HUDClass = ACoopRPGLootHUD::StaticClass();
 }
 
@@ -282,6 +284,11 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
     if (SlotIndex != INDEX_NONE)
     {
         PlayerSlots[SlotIndex] = Player;
+        if (auto* Identity = Player->GetPlayerState<ACoopRPGPlayerState>())
+        {
+            // Lobby selection can replace this default without changing pawn or slot identity.
+            Identity->SetSelectedHero(SlotIndex == 0 ? ECoopRPGHero::Adventurer : ECoopRPGHero::AnimalHero);
+        }
         const FString Label = UGameplayStatics::ParseOption(Options, TEXT("CoopValidationLabel"));
         ValidationClientLabels[SlotIndex] = Label.Equals(TEXT("A"), ESearchCase::CaseSensitive)
             || Label.Equals(TEXT("B"), ESearchCase::CaseSensitive) ? Label : FString();

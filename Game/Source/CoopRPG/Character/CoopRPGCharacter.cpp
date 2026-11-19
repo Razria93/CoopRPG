@@ -6,7 +6,13 @@
 #include "CoopRPG/Debug/CoopRPGCombatProbeComponent.h"
 #include "CoopRPG/GameFramework/CoopRPGGameplayFeedback.h"
 
+#include "CoopRPG/GameFramework/CoopRPGPlayerState.h"
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimSingleNodeInstance.h"
+#include "Animation/BlendSpace1D.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -24,6 +30,7 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGInput, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEquipment, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGLocomotion, Log, All);
 
 ACoopRPGCharacter::ACoopRPGCharacter()
 {
@@ -31,6 +38,7 @@ ACoopRPGCharacter::ACoopRPGCharacter()
     GetCharacterMovement()->bOrientRotationToMovement = true;
     GetCharacterMovement()->MaxWalkSpeed = 300.0f;
 
+    GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     BodyMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
     BodyMesh->SetupAttachment(GetRootComponent());
     BodyMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -66,6 +74,7 @@ ACoopRPGCharacter::ACoopRPGCharacter()
     CameraBoom->SetUsingAbsoluteRotation(true);
     CameraBoom->SetRelativeRotation(FRotator(-48.0f, 0.0f, 0.0f));
     CameraBoom->TargetArmLength = 650.0f;
+    CameraBoom->bDoCollisionTest = false;
 
     auto* Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
     Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
@@ -135,11 +144,95 @@ void ACoopRPGCharacter::FlashPresentationHit()
 void ACoopRPGCharacter::BeginPlay()
 {
     Super::BeginPlay();
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        OnCharacterMovementUpdated.AddDynamic(this, &ThisClass::UpdateLocomotion);
+    }
     AbilitySystem->InitAbilityActorInfo(this, this);
     if (HasAuthority())
     {
         AbilitySystem->GiveAbility(FGameplayAbilitySpec(UCoopRPGMeleeAbility::StaticClass()));
     }
+}
+
+void ACoopRPGCharacter::UpdateLocomotion(float, FVector, FVector)
+{
+    UAnimSingleNodeInstance* Animation = GetMesh()->GetSingleNodeInstance();
+    if (!Animation)
+    {
+        return;
+    }
+
+    // The owner and simulated proxies both have movement velocity after collision resolution.
+    const float GroundSpeed = GetCharacterMovement()->Velocity.Size2D();
+    Animation->SetBlendSpacePosition(FVector(GroundSpeed, 0.0f, 0.0f));
+
+    if (UE_LOG_ACTIVE(LogCoopRPGLocomotion, VeryVerbose))
+    {
+        FVector Input, Filtered;
+        Animation->GetBlendSpaceState(Input, Filtered);
+        UE_LOG(LogCoopRPGLocomotion, VeryVerbose,
+            TEXT("HeroLocomotion Slot=%d Role=%s Asset=%s Speed=%.2f Blend=%.2f Time=%.3f Yaw=%.1f"),
+            DisplaySlot, *UEnum::GetValueAsString(GetLocalRole()), *GetNameSafe(Animation->GetCurrentAsset()),
+            GroundSpeed, Filtered.X, Animation->GetCurrentTime(), GetActorRotation().Yaw);
+    }
+}
+
+void ACoopRPGCharacter::OnPlayerStateChanged(APlayerState* NewPlayerState, APlayerState* OldPlayerState)
+{
+    Super::OnPlayerStateChanged(NewPlayerState, OldPlayerState);
+    RefreshHeroAppearance();
+}
+
+void ACoopRPGCharacter::RefreshHeroAppearance()
+{
+    const auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
+    if (GetNetMode() == NM_DedicatedServer || !Identity || Identity->GetSelectedHero() == ECoopRPGHero::Unassigned)
+    {
+        return;
+    }
+
+    const TCHAR* AssetPath = Identity->GetSelectedHero() == ECoopRPGHero::Adventurer
+        ? TEXT("/Game/RPGHeroSquad/Mesh/Character/SK_RPGHeroPolyart.SK_RPGHeroPolyart")
+        : TEXT("/Game/RPGHeroSquad/Mesh/Character/SK_DogPolyart.SK_DogPolyart");
+    USkeletalMesh* HeroMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(AssetPath)).LoadSynchronous();
+    if (HeroMesh != GetMesh()->GetSkeletalMeshAsset())
+    {
+        GetMesh()->EmptyOverrideMaterials();
+        GetMesh()->SetSkeletalMeshAsset(HeroMesh);
+        if (HeroMesh)
+        {
+            // Ground the reference pose and match the existing capsule and overhead nameplate.
+            const FBoxSphereBounds Bounds = HeroMesh->GetImportedBounds();
+            const float HalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+            const float Scale = HalfHeight * 0.90f / FMath::Max(1.0f, static_cast<float>(Bounds.BoxExtent.Z));
+            const FVector FeetOffset(0.0f, 0.0f, -HalfHeight - Scale * (Bounds.Origin.Z - Bounds.BoxExtent.Z));
+            const FRotator Facing(0.0f, -90.0f, 0.0f);
+            GetMesh()->SetRelativeScale3D(FVector(Scale));
+            GetMesh()->SetRelativeLocationAndRotation(FeetOffset, Facing);
+            CacheInitialMeshOffset(FeetOffset, Facing);
+
+            const TCHAR* LocomotionPath = Identity->GetSelectedHero() == ECoopRPGHero::Adventurer
+                ? TEXT("/Game/Characters/Locomotion/BS_Adventurer.BS_Adventurer")
+                : TEXT("/Game/Characters/Locomotion/BS_AnimalHero.BS_AnimalHero");
+            UBlendSpace1D* Locomotion = TSoftObjectPtr<UBlendSpace1D>(FSoftObjectPath(LocomotionPath)).LoadSynchronous();
+            if (Locomotion && Locomotion->GetSkeleton() == HeroMesh->GetSkeleton())
+            {
+                GetMesh()->PlayAnimation(Locomotion, true);
+            }
+            else
+            {
+                UE_LOG(LogCoopRPGLocomotion, Warning, TEXT("Missing or incompatible locomotion %s for %s"),
+                    LocomotionPath, *GetNameSafe(HeroMesh));
+            }
+        }
+        SetPresentationTint(GetWorldTimerManager().IsTimerActive(HitFlashTimer));
+    }
+    BodyMesh->SetVisibility(!HeroMesh);
+    HeadMesh->SetVisibility(!HeroMesh);
+    UE_LOG(LogCoopRPGEquipment, Log, TEXT("HeroAppearance PlayerId=%d Hero=%s Mesh=%s Role=%s"),
+        Identity->GetPlayerId(), *UEnum::GetValueAsString(Identity->GetSelectedHero()), *GetNameSafe(HeroMesh),
+        *UEnum::GetValueAsString(GetLocalRole()));
 }
 
 void ACoopRPGCharacter::NotifyControllerChanged()
@@ -239,6 +332,13 @@ void ACoopRPGCharacter::SetPresentationTint(bool bDarkened)
     {
         const FLinearColor Color = CoopRPG::Presentation::PlayerColor(DisplaySlot);
         PresentationMaterial->SetVectorParameterValue(TEXT("Color"), bDarkened ? Color * 0.25f : Color);
+        if (GetMesh()->GetSkeletalMeshAsset())
+        {
+            for (int32 Index = 0; Index < GetMesh()->GetNumMaterials(); ++Index)
+            {
+                GetMesh()->SetMaterial(Index, bDarkened ? PresentationMaterial.Get() : nullptr);
+            }
+        }
     }
 }
 
