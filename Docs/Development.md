@@ -139,6 +139,10 @@ CoopRPG · 기록 시작 2026-11-05 · 현행 학습·개발 진도의 운영 �
 | 11/16 · G3 | 한 판 성공·실패·중단과 다음 맵 진입 | V06 핵심 경로 자동 재현과 사망 뒤 왕복 수동 재현 완료 | [자동 맵 이동](Validation/Index.md#v06-round-travel) · [사용자 왕복 이동](Validation/Index.md#v06-round-travel-user-result) · [접속 경계 자동](Validation/Index.md#v06-round-admission)·[수동 검증](Validation/Index.md#v06-round-admission-user-result) · [V07 기본 설정 완주](Validation/Index.md#v07-default-playthrough) |
 | 11/17 | 지연·손실 조건 검증 | 미기록 | 미기록 |
 | 11/18 | 경계 상황 수정·재검증 | 미기록 | 미기록 |
+| 11/18 · 2차 LAN 준비 | 사용자가 `c0fed32` 기반 별도 PC 2인 기동 준비를 요청했다. | AI가 기준 소스의 전용 Server·Client를 빌드하고 LAN 런처와 전달 ZIP을 준비했다. 새 폴더 파일 130개, LAN IPv4 로컬 접속·종료·재접속, 다음 맵 성공 자동 판정 16개를 확인했다. [실행 안내와 시험 근거](Validation/LanBaseline.md#2026-11-18-패키지-검증) | 별도 PC 사용자 확인은 [아래 수동 기록](Validation/LanBaseline.md#manual-tailscale-20261118)을 따른다. |
+| 11/18 · Tailscale 별도 PC 수동 기준선 | 사용자가 제공한 본가 서버·A와 노트북 B의 원본 로그를 대조했다. | 두 PC 접속, 양쪽 준비·무장, 적 처치와 팀 전리품 1회 지급, 공동 탈출 성공·1점, `L_Movement_Round2`에 양쪽 재접속과 준비 대기를 확인했다. [수동 시험 결과](Validation/LanBaseline.md#manual-tailscale-20261118) · [테스트 환경·자료 전달](Validation/Environment.md#phase2-test-environment) | 별도 PC에서 첫 판 완주와 다음 맵 진입을 확인했다. 수동 HP·SP·인벤토리 초기값 및 양쪽 `R` 재준비는 이번 자료에서 미확인이다. |
+| 11/18 · Tailscale 다음 맵 초기화·재준비 | 사용자가 같은 패키지로 두 PC에서 초기 HUD와 `R` 재준비를 확인하고, 사망과 공동 탈출 뒤 맵 이동을 재현했다. | AI가 자료 공유 채팅 두 곳의 서버·A·B 로그와 화면 20장을 Round ID별로 대조하고 SHA-256을 보존했다. [후속 수동 검증](Validation/LanBaseline.md#manual-tailscale-20261118-rerun) | 최초 완주로 도착한 스테이지 2에서 양쪽 초기 HUD와 300초 라운드 시작 확인. 이어 새 스테이지 2에서도 양쪽 재준비와 서버 시작 확인. 해당 회차의 초기 HUD는 A 화면으로 확인했다. |
+| 11/18 · 검증 회차 구분 | 사용자가 스테이지 2로 바로 접속하는 현상을 발견하고 실행·상태·종료를 한 창에서 관리하는 도구를 제안했다. | AI가 서버와 두 클라이언트 원본을 대조해 이전 서버의 같은 회차로 재접속한 원인을 확인했다. 사용자는 서버를 직접 종료하고 재조회했다. [원인과 수동 조치](Validation/LanBaseline.md#stage2-server-reuse) | [실행기 첫 작업](Roadmap.md#validation-launcher)의 범위와 완료 시험을 정리했다. |
 | 11/19 | G4: 패키지·회귀 검증 | 미기록 | 미기록 |
 | 11/20 | README·구조·문제 해결 사례 | 미기록 | 미기록 |
 | 11/21 | 검증 빌드 영상 | 미기록 | 미기록 |

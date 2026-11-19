@@ -71,6 +71,10 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 <a id="submission-start"></a>
 ## 실행 안내
 
+### 별도 PC 2인 실행
+
+같은 사설 네트워크의 Windows PC 두 대에서 `c0fed32` 패키지를 기동하는 방법과 확인할 로그는 [별도 PC 2인 실행 안내](Docs/Validation/LanBaseline.md)를 따른다.
+
 ### 제출 후보 패키지 실행
 
 Windows에서 제공받은 Win64 Development 패키지의 `Stage`를 새 폴더에 푼다. `Stage` 아래의 `WindowsServer`와 `WindowsClient` 폴더를 함께 유지한다. 저장소 루트에서 PowerShell을 열고, 패키지를 푼 경로로 `$package`를 바꿔 실행한다. 이 명령은 같은 PC의 전용 서버 1개에 클라이언트 A·B를 연결하고 실시간 로그 뷰어를 연다.

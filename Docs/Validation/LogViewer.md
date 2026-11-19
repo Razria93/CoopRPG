@@ -14,7 +14,7 @@ CoopRPG · 2026-11-15 · 병렬 보기·캡처·Excel 저장 안내
 | 환경 | 사용할 때 | 선택 이유 |
 |---|---|---|
 | PIE | 구현 중 입력·빙의·서버 판정·속성 복제를 빠르게 확인할 때 | 에디터 출력 로그와 디버거를 함께 쓸 수 있다. `Play As Client`로 전용 서버 월드와 클라이언트 두 개를 구성한다. 프로세스 간 차이를 좁힐 때는 `Run Under One Process`를 끈다. |
-| 패키지 실행 | 쿠킹된 게임을 전용 서버와 클라이언트로 기동하거나, 신규 접속·입력·판정 로그를 수집할 때 | 실제 `CoopRPGServer.exe`와 `CoopRPGClient.exe`의 시작·접속·종료 및 콘텐츠를 확인한다. 런처가 두 클라이언트를 같은 서버에 연결하고 프로세스별 로그를 모아 새 실행을 반복할 수 있다. 현재 수동 실행은 같은 PC의 루프백이며 개발용 입력 모드를 쓴다. |
+| 패키지 실행 | 쿠킹된 게임을 전용 서버와 클라이언트로 기동하거나, 신규 접속·입력·판정 로그를 수집할 때 | 실제 `CoopRPGServer.exe`와 `CoopRPGClient.exe`의 시작·접속·종료 및 콘텐츠를 확인한다. 런처가 두 클라이언트를 같은 서버에 연결하고 프로세스별 로그를 모아 새 실행을 반복할 수 있다. 이 문서의 로컬 런처는 같은 PC의 루프백에서 개발용 입력 모드를 쓴다. 별도 PC 시험 구성은 [테스트 환경과 근거 수집](Environment.md#phase2-test-environment)을 참고한다. |
 | 기존 로그 재생 | 표시명·필터·시각순·캡처·XLSX 또는 Before/After를 확인할 때 | 한 번 수집한 `server.log`, `a.log`, `b.log`를 그대로 사용해 뷰어의 표시 차이를 비교할 수 있다. 게임 세션을 실행하지 않고 로그만 연다. |
 
 PIE는 에디터가 실제로 읽은 코드와 콘텐츠를 확인한다. 비용·쿨다운 작업 당시에는 Editor 갱신을 보류했으므로 그 기능의 수동 재현 기준은 아래 Win64 Development 패키지다. 뷰어는 세 프로세스의 관측을 비교하고 근거를 저장할 때 함께 사용한다. [CoopRPG 비용·쿨다운 검증](Index.md#v02-cost-cooldown) · [Epic PIE 멀티플레이](https://dev.epicgames.com/documentation/unreal-engine/play-in-editor-multiplayer-options-in-unreal-engine?lang=en-US) · [Epic 전용 서버 빌드·쿠킹](https://dev.epicgames.com/documentation/unreal-engine/setting-up-dedicated-servers-in-unreal-engine?lang=en-US)
