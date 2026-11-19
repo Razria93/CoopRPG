@@ -61,7 +61,7 @@ $form = [Windows.Forms.Form]@{
     Text = 'CoopRPG | 검증 실행기'
     StartPosition = 'CenterScreen'
     AutoScaleMode = 'Dpi'
-    Size = [Drawing.Size]::new(795, 600)
+    Size = [Drawing.Size]::new(795, 632)
     MinimumSize = [Drawing.Size]::new(795, 600)
     Font = [Drawing.Font]::new('Malgun Gothic', 10)
 }
@@ -71,7 +71,7 @@ $layout = [Windows.Forms.TableLayoutPanel]@{
     ColumnCount = 1; RowCount = 4; Padding = [Windows.Forms.Padding]::new(12, 10, 12, 8)
 }
 [void]$layout.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new('Percent', 100))
-$settingsHeight = [Windows.Forms.RowStyle]::new('Absolute', 112)
+$settingsHeight = [Windows.Forms.RowStyle]::new('Absolute', 144)
 [void]$layout.RowStyles.Add($settingsHeight)
 [void]$layout.RowStyles.Add([Windows.Forms.RowStyle]::new('Percent', 100))
 foreach ($section in 1..2) { [void]$layout.RowStyles.Add([Windows.Forms.RowStyle]::new('AutoSize')) }
@@ -99,20 +99,20 @@ $settingsRows = [Windows.Forms.TableLayoutPanel]@{ Dock = 'Fill'; ColumnCount = 
 $settings.Controls.Add($settingsRows)
 
 $settingsGrid = [Windows.Forms.TableLayoutPanel]@{
-    Anchor = 'Right'; ColumnCount = 11; RowCount = 1; Margin = [Windows.Forms.Padding]::new(0)
+    Dock = 'Fill'; AutoSize = $true; AutoSizeMode = 'GrowAndShrink'
+    ColumnCount = 11; RowCount = 2; Margin = [Windows.Forms.Padding]::new(0)
 }
 for ($column = 0; $column -lt $settingsGrid.ColumnCount; $column++) {
     $style = switch ($column) {
-        0 { [Windows.Forms.ColumnStyle]::new('Absolute', 52) }
-        2 { [Windows.Forms.ColumnStyle]::new('Percent', 45) }
-        6 { [Windows.Forms.ColumnStyle]::new('Percent', 45) }
-        9 { [Windows.Forms.ColumnStyle]::new('Percent', 10) }
+        0 { [Windows.Forms.ColumnStyle]::new('Absolute', 63) }
+        6 { [Windows.Forms.ColumnStyle]::new('Percent', 100) }
+        9 { [Windows.Forms.ColumnStyle]::new('Absolute', 5) }
         10 { [Windows.Forms.ColumnStyle]::new('Absolute', 86) }
         default { [Windows.Forms.ColumnStyle]::new('AutoSize') }
     }
     [void]$settingsGrid.ColumnStyles.Add($style)
 }
-[void]$settingsGrid.RowStyles.Add([Windows.Forms.RowStyle]::new('AutoSize'))
+foreach ($row in 1..2) { [void]$settingsGrid.RowStyles.Add([Windows.Forms.RowStyle]::new('AutoSize')) }
 $settingsRows.Controls.Add($settingsGrid, 0, 0)
 $mode = [Windows.Forms.ComboBox]@{ Name = 'Mode'; DropDownStyle = 'DropDownList'; Width = 113 }
 $mode.Items.AddRange(@('로컬 2인', 'Tailscale 호스트', '접속 전용'))
@@ -122,17 +122,31 @@ $addressChoice = [Windows.Forms.ComboBox]@{ Name = 'AddressChoice'; AccessibleNa
 $addressChoice.Items.AddRange(@('127.0.0.1', '내 PC IPv4', '직접 입력'))
 $addressChoice.SelectedIndex = 0
 
-$targetPort = [Windows.Forms.NumericUpDown]@{ Name = 'TargetPort'; AccessibleName = 'UDP 포트'; Width = 64 }
+$targetPort = [Windows.Forms.NumericUpDown]@{
+    Name = 'TargetPort'; AccessibleName = 'UDP 포트'; BorderStyle = 'None'
+}
 $targetPort.Maximum = 65535
 $targetPort.Minimum = 1024
 $targetPort.Value = $Port
+$portCell = [Windows.Forms.Panel]@{
+    Width = 64; Height = $mode.Height; Anchor = 'Left'
+    BackColor = [Drawing.SystemColors]::Window
+    Margin = [Windows.Forms.Padding]::new(3)
+    Padding = [Windows.Forms.Padding]::new(5, 0, 2, 0)
+}
+$portCell.Add_Paint({
+    param($sender, $eventArgs)
+    [Windows.Forms.ControlPaint]::DrawBorder($eventArgs.Graphics, $sender.ClientRectangle,
+        [Drawing.SystemColors]::ControlDark, [Windows.Forms.ButtonBorderStyle]::Solid)
+})
+$portCell.Controls.Add($targetPort)
 $startMode = New-LauncherButton '실행' 'StartMode'
 $separatorColor = [Drawing.Color]::FromArgb(204, 209, 214)
 $modeSeparator = [Windows.Forms.Panel]@{
     Width = 1; Height = 20; Anchor = 'None'; Margin = [Windows.Forms.Padding]::new(8, 3, 8, 3); BackColor = $separatorColor
 }
 $portSeparator = [Windows.Forms.Panel]@{
-    Width = 1; Height = 20; Anchor = 'None'; Margin = [Windows.Forms.Padding]::new(8, 3, 8, 3); BackColor = $separatorColor
+    Width = 1; Height = 20; Anchor = 'Right'; Margin = [Windows.Forms.Padding]::new(8, 3, 8, 3); BackColor = $separatorColor
 }
 $packageSeparator = [Windows.Forms.Panel]@{
     Height = 1; Anchor = 'Left, Right'; Margin = [Windows.Forms.Padding]::new(3, 0, 3, 0); BackColor = $separatorColor
@@ -152,7 +166,7 @@ $addressCell = New-LauncherComboCell $addressChoice
 $settingsControls = [ordered]@{
     0 = New-LauncherLabel '모드'; 1 = $modeCell; 2 = $modeSeparator
     3 = New-LauncherLabel '서버 IPv4'; 4 = $target; 5 = $addressCell; 6 = $portSeparator
-    7 = New-LauncherLabel 'UDP 포트'; 8 = $targetPort; 10 = $startMode
+    7 = New-LauncherLabel 'UDP 포트'; 8 = $portCell; 10 = $startMode
 }
 foreach ($settingCell in $settingsControls.GetEnumerator()) {
     $control = $settingCell.Value
@@ -162,16 +176,28 @@ foreach ($settingCell in $settingsControls.GetEnumerator()) {
     }
     $settingsGrid.Controls.Add($control, $settingCell.Key, 0)
 }
-$startMode.Anchor = 'Left, Right'
 $startMode.AutoSize = $false
-$startMode.Height = 28
+$startMode.Anchor = 'Top, Bottom, Left, Right'
+$startMode.TextAlign = 'MiddleCenter'
+$settingsGrid.SetRowSpan($startMode, 2)
+$serverMapLabel = New-LauncherLabel '서버 맵'
+$serverMapLabel.Anchor = 'Left'
+$serverMapLabel.Margin = [Windows.Forms.Padding]::new(3)
+$serverMap = [Windows.Forms.ComboBox]@{
+    Name = 'ServerMap'; AccessibleName = '서버 맵'; DropDownStyle = 'DropDownList'; Enabled = $false
+}
+$serverMapCell = New-LauncherComboCell $serverMap
+$serverMapCell.Anchor = 'Left, Right'
+$settingsGrid.Controls.Add($serverMapLabel, 0, 1)
+$settingsGrid.Controls.Add($serverMapCell, 1, 1)
+$settingsGrid.SetColumnSpan($serverMapCell, 8)
 $settingsRows.Controls.Add($packageSeparator, 0, 1)
 
 $packageRow = [Windows.Forms.TableLayoutPanel]@{
     Dock = 'Fill'; AutoSize = $true; AutoSizeMode = 'GrowAndShrink'
     ColumnCount = 3; RowCount = 1; Margin = [Windows.Forms.Padding]::new(0)
 }
-[void]$packageRow.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new('Absolute', 52))
+[void]$packageRow.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new('Absolute', 63))
 [void]$packageRow.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new('Percent', 100))
 [void]$packageRow.ColumnStyles.Add([Windows.Forms.ColumnStyle]::new('Absolute', 86))
 $settingsRows.Controls.Add($packageRow, 0, 2)
@@ -193,9 +219,10 @@ $packageRow.Controls.Add($browsePackage, 2, 0)
 function Resize-LauncherSettings {
     $modeCell.Height = $mode.Height
     $addressCell.Height = $addressChoice.Height
-    $sideInsets = $form.Width - $settingsRows.ClientSize.Width
-    $compactWidth = [Math]::Max(1, $form.MinimumSize.Width - $sideInsets)
-    $settingsGrid.Size = [Drawing.Size]::new($compactWidth, $settingsGrid.PreferredSize.Height)
+    $serverMapCell.Height = $serverMap.Height
+    $portCell.Height = $mode.Height
+    $portTop = [int][Math]::Floor(($portCell.ClientSize.Height - $targetPort.Height) / 2)
+    $targetPort.SetBounds($portCell.Padding.Left, $portTop, ($portCell.ClientSize.Width - $portCell.Padding.Horizontal), $targetPort.Height)
     $height = $settingsRows.PreferredSize.Height + $settings.DisplayRectangle.Top +
         $settings.Padding.Bottom + $settings.Margin.Vertical
     if ($settingsHeight.Height -ne $height) { $settingsHeight.Height = $height }
@@ -341,6 +368,7 @@ $tooltip = [Windows.Forms.ToolTip]::new()
 $tooltip.SetToolTip($mode, '로컬 2인은 서버·A·B, Tailscale 호스트는 서버·A, 접속 전용은 선택한 클라이언트를 실행합니다.')
 $tooltip.SetToolTip($addressChoice, '127.0.0.1은 이 PC 안에서 사용합니다. 내 PC IPv4는 자동 선택하며, 접속할 서버 주소는 직접 입력할 수 있습니다.')
 $tooltip.SetToolTip($targetPort, '기본 게임 포트는 UDP 7777입니다. 서버와 두 클라이언트는 같은 번호를 사용합니다.')
+$tooltip.SetToolTip($serverMap, '서버를 시작할 맵입니다. 접속 전용에서는 서버가 연 맵에 들어갑니다.')
 
 function Get-LauncherPackageIssue([string]$Stage) {
     if (!$Stage) { return '게임 패키지를 선택하세요.' }
@@ -415,6 +443,7 @@ function Save-LauncherPreferences {
         packageRoot = $script:packageRoot; mode = $mode.SelectedIndex
         addressMode = $addressModes[$addressChoice.SelectedIndex]
         manualAddress = $script:manualAddress; port = [int]$targetPort.Value
+        serverMap = [string]$serverMap.SelectedItem
     })
 }
 
@@ -472,6 +501,9 @@ function Set-LauncherPackage([string]$Directory) {
     foreach ($id in $ids) { $script:currentLive[$id] = $id -in $liveSources }
     Set-LauncherPackageDisplay $stage
     $script:packageInfo = Get-CoopLauncherPackageInfo $stage
+    $serverMap.Items.Clear()
+    $serverMap.Items.AddRange([object[]]$script:packageInfo.ServerMaps)
+    $serverMap.SelectedItem = $script:packageInfo.DefaultServerMap
     $build = if ($script:packageInfo.BuildId) { $script:packageInfo.BuildId } else { '빌드 미확인' }
     $form.Text = "CoopRPG | 검증 실행기 · $build"
 
@@ -487,6 +519,8 @@ function Set-LauncherPackage([string]$Directory) {
             $target.Text = [string]$manifest.address
             if ($addressChoice.SelectedIndex -eq 2) { $script:manualAddress = $target.Text }
             if ($manifest.PSObject.Properties['adapterKey']) { $script:adapterKey = [string]$manifest.adapterKey }
+            $sessionMap = if ($manifest.PSObject.Properties['serverMap']) { $manifest.serverMap } else { 'L_Movement' }
+            if ($serverMap.Items.Contains($sessionMap)) { $serverMap.SelectedItem = $sessionMap }
 
         } finally {
             $script:applyingSettings = $false
@@ -540,7 +574,14 @@ function Initialize-LauncherSettings {
     if (!$directory) { $directory = Find-LauncherStage $PSScriptRoot }
     if (!$directory) { $directory = Find-LauncherStage (Split-Path -Parent $PSScriptRoot) }
     if ($directory) {
-        try { Set-LauncherPackage $directory } catch {
+        try {
+            Set-LauncherPackage $directory
+            if ($script:packageRoot -and !$script:currentLive.ContainsValue($true) -and $saved -and
+                $saved.PSObject.Properties['packageRoot'] -and $saved.packageRoot -eq $script:packageRoot -and
+                $saved.PSObject.Properties['serverMap'] -and $serverMap.Items.Contains($saved.serverMap)) {
+                $serverMap.SelectedItem = $saved.serverMap
+            }
+        } catch {
             Set-LauncherPackageDisplay $directory
             $notice.Text = $_.Exception.Message
         }
@@ -592,8 +633,9 @@ function Invoke-LauncherStart([string]$Id) {
                     Save-CoopLauncherSettings $remoteEndpointPath @{ address = $address.ToString(); port = [int]$targetPort.Value }
                 }
             } catch { $notice.Text = "설정을 저장하지 못했습니다. $($_.Exception.Message)" }
+            $selectedMap = if ($mode.SelectedIndex -ne 2) { [string]$serverMap.SelectedItem } else { '' }
             $script:session = New-CoopLauncherSession $script:logRoot $address ([int]$targetPort.Value) $mode.SelectedIndex `
-                $script:packageRoot $addressModes[$addressChoice.SelectedIndex] $script:adapterKey
+                $script:packageRoot $addressModes[$addressChoice.SelectedIndex] $script:adapterKey -ServerMap $selectedMap
             $script:observed = @{}
             $script:messages.Clear()
             $script:canceledStarts.Clear()
@@ -780,7 +822,9 @@ function Update-LauncherView {
     Update-LauncherRoster
     $running = $script:starting -or $script:clientStops.Count -gt 0 -or $script:currentLive.ContainsValue($true)
     $mode.Enabled = !$running
-    $targetPort.Enabled = !$running
+    $portCell.Enabled = !$running
+    $portCell.BackColor = if ($running) { [Drawing.SystemColors]::Control } else { [Drawing.SystemColors]::Window }
+    $serverMap.Enabled = !$running -and $mode.SelectedIndex -ne 2 -and $serverMap.Items.Count -gt 1
     $addressChoice.Enabled = !$running
     $target.Enabled = !$running -and $addressChoice.SelectedIndex -eq 2
 

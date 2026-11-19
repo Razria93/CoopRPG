@@ -88,3 +88,24 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Start-CoopLan.ps1 -Rol
 - `Packaged-04/success-a.png`·`success-b.png`, `server.log`·`a.log`·`b.log`, `os-input.jsonl`과 `audit.json`에 성공 화면, 원본 로그, 입력 기록과 판정이 있다.
 
 **사용자 확인** · 두 PC에 `CoopRPG-MVP02-01-Round-01.zip`을 풀고 위 기동·플레이 순서에서 서버 옵션을 `-Map L_Round_01`로 바꾼다. 서버 로그의 `listening on port`와 `RoundStageReady Map=L_Round_01`을 확인한 뒤 A·B를 접속한다. 교전에서 적의 정면 표식과 두 플레이어가 함께 들어오는 화면, 양쪽 성공·1점 화면, 서버·A·B 원본 로그를 남긴다. [별도 PC 검증 기준](LanBaseline.md#manual-tailscale-20261118)
+
+<a id="round-01-launcher"></a>
+### 실행기에서 숲 서버 시작·종료
+
+실행기의 `서버 맵`에서 패키지에 등록한 시작 맵을 고를 수 있다. 이번 묶음은 `L_Round_01`을 기본 선택으로 표시하고 `L_Movement`도 열 수 있다. 서버 실행 시 선택을 회차 기록에 저장하고, 실행기를 다시 열면 실행 중인 맵을 복원한다. 같은 패키지에서 마지막으로 고른 맵도 저장한다. 기존 패키지 정보에 맵 목록이 없으면 `L_Movement`를 사용한다. `접속 전용`의 클라이언트는 접속 대상 서버가 연 맵에 들어간다.
+
+| PC | 기동과 확인 |
+|---|---|
+| 데스크톱 | 두 PC에 같은 `CoopRPG-MVP02-01-Round-01-2PC.zip`을 풀고 `Open-CoopRPG-2PC.cmd`를 연다. `Tailscale 호스트`·데스크톱 Tailscale IPv4·UDP `7777`·`L_Round_01`을 확인하고 `실행`을 누른다. 전용 서버와 A가 열리면 `주소 복사`로 주소와 포트를 노트북에 전달한다. |
+| 노트북 | `접속 전용`에서 받은 값을 복사한 뒤 `주소 붙여넣기`를 누르고 B를 접속시킨다. 데스크톱의 서버 참가자 표와 양쪽 숲 화면을 확인한다. |
+| 시험 종료 | 양쪽 성공·팀 점수 1 화면과 숲 시야·측면 우회·바위 충돌 장면을 남긴다. 각 실행기의 `로그 폴더`에서 데스크톱 서버·A와 노트북 B의 원본을 보관한다. 양쪽 클라이언트를 닫고 데스크톱 서버 행의 `종료`를 누른다. |
+
+게임 `Stage` 파일 85개는 앞서 2인 완주를 확인한 ZIP과 SHA‑256이 모두 일치한다. 실행기만 묶어 배포하는 과정에서 Windows PowerShell의 CMD 진입점이 `Get-FileHash`를 불러오지 못해 빌드 정보가 표시되지 않았다. 해시 판정을 .NET SHA‑256으로 바꾸고 CMD에서 올바른 빌드와 Stage가 열리는 것을 확인했다. 창 폭 795px·1160px에서 맵 라벨·설정과 로그 버튼을 실제 화면으로 확인했다.
+
+**근거** · 로컬 `Artifacts/Validation/mvp02-01-round-01-launcher-20261119/`의 실행 ZIP, `archive-verification.json`, `entry-final.json`, `Live-bb8702c7/checks.txt`와 서버·A·B 원본, `host-default.png`·`host-wide.png`·`host-two-participants.png`·`host-stopped.png`. 별도 물리 PC 2대에서의 실사용 확인은 대기 중이다.
+
+#### 넓은 창 설정 배치 보완
+
+위쪽은 모드와 IPv4 입력·선택을 왼쪽에 두고 UDP 포트와 `실행`을 오른쪽에 두었다. 가운데 추가 폭은 아래 `서버 맵` 선택란에서 사용한다. 맵 선택란은 모드 입력란부터 UDP 포트의 오른쪽 끝까지 이어진다. `실행`은 두 행의 위·아래 끝을 맞추고 텍스트를 가운데에 둔다. UDP 값은 숫자 컨트롤 주변에 여백을 주어 직접 입력과 화살표 증감 동작을 유지한다.
+
+실제 Windows 실행기를 폭 795px·1160px로 띄워 끝선, 중앙 정렬과 스크롤 유무를 확인했다. 로컬 `Artifacts/Validation/mvp02-01-round-01-launcher-layout-20261119/`의 `default.png`·`wide.png`, `layout-checks.json`, `port-check.txt`에 화면과 측정값이 있다. `CoopRPG-MVP02-01-Round-01-2PC-layout.zip`은 이전 ZIP의 실행기 UI 스크립트만 갱신한 파일이며, 게임 `Stage` 파일 85개는 해시가 일치한다. 대조 결과는 `archive-verification.json`에 있다.
