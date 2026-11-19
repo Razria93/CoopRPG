@@ -9,6 +9,7 @@
 #include "CoopRPGLootHUD.h"
 #include "CoopRPGPlayerController.h"
 #include "CoopRPGRoundTravelSeats.h"
+#include "CoopRPGPlayerState.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -24,8 +25,15 @@ namespace
 {
     constexpr TCHAR FirstMapPackage[] = TEXT("/Game/Maps/L_Movement");
     constexpr TCHAR SecondMapPackage[] = TEXT("/Game/Maps/L_Movement_Round2");
+    constexpr TCHAR ForestMapName[] = TEXT("L_ForestExpedition");
+    constexpr TCHAR RoundOneMapName[] = TEXT("L_Round_01");
     constexpr double ResultDisplaySeconds = 3.0;
     constexpr int32 RoundCapacity = 2;
+
+    bool UsesPlacedRoundActors(const FString& MapName)
+    {
+        return MapName == ForestMapName || MapName == RoundOneMapName;
+    }
 
     void LogAdmissionRejection(const TCHAR* Stage, const FString& Reason)
     {
@@ -46,6 +54,7 @@ ACoopRPGGameMode::ACoopRPGGameMode()
     DefaultPawnClass = ACoopRPGCharacter::StaticClass();
     PlayerControllerClass = ACoopRPGPlayerController::StaticClass();
     GameStateClass = ACoopRPGGameState::StaticClass();
+    PlayerStateClass = ACoopRPGPlayerState::StaticClass();
     HUDClass = ACoopRPGLootHUD::StaticClass();
 }
 
@@ -129,13 +138,33 @@ void ACoopRPGGameMode::AcknowledgeRoundResult(ACoopRPGPlayerController* Player, 
 void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
     Super::InitGame(MapName, Options, ErrorMessage);
-    bEnemyCombat = UGameplayStatics::HasOption(Options, TEXT("EnemyCombat"));
+    bEnemyCombat = UGameplayStatics::HasOption(Options, TEXT("EnemyCombat"))
+        || UsesPlacedRoundActors(UGameplayStatics::GetCurrentLevelName(this));
 }
 
 void ACoopRPGGameMode::BeginPlay()
 {
     Super::BeginPlay();
     const FString MapName = UGameplayStatics::GetCurrentLevelName(this);
+    if (UsesPlacedRoundActors(MapName))
+    {
+        auto* Chest = Cast<ACoopRPGSharedChest>(UGameplayStatics::GetActorOfClass(this, ACoopRPGSharedChest::StaticClass()));
+        auto* Zone = Cast<ACoopRPGExtractionZone>(UGameplayStatics::GetActorOfClass(this, ACoopRPGExtractionZone::StaticClass()));
+        Enemy = Cast<ACoopRPGEnemy>(UGameplayStatics::GetActorOfClass(this, ACoopRPGEnemy::StaticClass()));
+        auto* State = GetGameState<ACoopRPGGameState>();
+        if (ensureMsgf(Chest && Zone && IsValid(Enemy.Get()) && State,
+            TEXT("Round map %s requires a shared chest, enemy, and extraction zone."), *MapName))
+        {
+            State->InitializeLootRound(Chest, Zone);
+            PublishReadySlots(*State);
+            const TCHAR* Event = MapName == ForestMapName ? TEXT("ForestStageReady") : TEXT("RoundStageReady");
+            UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("%s Map=%s Chest=%s Enemy=%s Extraction=%s"),
+                Event, *MapName, *Chest->GetActorLocation().ToString(), *Enemy->GetActorLocation().ToString(),
+                *Zone->GetActorLocation().ToString());
+        }
+        return;
+    }
+
     if (MapName == TEXT("L_Movement") || MapName == TEXT("L_Movement_Round2"))
     {
         ACoopRPGExtractionZone* Zone = nullptr;
@@ -255,6 +284,11 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
     if (SlotIndex != INDEX_NONE)
     {
         PlayerSlots[SlotIndex] = Player;
+        if (auto* Identity = Player->GetPlayerState<ACoopRPGPlayerState>())
+        {
+            // Lobby selection can replace this default without changing pawn or slot identity.
+            Identity->SetSelectedHero(SlotIndex == 0 ? ECoopRPGHero::Adventurer : ECoopRPGHero::AnimalHero);
+        }
         const FString Label = UGameplayStatics::ParseOption(Options, TEXT("CoopValidationLabel"));
         ValidationClientLabels[SlotIndex] = Label.Equals(TEXT("A"), ESearchCase::CaseSensitive)
             || Label.Equals(TEXT("B"), ESearchCase::CaseSensitive) ? Label : FString();

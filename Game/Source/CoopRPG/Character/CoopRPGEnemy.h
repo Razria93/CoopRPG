@@ -57,6 +57,12 @@ private:
     TObjectPtr<UStaticMeshComponent> EnemyVisual;
 
     UPROPERTY()
+    TObjectPtr<UStaticMeshComponent> FacingMarker;
+
+    UPROPERTY(EditInstanceOnly, Category = "Presentation")
+    bool bShowFacingMarker = false;
+
+    UPROPERTY()
     TObjectPtr<UMaterialInstanceDynamic> PresentationMaterial;
 
     FTimerHandle HitFlashTimer;

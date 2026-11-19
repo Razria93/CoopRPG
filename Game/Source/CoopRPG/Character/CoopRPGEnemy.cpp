@@ -65,6 +65,15 @@ ACoopRPGEnemy::ACoopRPGEnemy()
         TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
     EnemyVisual->SetMaterial(0, TintableMaterial.Object);
 
+    FacingMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FacingMarker"));
+    FacingMarker->SetupAttachment(GetRootComponent());
+    FacingMarker->SetStaticMesh(Cube.Object);
+    FacingMarker->SetMaterial(0, TintableMaterial.Object);
+    FacingMarker->SetRelativeLocation(FVector(35.0f, 0.0f, 70.0f));
+    FacingMarker->SetRelativeScale3D(FVector(0.20f, 0.30f, 0.18f));
+    FacingMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    FacingMarker->SetVisibility(false);
+
     AbilitySystem = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystem"));
     AbilitySystem->SetIsReplicated(true);
     AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
@@ -186,6 +195,7 @@ void ACoopRPGEnemy::FlashPresentationHit()
 void ACoopRPGEnemy::BeginPlay()
 {
     Super::BeginPlay();
+    FacingMarker->SetVisibility(bShowFacingMarker);
     RestorePresentationTint();
     AbilitySystem->InitAbilityActorInfo(this, this);
     ObservationOrigin = GetActorLocation();
@@ -324,6 +334,7 @@ void ACoopRPGEnemy::ApplyDeathPresentation()
 {
     GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     EnemyVisual->SetVisibility(false);
+    FacingMarker->SetVisibility(false);
 }
 
 void ACoopRPGEnemy::SetPresentationTint(bool bDarkened)

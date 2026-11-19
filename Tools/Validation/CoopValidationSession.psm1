@@ -96,7 +96,7 @@ function Read-CoopLauncherRemoteEndpoint([string]$Path) {
 }
 
 function Get-CoopLauncherPackageInfo([string]$Stage) {
-    $unknown = [pscustomobject]@{ BuildId = ''; Roster = 'Unknown' }
+    $unknown = [pscustomobject]@{ BuildId = ''; Roster = 'Unknown'; ServerMaps = @('L_Movement'); DefaultServerMap = 'L_Movement' }
     $directory = if ((Split-Path -Leaf $Stage) -eq 'Stage') { Split-Path -Parent $Stage } else { $Stage }
     $path = Join-Path $directory 'package-manifest.json'
     if (!(Test-Path -LiteralPath $path -PathType Leaf)) { return $unknown }
@@ -110,18 +110,44 @@ function Get-CoopLauncherPackageInfo([string]$Stage) {
             $manifest.capabilities.validationParticipants -isnot [bool]) { return $unknown }
 
         $verified = $false
+        $serverVerified = $false
         foreach ($role in @('Server', 'Client')) {
             $binary = Join-Path $Stage "Windows$role/CoopRPG/Binaries/Win64/CoopRPG$role.exe"
             if (!(Test-Path -LiteralPath $binary -PathType Leaf)) { continue }
             $property = $manifest.PSObject.Properties["${role}Sha256"]
-            if (!$property -or (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash -ne $property.Value) {
-                return [pscustomobject]@{ BuildId = ''; Roster = 'Mismatch' }
+            $sha = [Security.Cryptography.SHA256]::Create()
+            $stream = $null
+            try {
+                $stream = [IO.File]::OpenRead($binary)
+                $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '')
+            } finally {
+                if ($stream) { $stream.Dispose() }
+                $sha.Dispose()
+            }
+            if (!$property -or $hash -ne $property.Value) {
+                $unknown.Roster = 'Mismatch'
+                return $unknown
             }
             $verified = $true
+            if ($role -eq 'Server') { $serverVerified = $true }
         }
         if ($verified) {
             $roster = if ($manifest.capabilities.validationParticipants) { 'Supported' } else { 'Unsupported' }
-            return [pscustomobject]@{ BuildId = [string]$manifest.buildId; Roster = $roster }
+            $unknown.BuildId = [string]$manifest.buildId
+            $unknown.Roster = $roster
+            if ($serverVerified -and $manifest.PSObject.Properties['serverMaps']) {
+                $supported = @('L_Movement', 'L_ForestExpedition', 'L_Round_01')
+                $listed = @($manifest.serverMaps | Where-Object { $_ -is [string] -and $_ -cin $supported } |
+                    Select-Object -Unique)
+                if ($listed.Count -gt 0) {
+                    $unknown.ServerMaps = $listed
+                    $unknown.DefaultServerMap = $listed[0]
+                    if ($manifest.PSObject.Properties['defaultServerMap'] -and $manifest.defaultServerMap -cin $listed) {
+                        $unknown.DefaultServerMap = [string]$manifest.defaultServerMap
+                    }
+                }
+            }
+            return $unknown
         }
     } catch { return $unknown }
     $unknown
@@ -157,7 +183,7 @@ function Get-CoopLauncherLocalAddresses {
 }
 
 function New-CoopLauncherSession([string]$LogRoot, [ipaddress]$Address, [int]$Port, [int]$Mode,
-    [string]$PackageRoot, [string]$AddressMode, [string]$AdapterKey) {
+    [string]$PackageRoot, [string]$AddressMode, [string]$AdapterKey, [string]$ServerMap = 'L_Movement') {
     $name = 'launcher-{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmmss-fff'), [guid]::NewGuid().ToString('N').Substring(0, 8)
     $directory = Join-Path $LogRoot $name
     [void][IO.Directory]::CreateDirectory($directory)
@@ -166,6 +192,7 @@ function New-CoopLauncherSession([string]$LogRoot, [ipaddress]$Address, [int]$Po
         Manifest = [pscustomobject]@{
             address = $Address.ToString(); port = $Port; mode = $Mode; sources = @(); previousSources = @()
             packageRoot = $PackageRoot; addressMode = $AddressMode; adapterKey = $AdapterKey
+            serverMap = $ServerMap
         }
     }
 }
@@ -226,7 +253,11 @@ function Start-CoopLauncherProcess($Session, [ValidateSet('server', 'a', 'b')][s
         Role = $role; Address = $address; Port = $port; PackageRoot = $PackageRoot
         LogRoot = $Session.Directory; AllowLoopback = $true; PassThru = $true
     }
-    if ($role -eq 'Client') { $options.ClientLabel = $Id.ToUpperInvariant() }
+    if ($role -eq 'Client') {
+        $options.ClientLabel = $Id.ToUpperInvariant()
+    } elseif ($Session.Manifest.PSObject.Properties['serverMap'] -and $Session.Manifest.serverMap) {
+        $options.Map = $Session.Manifest.serverMap
+    }
     $launch = & (Join-Path $PSScriptRoot 'Start-CoopLan.ps1') @options
     $process = $launch.Process
     try {

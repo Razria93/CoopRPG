@@ -26,6 +26,12 @@
 /Game/Plugins/**/Intermediate/
 /Game/Plugins/**/Saved/
 /Game/Plugins/**/DerivedDataCache/
+/Game/Build/**/FileOpenOrder/CookerOpenOrder.log
+
+# Local licensed source content, supplied separately for playable builds.
+/Game/Content/ThirdParty/
+/Game/Content/RPGHeroSquad/
+/Game/Content/RPGTinyFantasyForest/
 
 # Local packages, large raw evidence and retired temporary documents
 /Artifacts/

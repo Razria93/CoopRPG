@@ -6,7 +6,8 @@
     [switch]$NoForeground,
     [switch]$NoLogViewer,
     [switch]$EnemyCombat,
-    [ValidateSet('A','B')][string]$FocusClient='A'
+    [ValidateSet('A','B')][string]$FocusClient='A',
+    [ValidateSet('L_Movement','L_ForestExpedition','L_Round_01')][string]$Map='L_Movement'
 )
 $ErrorActionPreference='Stop'
 Import-Module (Join-Path $PSScriptRoot 'CombatViewerLayout.psm1') -Force
@@ -69,8 +70,9 @@ try {
     $work=$placement.Game
     $gap=12;$width=$placement.A.Width;$height=$placement.A.Height
     $common=@('-nosound','-NoSplash','-forcelogflush')
-    if(!$EnemyCombat){$common+='-CoopCombatTest'}
-    $mapArgs=@(if($EnemyCombat){'/Game/Maps/L_Movement?EnemyCombat'})
+    $runEnemyCombat = $EnemyCombat -or $Map -ne 'L_Movement'
+    if(!$runEnemyCombat){$common+='-CoopCombatTest'}
+    $mapArgs=@(if($runEnemyCombat){"/Game/Maps/${Map}?EnemyCombat"})
     # Server log is written to disk; its console must not cover the two game windows.
     $started.server=Start-Process -FilePath $server -WorkingDirectory (Split-Path $server) -ArgumentList ($mapArgs+@("-port=$port",'-MULTIHOME=127.0.0.1','-log',"-ABSLOG=`"$out/server.log`"",'-ExecCmds="t.MaxFPS 30,Log LogCoopRPGInput Verbose,AbilitySystem.ServerRPCBatching.Log 1"')+$common) -WindowStyle Hidden -PassThru
     Wait-Log 'server' "listening on port $port\b"
@@ -112,7 +114,8 @@ try {
             @{id=$role;label=$label;file=($role+'.log');processId=$started[$role].Id;processName=$started[$role].ProcessName;startedUtc=$started[$role].StartTime.ToUniversalTime().ToString('o')}
         }
     )
-    $meta.enemyCombat=[bool]$EnemyCombat
+    $meta.enemyCombat=$runEnemyCombat
+    $meta.map=$Map
     $meta.monitorLayout=@{game=$placement.Game.DeviceName;log=$placement.Log.DeviceName;separate=$placement.Separate}
     # The viewer reads this manifest at startup, before its own PID is known.
     $meta|ConvertTo-Json -Depth 6|Set-Content -LiteralPath "$out/processes.json" -Encoding utf8
