@@ -157,6 +157,7 @@ CoopRPG · 기록 시작 2026-11-05 · 현행 학습·개발 진도의 운영 �
 | 11/19 · 클라이언트 종료·중복 접속 보완 | 사용자가 두 PC에서 참가자·준비·새 서버 입장을 확인했고, B 종료 후 P2가 남는 증상과 접속 연타 후 둘째 확인 취소를 제보했다. | AI가 이전 서버의 60초 타임아웃과 노트북의 빨간 접속 완료 화면을 대조했다. 정상 종료 우선과 중복 실행 차단, 취소 처리 및 종료 로그를 반영했다. [트러블슈팅](Cases/ValidationLauncher.md#client-lifecycle-troubleshooting) | 로컬 전용 서버·A·B로 동일 회차 재접속, 정상 종료 및 5초 강제 종료 경로, 진행 중 종료·0점 단일 확정, 연타·취소·시작 실패 표시를 확인했다. 저장소 검사 6개도 통과했다. 수정판은 [새 묶음 검증](Validation/LanBaseline.md#validation-launcher-client-lifecycle)에 남겼고 두 PC 사용자 확인이 남았다. |
 | 11/19 · 종료 보완 묶음 두 PC 재검증 | 사용자가 실제 Windows 취소 후 접속, B 종료·재접속과 라운드 중 종료를 확인하고 양쪽 자료를 공유했다. | AI가 같은 회차의 서버·A·B와 화면을 대조하고 Windows PowerShell 5.1의 예외 변환을 확인했다. [수동 검증과 원본](Validation/LanBaseline.md#validation-launcher-client-lifecycle-two-pc) | 정상 종료·같은 서버 재접속·단일 0점 통과. Windows 실행 확인 취소의 빨간 실패 표시 보완이 남았다. |
 | 11/19 · 실행 취소 상태 표시 | 사용자가 첫 클릭 뒤 버튼이 잠기고 확인 창이 한 번만 떴음을 확인했다. 취소는 재시도가 가능한 표시 개선으로 처리하고 AI가 로컬 검증과 캡처를 맡았다. | 원본 Win32 예외가 전달되는 셸 실행 호출과 중립색 `실행 취소` 행을 적용했다. | 취소 복귀, 실제 시작 오류, 로컬 전용 서버에서 B 재접속을 확인했다. [결과 화면과 원본](Validation/LanBaseline.md#validation-launcher-start-canceled) |
+| 11/19 · #19 리뷰 대응 및 뷰어 출처 갱신 | 사용자가 늦은 접속·재접속에서 화면과 Excel을 함께 확인하도록 요청했다. | AI가 회차의 교체 파일 이력과 열린 뷰어의 출처 갱신, 파일별 사건·Actor 식별을 반영했다. | 실제 전용 서버·A·B에서 늦은 접속과 B 재접속을 재현했다. 통합 XLSX 50행 중 클라이언트 원본 25행을 파일·바이트 위치까지 대조했다. [검증과 원본](Validation/LanBaseline.md#validation-launcher-live-source-refresh) |
 | 11/19 | G4: 패키지·회귀 검증 | 미기록 | 미기록 |
 | 11/20 | README·구조·문제 해결 사례 | 미기록 | 미기록 |
 | 11/21 | 검증 빌드 영상 | 미기록 | 미기록 |

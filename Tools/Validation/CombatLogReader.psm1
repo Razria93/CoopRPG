@@ -392,10 +392,11 @@ function ConvertTo-CombatLogEvent([string]$Line) {
     [pscustomobject]@{SchemaVersion=1;UtcTime=$utc;Time=$time;SortTicks=$(if($null -ne $utc){$utc.Ticks}else{[long]::MaxValue});Category=$category;Topic=$topic;Level=$level;EventCode=$eventCode;Stage=$stage;Outcome=$outcome;ReasonCode=$reason;Kind=$kind;HealthSubject='';Label=$label;Detail=$detail;Summary=$summary;Actor=$actor;Target=[string]$fields['Target'];RequestId=$null;Relationship='관계 미계측';Fields=$fields;Raw=$Line;Text="[$time] $summary"}
 }
 
-function Add-CombatEventContext($Event,[string]$RunId,[string]$SourceId,[string]$SourceLabel,[string]$Path,$Record,[long]$CollectionOrder){
+function Add-CombatEventContext($Event,[string]$RunId,[string]$SourceId,[string]$SourceLabel,[string]$Path,$Record,[long]$CollectionOrder,[string]$FileKey){
     $Event.Relationship='관계 미계측'
     $world=if($Record.PSObject.Properties['WorldSequence']){[int]$Record.WorldSequence}else{0}
-    $properties=@{WorldSequence=$world;RunId=$RunId;SourceId=$SourceId;SourceLabel=$SourceLabel;SourcePath=$Path;FileGeneration=$Record.FileGeneration;ByteOffset=$Record.ByteOffset;CollectionOrder=$CollectionOrder;EventId=('{0}/{1}/file{2}/{3}' -f $RunId,$SourceId,$Record.FileGeneration,$Record.ByteOffset)}
+    if(!$FileKey){$FileKey=[uri]::EscapeDataString($Path.ToUpperInvariant())}
+    $properties=@{WorldSequence=$world;RunId=$RunId;SourceId=$SourceId;SourceLabel=$SourceLabel;SourcePath=$Path;SourceFileKey=$FileKey;FileGeneration=$Record.FileGeneration;ByteOffset=$Record.ByteOffset;CollectionOrder=$CollectionOrder;EventId=('{0}/{1}/{2}/file{3}/{4}' -f $RunId,$SourceId,$FileKey,$Record.FileGeneration,$Record.ByteOffset)}
     foreach($key in $properties.Keys){$Event | Add-Member -NotePropertyName $key -NotePropertyValue $properties[$key]}
     return $Event
 }
@@ -423,7 +424,7 @@ function Get-CombatHealthPlayerId($Event) {
 
 function Get-CombatActorEvidenceKey($Event) {
     if($Event.WorldSequence -gt 0 -and $Event.Actor -and $Event.Fields['NetMode'] -eq 'Client'){
-        return '{0}/{1}/{2}/{3}/{4}' -f $Event.RunId,$Event.SourceId,$Event.FileGeneration,$Event.WorldSequence,$Event.Actor
+        return '{0}/{1}/{2}/{3}/{4}/{5}' -f $Event.RunId,$Event.SourceId,$Event.SourceFileKey,$Event.FileGeneration,$Event.WorldSequence,$Event.Actor
     }
     return ''
 }

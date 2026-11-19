@@ -164,7 +164,7 @@ function New-CoopLauncherSession([string]$LogRoot, [ipaddress]$Address, [int]$Po
     [pscustomobject]@{
         Directory = $directory
         Manifest = [pscustomobject]@{
-            address = $Address.ToString(); port = $Port; mode = $Mode; sources = @()
+            address = $Address.ToString(); port = $Port; mode = $Mode; sources = @(); previousSources = @()
             packageRoot = $PackageRoot; addressMode = $AddressMode; adapterKey = $AdapterKey
         }
     }
@@ -241,12 +241,19 @@ function Start-CoopLauncherProcess($Session, [ValidateSet('server', 'a', 'b')][s
             startTicks = $started.Ticks.ToString([Globalization.CultureInfo]::InvariantCulture)
             stoppedByLauncher = $false
         }
-        $previous = $Session.Manifest.sources
-        $Session.Manifest.sources = @($previous | Where-Object { $_.id -ne $Id }) + @($source)
+        $manifest = $Session.Manifest
+        $previous = $manifest.sources
+        if (!$manifest.PSObject.Properties['previousSources']) {
+            $manifest | Add-Member -NotePropertyName previousSources -NotePropertyValue @()
+        }
+        $history = $manifest.previousSources
+        $manifest.previousSources = @($history) + @($previous | Where-Object { $_.id -eq $Id })
+        $manifest.sources = @($previous | Where-Object { $_.id -ne $Id }) + @($source)
         try {
             Save-CoopLauncherSession $Session
         } catch {
-            $Session.Manifest.sources = $previous
+            $manifest.sources = $previous
+            $manifest.previousSources = $history
             throw
         }
         $source
