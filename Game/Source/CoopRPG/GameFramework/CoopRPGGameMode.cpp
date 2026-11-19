@@ -18,6 +18,7 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundTravel, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundAdmission, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGValidationRoster, Log, All);
 
 namespace
 {
@@ -151,6 +152,7 @@ void ACoopRPGGameMode::BeginPlay()
         {
             auto* Chest = GetWorld()->SpawnActor<ACoopRPGSharedChest>(FVector(300.0f, -95.0f, 28.0f), FRotator::ZeroRotator);
             State->InitializeLootRound(Chest, Zone);
+            PublishReadySlots(*State);
         }
     }
 }
@@ -238,19 +240,27 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
         UE_LOG(LogCoopRPGRoundAdmission, Log, TEXT("RoundPlayerAdmitted Map=%s Players=%d"),
             *Map.ToString(), GetNumPlayers());
     }
-    if (ReservedSlot != INDEX_NONE)
+    int32 SlotIndex = ReservedSlot;
+    if (SlotIndex == INDEX_NONE)
     {
-        PlayerSlots[ReservedSlot] = Player;
-    }
-    else
-    {
-        for (auto& Slot : PlayerSlots)
+        for (int32 Index = 0; Index < RoundCapacity; ++Index)
         {
-            if (!Slot.IsValid())
+            if (!PlayerSlots[Index].IsValid())
             {
-                Slot = Player;
+                SlotIndex = Index;
                 break;
             }
+        }
+    }
+    if (SlotIndex != INDEX_NONE)
+    {
+        PlayerSlots[SlotIndex] = Player;
+        const FString Label = UGameplayStatics::ParseOption(Options, TEXT("CoopValidationLabel"));
+        ValidationClientLabels[SlotIndex] = Label.Equals(TEXT("A"), ESearchCase::CaseSensitive)
+            || Label.Equals(TEXT("B"), ESearchCase::CaseSensitive) ? Label : FString();
+        if (auto* State = GetGameState<ACoopRPGGameState>())
+        {
+            PublishReadySlots(*State);
         }
     }
     return Player;
@@ -264,11 +274,12 @@ void ACoopRPGGameMode::Logout(AController* Exiting)
     {
         bParticipantDisconnected = true;
     }
-    for (auto& Slot : PlayerSlots)
+    for (int32 Index = 0; Index < RoundCapacity; ++Index)
     {
-        if (Slot.Get() == Exiting)
+        if (PlayerSlots[Index].Get() == Exiting)
         {
-            Slot.Reset();
+            PlayerSlots[Index].Reset();
+            ValidationClientLabels[Index].Reset();
         }
     }
     Super::Logout(Exiting);
@@ -295,7 +306,7 @@ void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
     }
 }
 
-void ACoopRPGGameMode::PublishReadySlots(ACoopRPGGameState& State) const
+void ACoopRPGGameMode::PublishReadySlots(ACoopRPGGameState& State)
 {
     const auto GetStatus = [](const APlayerController* Controller)
     {
@@ -306,7 +317,32 @@ void ACoopRPGGameMode::PublishReadySlots(ACoopRPGGameState& State) const
         }
         return Player->IsRoundReady() ? ECoopRPGReadyStatus::Ready : ECoopRPGReadyStatus::Waiting;
     };
-    State.SetReadySlots({GetStatus(PlayerSlots[0].Get()), GetStatus(PlayerSlots[1].Get())});
+    const FCoopRPGReadySlots ReadySlots{GetStatus(PlayerSlots[0].Get()), GetStatus(PlayerSlots[1].Get())};
+    State.SetReadySlots(ReadySlots);
+    if (GetNetMode() != NM_DedicatedServer || !State.GetRoundId().IsValid())
+    {
+        return;
+    }
+
+    const auto DescribeSlot = [this](int32 Index, ECoopRPGReadyStatus ReadyStatus)
+    {
+        const APlayerController* Controller = PlayerSlots[Index].Get();
+        const APlayerState* PlayerState = Controller ? Controller->GetPlayerState<APlayerState>() : nullptr;
+        const FString& Label = ValidationClientLabels[Index];
+        const TCHAR* Status = !Controller ? TEXT("Disconnected") : !Controller->GetPawn() ? TEXT("Joining")
+            : ReadyStatus == ECoopRPGReadyStatus::Ready ? TEXT("Ready") : TEXT("Waiting");
+        return FString::Printf(TEXT("P%dLabel=%s P%dId=%d P%dState=%s"), Index + 1,
+            Controller && !Label.IsEmpty() ? *Label : TEXT("None"), Index + 1,
+            PlayerState ? PlayerState->GetPlayerId() : INDEX_NONE, Index + 1, Status);
+    };
+
+    const FString Snapshot = FString::Printf(TEXT("Round=%s %s %s"), *State.GetRoundId().ToString(),
+        *DescribeSlot(0, ReadySlots.PlayerOne), *DescribeSlot(1, ReadySlots.PlayerTwo));
+    if (Snapshot != LastValidationParticipants)
+    {
+        LastValidationParticipants = Snapshot;
+        UE_LOG(LogCoopRPGValidationRoster, Log, TEXT("ValidationParticipants %s"), *Snapshot);
+    }
 }
 
 FString ACoopRPGGameMode::GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId)
