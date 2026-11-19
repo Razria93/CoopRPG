@@ -56,7 +56,8 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 |---|---|---|
 | 빌드·전용 서버·이동 | [빌드 원리](Docs/Learning/UnrealBuildPipeline.md) · [소스 엔진](Docs/Learning/SourceEngineDecision.md) · [구조](Docs/Architecture.md) · [V01 결과](Docs/Validation/Index.md#v01-server-shutdown) | 현재 저장소 문서를 사용. 별도 HTML/PDF가 있더라도 아래 식별 정보가 확인되기 전 최신본으로 간주하지 않음 |
 | GAS 단타·비용·속성 복제 | [GAS 구현 읽기](Docs/Learning/GASMeleeAttack.md) · [입력 회귀](Docs/Validation/Index.md#v02-attack-input-regression) · [사용자 확인](Docs/Validation/Index.md#v02-manual-attack-result) | Markdown은 비용·쿨다운과 Mixed 복제의 실제 시험을 추가한 미커밋 갱신본. 8쪽 PDF는 그 이전 로컬 검토본으로 새 기능 미반영·공개/최종 제출본 아님 |
-| 전용 서버 로그 뷰어 | [기술 안내](Docs/Validation/LogViewer.md) · [사용자 수동 검증](Docs/Validation/Index.md#v02-viewer-player-attribution-manual) · [최종 화면 검증](Docs/Validation/Index.md#v02-viewer-toolbar-order) | 포트폴리오 HTML 로컬 편집본은 `Artifacts/Documentation/CoopRPG-LogViewer-Case/index.html`. `manifest.json`에 뷰어 기준·수동 실행·파일 해시를 기록했다. 1440px·390px에서 검수했다. |
+| 전용 서버 로그 뷰어 | [제작·검토 사례](Docs/Cases/ValidationLogViewer.md) · [기술 안내](Docs/Validation/LogViewer.md) · [사용자 수동 검증](Docs/Validation/Index.md#v02-viewer-player-attribution-manual) | Markdown 사례는 후속 보완까지 연결한다. V02 시점의 로컬 HTML 편집본은 원본 작업 트리의 `Artifacts/Documentation/CoopRPG-LogViewer-Case/index.html`이다. `manifest.json`에 화면 기준·수동 실행·파일 해시가 있고, 1440px·390px에서 검수했다. |
+| 검증 실행기 | [제작·검토 사례](Docs/Cases/ValidationLauncher.md) · [기동·검증 안내](Docs/Validation/LanBaseline.md#validation-launcher-first-run) · [두 PC 검증](Docs/Validation/LanBaseline.md#validation-launcher-client-lifecycle-two-pc) · [취소 표시 검증](Docs/Validation/LanBaseline.md#validation-launcher-start-canceled) | 데스크톱·노트북에서 B 정상 종료와 같은 서버 재접속, 진행 중 종료·0점을 확인했다. 마지막 `실행 취소` 표시와 재접속은 로컬에서 검증했다. |
 
 **GAS PDF 판본 · 2026-11-15 식별**
 

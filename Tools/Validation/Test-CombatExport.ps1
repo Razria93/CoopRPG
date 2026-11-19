@@ -15,9 +15,7 @@ foreach($module in @('CombatLogReader.psm1','CombatViewerLayout.psm1','CombatLog
     $modulePath=(Join-Path $PSScriptRoot $module).Replace("'","''")
     $script=$script.Replace("(Join-Path `$PSScriptRoot '$module')","'$modulePath'")
 }
-$settingsPath="$out/settings.json".Replace("'","''")
-$script=$script.Replace('$settings=Read-CombatViewerSettings',"`$settings=Read-CombatViewerSettings -Path '$settingsPath'")
-$script=$script.Replace('Save-CombatViewerSettings @{',"Save-CombatViewerSettings -Path '$settingsPath' -Values @{")
+$settingsPath=Join-Path $out 'settings.json'
 $checks=@'
 $script:qaChecks=New-Object Collections.Generic.List[object];$script:qaExports=New-Object Collections.Generic.List[object];$script:qaPhase=0;$script:qaStarted=[DateTime]::UtcNow;$script:qaFinished=$false
 function Check-Export([string]$Name,[bool]$Success){$script:qaChecks.Add([pscustomobject]@{name=$Name;passed=$Success});if(!$Success){throw "Export check failed: $Name"}}
@@ -86,6 +84,33 @@ $timer.Add_Tick({
                 Check-Export '3000 retained rows exported' ((Get-Item "$logRoot/volume-3000.xlsx").Length -gt 0)
                 [IO.File]::WriteAllText("$logRoot/volume.json",(@{rows=3000;milliseconds=$watch.Elapsed.TotalMilliseconds}|ConvertTo-Json))
                 Check-Export 'export leaves search order and view intact' ($search.Text -eq '' -and $order.SelectedIndex -eq 0 -and $viewChoice.SelectedIndex -eq 1 -and $countChoice.SelectedItem -eq '4' -and $displayChoice.SelectedIndex -eq 1)
+                $bFirstLine=Get-Content -LiteralPath "$logRoot/b.log" -Encoding UTF8 -TotalCount 1
+                [IO.File]::WriteAllLines("$logRoot/b-rejoined.log",[string[]]@($bFirstLine),[Text.UTF8Encoding]::new($true))
+                [IO.File]::WriteAllLines("$logRoot/probe.log",[string[]]@($bFirstLine),[Text.UTF8Encoding]::new($true))
+                $oldB=@{id='b';label='클라이언트 2';file='b.log'}
+                $manifest=@{
+                    previousSources=@($oldB)
+                    sources=@(
+                        @{id='server';label='서버';file='server.log'}
+                        @{id='a';label='클라이언트 1';file='a.log'}
+                        @{id='b';label='클라이언트 2';file='b-rejoined.log'}
+                        @{id='probe';label='추가 출처';file='probe.log'}
+                    )
+                }
+                $script:qaSelectedSources=@($script:activePanes | ForEach-Object SourceId) -join ','
+                $search.Text='AttackInput'
+                [IO.File]::WriteAllText("$logRoot/processes.json",($manifest | ConvertTo-Json -Depth 5),[Text.UTF8Encoding]::new($false))
+                $script:qaPhase=2
+            }
+            2 {
+                if($script:collection -lt 123){return}
+                Check-Export 'live manifest adds an actual tab and selector option' ($tabs.TabPages[4].Tag -eq 'probe' -and $script:panes[1].Selector.Items[4] -eq '추가 출처')
+                Check-Export 'live manifest preserves source selections and search' ((@($script:activePanes | ForEach-Object SourceId) -join ',') -eq $script:qaSelectedSources -and $search.Text -eq 'AttackInput')
+                $firstB=@($script:store | Where-Object { $_.SourceId -eq 'b' -and $_.ByteOffset -eq 0 })
+                Check-Export 'same role and byte offset remain distinct across files' ($firstB.Count -eq 2 -and $firstB[0].EventId -ne $firstB[1].EventId)
+                foreach($pane in $script:activePanes){$pane.Selector.SelectedIndex=[Array]::IndexOf($sourceIds,'b')}
+                Refresh-Events;$excel.PerformClick();Keep-Export 'reconnected-b'
+                Check-Export 'old and new B logs exported once through overlapping panes' ($script:lastExport.Count -eq 41 -and @((New-ViewerExportSnapshot).Rows.Event.SourcePath | Sort-Object -Unique).Count -eq 2)
                 Finish-Export $true 'Export checks completed'
             }
         }
@@ -94,7 +119,7 @@ $timer.Add_Tick({
 '@
 $script=$script.Replace('$form.Add_Shown(',$checks+[Environment]::NewLine+'$form.Add_Shown(')
 $runner=Join-Path $out 'ui-runner.ps1';[IO.File]::WriteAllText($runner,$script,$utf8)
-$process=Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',('"'+$runner+'"'),'-LogDirectory',('"'+$out+'"'),'-Left','0','-Top','0','-Width','1920','-Height','1000','-ViewMode','Single') -RedirectStandardError "$out/stderr.log" -RedirectStandardOutput "$out/stdout.log"
+$process=Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',('"'+$runner+'"'),'-SettingsPath',('"'+$settingsPath+'"'),'-LogDirectory',('"'+$out+'"'),'-Left','0','-Top','0','-Width','1920','-Height','1000','-ViewMode','Single') -RedirectStandardError "$out/stderr.log" -RedirectStandardOutput "$out/stdout.log"
 $process.Id | Set-Content "$out/process.pid"
 if(!$process.WaitForExit(150000)){$process.Kill();throw 'Export test process timed out; own test process stopped.'}
 if(!(Test-Path "$out/export-result.json")){throw "No export result; inspect $out/stderr.log"}

@@ -7,7 +7,8 @@
     [ValidateSet('Single','Parallel')][string]$ViewMode='Single',
     [ValidateRange(2,4)][int]$PaneCount=3,
     [ValidateSet('Compact','Aligned')][string]$DisplayMode='Compact',
-    [ValidateRange(100,20000)][int]$Capacity=3000
+    [ValidateRange(100,20000)][int]$Capacity=3000,
+    [string]$SettingsPath
 )
 $ErrorActionPreference='Stop'
 Import-Module (Join-Path $PSScriptRoot 'CombatLogReader.psm1') -Force
@@ -19,7 +20,8 @@ Add-Type -AssemblyName System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 $logRoot=[IO.Path]::GetFullPath($LogDirectory)
 if(!(Test-Path -LiteralPath $logRoot -PathType Container)){throw "Missing log directory: $logRoot"}
-$settings=Read-CombatViewerSettings
+if(!$SettingsPath){$SettingsPath=Get-CombatViewerSettingsPath}
+$settings=Read-CombatViewerSettings -Path $SettingsPath
 $monitors=@(Get-CombatMonitors)
 $choice=if($Monitor){$Monitor}elseif($settings.LogMonitor){$settings.LogMonitor}else{''}
 $chosen=Find-CombatMonitor $monitors $choice
@@ -33,25 +35,67 @@ if(!$overlap.Count){$Left=$chosen.Left+12;$Top=$chosen.Top+12;$Width=[Math]::Min
 $fontSize=12
 if($settings.FontSize){$fontSize=[Math]::Max(10,[Math]::Min(18,[double]$settings.FontSize))}
 $runId=Split-Path $logRoot -Leaf
-$manifest=$null
-try{if(Test-Path "$logRoot/processes.json"){$manifest=Get-Content -LiteralPath "$logRoot/processes.json" -Raw -Encoding UTF8 | ConvertFrom-Json}}catch{Write-Warning 'Process manifest unreadable; log viewing still works.'}
-$sourceSpecs=@()
-if($manifest -and $manifest.sources){$sourceSpecs=@($manifest.sources)}
-else{
+$manifestPath=Join-Path $logRoot 'processes.json'
+$logPrefix=$logRoot.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar
+$script:manifest=$null
+$script:lastManifestText=$null
+$script:sourceSpecs=@()
+$sources=@{}
+$readers=[ordered]@{}
+$sourceLabelById=@{}
+
+function Read-ViewerManifestText {
+    if(![IO.File]::Exists($manifestPath)){return}
+    # Allow the launcher to replace the manifest while the viewer reads a snapshot.
+    $share=[IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
+    $stream=[IO.File]::Open($manifestPath,[IO.FileMode]::Open,[IO.FileAccess]::Read,$share)
+    try{
+        $reader=[IO.StreamReader]::new($stream,[Text.Encoding]::UTF8)
+        try{$reader.ReadToEnd()}finally{$reader.Dispose()}
+    }finally{$stream.Dispose()}
+}
+
+function Set-ViewerSources($Active,$Previous,[switch]$FollowFromStart) {
+    $entries=@(
+        foreach($isCurrent in @($false,$true)){
+            $specs=if($isCurrent){$Active}else{$Previous}
+            foreach($spec in $specs){
+                if(!$spec.id -or !$spec.file){throw 'The process manifest contains an incomplete log source.'}
+                $path=[IO.Path]::GetFullPath((Join-Path $logRoot $spec.file))
+                if(!$path.StartsWith($logPrefix,[StringComparison]::OrdinalIgnoreCase)){throw 'Source log must be inside the selected run directory.'}
+                $fileKey=[uri]::EscapeDataString($path.Substring($logPrefix.Length).Replace('\','/').ToUpperInvariant())
+                @{Spec=$spec;Path=$path;FileKey=$fileKey;Current=$isCurrent}
+            }
+        }
+    )
+    $sources.Clear()
+    foreach($entry in $entries){
+        $spec=$entry.Spec
+        $key='{0}/{1}' -f $spec.id,$entry.FileKey
+        if(!$readers.Contains($key)){
+            $reader=New-CombatLogReader $entry.Path
+            if($FollowFromStart){$reader.Initialized=$true}
+            $readers[$key]=@{Spec=$spec;FileKey=$entry.FileKey;Reader=$reader;Ignored=0;LastEvent=$null;ProcessState='확인 대기';Drained=$false}
+        }
+        $source=$readers[$key];$source.Spec=$spec
+        $sourceLabelById[$spec.id]=[string]$spec.label
+        if($entry.Current){$sources[$spec.id]=$source}
+    }
+    $script:sourceSpecs=@($Active)
+}
+
+try{
+    $script:lastManifestText=Read-ViewerManifestText
+    if($script:lastManifestText){$script:manifest=$script:lastManifestText | ConvertFrom-Json}
+}catch{Write-Warning 'Process manifest unreadable; log viewing still works.'}
+$initialSpecs=if($manifest -and $manifest.sources){$manifest.sources}else{
     foreach($definition in @(@('server','서버','server.log','CoopRPGServer'),@('a','클라이언트 1','a.log','CoopRPGClient'),@('b','클라이언트 2','b.log','CoopRPGClient'))){
         $id=$definition[0];$processId=0
         if($manifest -and $manifest.processes){$value=$manifest.processes.PSObject.Properties[$id];if($value){$processId=[int]$value.Value}}
-        $sourceSpecs+=[pscustomobject]@{id=$id;label=$definition[1];file=$definition[2];processId=$processId;processName=$definition[3];startedUtc=''}
+        [pscustomobject]@{id=$id;label=$definition[1];file=$definition[2];processId=$processId;processName=$definition[3];startedUtc=''}
     }
 }
-$sources=@{}
-$sourceLabelById=@{}
-foreach($spec in $sourceSpecs){
-    $path=[IO.Path]::GetFullPath((Join-Path $logRoot $spec.file))
-    if(!(($path+[IO.Path]::DirectorySeparatorChar).StartsWith($logRoot.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase))){throw 'Source log must be inside the selected run directory.'}
-    $sourceLabelById[$spec.id]=[string]$spec.label
-    $sources[$spec.id]=@{Spec=$spec;Reader=(New-CombatLogReader $path);Total=0;Ignored=0;LastEvent=$null;ProcessState='확인 대기';ProcessChecked=$false}
-}
+Set-ViewerSources @($initialSpecs) $manifest.previousSources
 $script:store=New-Object Collections.Generic.List[object]
 $script:clientByPlayerId=@{}
 $script:common=@();$script:collection=0L;$script:evicted=0;$script:renderDirty=$true;$script:refreshing=$false;$script:settingsError=''
@@ -60,8 +104,9 @@ $script:previewAttempted=$false;$script:renderCount=0;$script:maxTickMs=0.0;$scr
 $script:scrollSync=$false;$script:splitSync=$false;$script:layoutBusy=$false;$script:tabSync=$false;$script:activePane=$null;$script:splitRatio=0.64
 $script:panes=@();$script:activePanes=@();$script:groups=@()
 $script:exportDirectory=Join-Path $logRoot 'Exports';$script:exportMessage='내보내기: 창 캡처 또는 Excel 저장';$script:lastExport=$null;$script:lastRenderedUtc=''
-$sourceIds=@('')+@($sourceSpecs | ForEach-Object id)
-$sourceLabels=@('통합')+@($sourceSpecs | ForEach-Object label)
+$script:sourceIds=@('')+@($sourceSpecs | ForEach-Object id)
+$script:sourceLabels=@('통합')+@($sourceSpecs | ForEach-Object label)
+$script:sourceChoicesBusy=$false
 if(!$PSBoundParameters.ContainsKey('ViewMode') -and $settings.ViewMode -in @('Single','Parallel')){$ViewMode=$settings.ViewMode}
 if(!$PSBoundParameters.ContainsKey('PaneCount') -and $settings.PaneCount -in @(2,3,4)){$PaneCount=[int]$settings.PaneCount}
 if(!$PSBoundParameters.ContainsKey('DisplayMode') -and $settings.DisplayMode -in @('Compact','Aligned')){$DisplayMode=$settings.DisplayMode}
@@ -308,6 +353,7 @@ function New-LogPane([int]$Index,[string]$SourceId){
     $grid.Tag=$pane;$selector.Tag=$pane;$split.Tag=$pane
     $idx=[Array]::IndexOf($sourceIds,$SourceId);$selector.SelectedIndex=[Math]::Max(0,$idx)
     $selector.Add_SelectedIndexChanged({param($sender,$e)
+        if($script:sourceChoicesBusy -or $sender.SelectedIndex -lt 0){return}
         $p=$sender.Tag;$p.SourceId=$sourceIds[$sender.SelectedIndex];$p.SelectedId='';$p.Grid.ClearSelection();$script:activePane=$p;$script:renderDirty=$true
         if($p.Index -eq 0 -and !$script:tabSync){$script:tabSync=$true;try{$tabs.SelectedIndex=$sender.SelectedIndex}finally{$script:tabSync=$false}}
     })
@@ -434,7 +480,9 @@ function Refresh-Events {
     Update-ViewerStatus
 }
 $search.Add_TextChanged({$script:renderDirty=$true});$outcome.Add_SelectedIndexChanged({$script:renderDirty=$true});$order.Add_SelectedIndexChanged({$script:renderDirty=$true})
-$tabs.Add_SelectedIndexChanged({if(!$script:tabSync){$script:panes[0].Selector.SelectedIndex=$tabs.SelectedIndex}})
+$tabs.Add_SelectedIndexChanged({
+    if(!$script:sourceChoicesBusy -and !$script:tabSync -and $tabs.SelectedIndex -ge 0){$script:panes[0].Selector.SelectedIndex=$tabs.SelectedIndex}
+})
 $viewChoice.Add_SelectedIndexChanged({Set-PaneLayout});$countChoice.Add_SelectedIndexChanged({Set-PaneLayout})
 $displayChoice.Add_SelectedIndexChanged({Resize-Panes;$script:renderDirty=$true})
 $pause.Add_CheckedChanged({
@@ -469,7 +517,7 @@ $fontControl.Add_ValueChanged({
 $move.Add_Click({
     $fresh=@(Get-CombatMonitors);$selected=$monitors[$monitorChoice.SelectedIndex];$target=Find-CombatMonitor $fresh $selected.DeviceName;if(!$target){$target=$fresh[0]}
     $form.WindowState='Normal';$form.Bounds=New-Object Drawing.Rectangle($target.Left,$target.Top,$target.Width,$target.Height);$form.WindowState='Maximized'
-    try{Save-CombatViewerSettings @{LogMonitor=$target.DeviceName}}catch{$script:settingsError=$_.Exception.Message}
+    try{Save-CombatViewerSettings @{LogMonitor=$target.DeviceName} -Path $SettingsPath}catch{$script:settingsError=$_.Exception.Message}
 })
 $hostPanel.Add_Resize({Resize-Panes})
 function New-ViewerExportSnapshot {
@@ -486,8 +534,8 @@ function New-ViewerExportSnapshot {
         '선택 출처'=($panes.Label -join ', ');'표시 멈춤'=[bool]$pause.Checked;'최신 따라가기'=[bool]$follow.Checked;'글자 크기'=[double]$fontControl.Value
         '화면 데이터 갱신 UTC'=$script:lastRenderedUtc;'화면 갱신 당시 수집 수'=$script:lastShownCollection;'저장 당시 수집 수'=$script:collection
         '현재 보관 수'=$script:store.Count;'전체 보관 한도'=$Capacity;'현재 한도 초과 제거 수'=$script:evicted
-        '파일 시작 생략 바이트'=($sources.Values | ForEach-Object {$_.Reader.InitialSkippedBytes} | Measure-Object -Sum).Sum
-        '현재 읽기 대기 바이트'=($sources.Values | ForEach-Object {$_.Reader.UnreadBytes} | Measure-Object -Sum).Sum
+        '파일 시작 생략 바이트'=($readers.Values | ForEach-Object {$_.Reader.InitialSkippedBytes} | Measure-Object -Sum).Sum
+        '현재 읽기 대기 바이트'=($readers.Values | ForEach-Object {$_.Reader.UnreadBytes} | Measure-Object -Sum).Sum
         'Excel 범위'='현재 필터·선택 출처에 해당하는 목록 전체. 화면 밖 행 포함, 빈칸·중복 사건 제외. 원본 파일 전체와 다름.'
         'PNG 범위'='현재 창에 보이는 목록·상세·배치만 렌더링. 스크롤 밖 영역과 다른 창은 포함하지 않음.'
         '관계 해석'='시각·행 번호는 인과관계나 요청 ID가 아님. 요청 관계 미계측.'
@@ -532,14 +580,53 @@ $exportFolder.Add_Click({
 
 Align-Toolbars;Set-PaneLayout
 
+function Update-ViewerSourceChoices {
+    $ids=@('')+@($sourceSpecs | ForEach-Object id)
+    $labels=@('통합')+@($sourceSpecs | ForEach-Object label)
+    if(($ids -join [char]10) -ceq ($sourceIds -join [char]10) -and ($labels -join [char]10) -ceq ($sourceLabels -join [char]10)){return}
+    $script:sourceChoicesBusy=$true
+    try{
+        $selectedTab=[string]$tabs.SelectedTab.Tag
+        $script:sourceIds=$ids;$script:sourceLabels=$labels
+        foreach($page in @($tabs.TabPages)){$page.Dispose()}
+        for($i=0;$i -lt $ids.Count;$i++){
+            $page=New-Object Windows.Forms.TabPage
+            $page.Text=$labels[$i];$page.Tag=$ids[$i]
+            [void]$tabs.TabPages.Add($page)
+        }
+        $tabs.SelectedIndex=[Math]::Max(0,[Array]::IndexOf($ids,$selectedTab))
+        foreach($pane in $script:panes){
+            $pane.Selector.Items.Clear()
+            $pane.Selector.Items.AddRange([object[]]$labels)
+            $index=[Math]::Max(0,[Array]::IndexOf($ids,$pane.SourceId))
+            $pane.SourceId=$ids[$index]
+            $pane.Selector.SelectedIndex=$index
+        }
+        $script:renderDirty=$true
+    }finally{$script:sourceChoicesBusy=$false}
+}
+
+function Update-ViewerLogSources {
+    try{
+        $text=Read-ViewerManifestText
+        if(!$text -or $text -ceq $script:lastManifestText){return}
+        $script:lastManifestText=$text
+        $next=$text | ConvertFrom-Json
+        if(!$next.sources){return}
+        Set-ViewerSources @($next.sources) $next.previousSources -FollowFromStart
+        $script:manifest=$next
+        Update-ViewerSourceChoices
+    }catch{Write-Warning "Process manifest update ignored: $($_.Exception.Message)"}
+}
+
 function Update-ViewerStatus {
         $script:sourceText=@(foreach($spec in $sourceSpecs){
             $s=$sources[$spec.id];$file=if($s.Reader.State -eq 'Waiting'){'파일 대기'}elseif($s.Reader.State -eq 'Error'){'읽기 실패: '+$s.Reader.Error}else{'파일 읽기 정상'}
             "$($spec.label): $($s.ProcessState) / $file / 마지막 사건 $(if($s.LastEvent){$s.LastEvent}else{'없음'})"
         })
-        $ignored=($sources.Values | ForEach-Object Ignored | Measure-Object -Sum).Sum
-        $truncated=($sources.Values | ForEach-Object {$_.Reader.InitialSkippedBytes} | Measure-Object -Sum).Sum
-        $script:unreadBytes=($sources.Values | ForEach-Object {$_.Reader.UnreadBytes} | Measure-Object -Sum).Sum
+        $ignored=($readers.Values | ForEach-Object Ignored | Measure-Object -Sum).Sum
+        $truncated=($readers.Values | ForEach-Object {$_.Reader.InitialSkippedBytes} | Measure-Object -Sum).Sum
+        $script:unreadBytes=($readers.Values | ForEach-Object {$_.Reader.UnreadBytes} | Measure-Object -Sum).Sum
         $mode=if($pause.Checked){"표시 멈춤 · 새 사건 $($script:collection-$script:lastShownCollection)건 대기"}else{'표시 갱신 중'}
         $status.Text=($script:sourceText -join [Environment]::NewLine)+[Environment]::NewLine+"$mode · 화면 $($script:common.Count) / 보관 $($script:store.Count) / 한도 $Capacity · 한도 초과 $script:evicted · 엔진 일반 로그 제외 $ignored · 초기 생략 $truncated B · 읽기 대기 $script:unreadBytes B"+[Environment]::NewLine+"시각은 $([TimeZoneInfo]::Local.Id) · 정렬은 인과관계가 아님 · 빈칸=다른 출처의 사건 · 원본 보존$(if($script:settingsError){' · 설정 저장 실패: '+$script:settingsError})"+[Environment]::NewLine+$script:exportMessage
 }
@@ -561,14 +648,21 @@ $timer=New-Object Windows.Forms.Timer;$timer.Interval=300
 $timer.Add_Tick({
     $watch=[Diagnostics.Stopwatch]::StartNew()
     try{
-        foreach($spec in $sourceSpecs){
-            $source=$sources[$spec.id]
+        if(([DateTime]::UtcNow-$script:lastProcessCheck).TotalSeconds -ge 2){
+            Update-ViewerLogSources
+            Update-SourceState
+            $script:lastProcessCheck=[DateTime]::UtcNow
+        }
+        foreach($source in $readers.Values){
+            $spec=$source.Spec
+            $current=[object]::ReferenceEquals($source,$sources[$spec.id])
+            if(!$current -and $source.Drained){continue}
             try{
                 foreach($record in @(Read-CombatLogRecords $source.Reader -MaxBytes 8192)){
-                    $source.Total++;$event=ConvertTo-CombatLogEvent $record.Line
+                    $event=ConvertTo-CombatLogEvent $record.Line
                     if($null -eq $event){$source.Ignored++;continue}
                     $script:collection++
-                    $event=Add-CombatEventContext $event $runId $spec.id $spec.label $source.Reader.Path $record $script:collection
+                    $event=Add-CombatEventContext $event $runId $spec.id $spec.label $source.Reader.Path $record $script:collection $source.FileKey
                     $playerId = [string]$event.Fields['LocalPlayerId']
                     if ($spec.id -ne 'server' -and $event.Fields['NetMode'] -eq 'Client' -and $playerId -match '^[1-9][0-9]*$') {
                         if (!$script:clientByPlayerId.ContainsKey($playerId)) {
@@ -580,11 +674,11 @@ $timer.Add_Tick({
                     }
                     $script:store.Add($event);$source.LastEvent=$event.Time;$script:renderDirty=$true
                 }
+                if(!$current -and $source.Reader.State -ne 'Error' -and !$source.Reader.UnreadBytes){$source.Drained=$true}
             }catch{$source.Reader.State='Error';$source.Reader.Error=$_.Exception.Message}
         }
         if($script:store.Count -gt $Capacity){$remove=$script:store.Count-$Capacity;$script:store.RemoveRange(0,$remove);$script:evicted+=$remove}
         if($script:renderDirty){Refresh-Events}
-        if(([DateTime]::UtcNow-$script:lastProcessCheck).TotalSeconds -ge 2){Update-SourceState;$script:lastProcessCheck=[DateTime]::UtcNow}
         Update-ViewerStatus
         # Render only this tool's own controls for visual QA; not a desktop capture.
         if($PreviewPath -and !$script:previewAttempted -and $script:renderCount -gt 0 -and $script:unreadBytes -eq 0){
@@ -606,7 +700,7 @@ $timer.Add_Tick({
 
 $form.Add_Shown({$form.Hide();$form.Show();Align-Toolbars;Resize-Panes;$timer.Start()})
 $form.Add_FormClosing({
-    try{Save-CombatViewerSettings @{FontSize=[double]$fontControl.Value;LogMonitor=[Windows.Forms.Screen]::FromControl($form).DeviceName;ViewMode=$(if($viewChoice.SelectedIndex -eq 1){'Parallel'}else{'Single'});PaneCount=[int]$countChoice.SelectedItem;DisplayMode=$(if($displayChoice.SelectedIndex -eq 1){'Aligned'}else{'Compact'});PaneSources=@($script:panes | Select-Object -Skip 1 | ForEach-Object SourceId)}}catch{Write-Warning $_.Exception.Message}
+    try{Save-CombatViewerSettings @{FontSize=[double]$fontControl.Value;LogMonitor=[Windows.Forms.Screen]::FromControl($form).DeviceName;ViewMode=$(if($viewChoice.SelectedIndex -eq 1){'Parallel'}else{'Single'});PaneCount=[int]$countChoice.SelectedItem;DisplayMode=$(if($displayChoice.SelectedIndex -eq 1){'Aligned'}else{'Compact'});PaneSources=@($script:panes | Select-Object -Skip 1 | ForEach-Object SourceId)} -Path $SettingsPath}catch{Write-Warning $_.Exception.Message}
 })
 $form.Add_FormClosed({$timer.Stop();$timer.Dispose();$exportTooltip.Dispose();$topicMenu.Dispose();$topicTooltip.Dispose()})
 try{[void]$form.ShowDialog()}finally{foreach($p in $script:panes){$p.Container.Dispose()};$form.Dispose()}

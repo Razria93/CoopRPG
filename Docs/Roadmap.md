@@ -74,7 +74,8 @@
 - **원인** · 재검증 전에 게임 창을 닫았지만 전용 서버는 실행 중이었고, 다시 실행한 두 클라이언트가 그 서버의 스테이지 2에 접속했다. [재접속 원인과 종료 확인](Validation/LanBaseline.md#stage2-server-reuse) · [사람·AI의 역할](Portfolio/AICollaborationEvidence.md#launcher-case)
 - **상태 표시** · 서버는 프로세스 생성과 바인딩 완료, 클라는 프로세스 생성과 게임 입장을 구분한다. 시작 실패, 정원·진행 중 접속 거절, 연결 종료는 확인된 이유를 표시하고 로그를 연다. 같은 실행기가 시작한 프로세스는 실행기를 다시 열었을 때도 식별해 해당 프로세스만 종료한다.
 - **완료 시험** · 같은 패키지로 로컬 2인과 별도 PC A·B에서 기동한다. 실행기를 다시 열어 기존 서버를 확인하고, 종료·재기동한 뒤 양쪽이 스테이지 1에 접속하는지 확인한다. 포트 충돌·접속 거절을 재현하고 화면 안내를 원본 로그와 대조한다.
-- **작업 순서** · LAN 기준선 PR을 먼저 정리하고 그 위에서 실행기 작업을 진행한다. 숲 동선은 게임 변경만 담는 별도 PR로 진행한다. 첫 구현은 반나절을 재판단 시점으로 삼는다.
+- **검증 완료** · 로컬 2인에서 포트 충돌·정원 거절을 확인했다. 데스크톱과 노트북에서 사용자가 기존 PID 복원·종료·서버 재기동과 같은 새 스테이지 1에 양쪽이 접속하는 흐름을 확인했다. LAN 기준선은 Draft PR #18로 분리했다. 숲 동선은 별도 게임 PR로 진행한다. [별도 PC 실행기 수동 검증](Validation/LanBaseline.md#validation-launcher-two-pc)
+- **서버 참가자 표시** · 서버가 배정한 슬롯과 A/B 표식을 함께 보여준다. 새 패키지의 같은 PC 시험에서 B 선접속, 같은 IP의 두 클라이언트, 종료·재접속, 로그 열기와 화면 배치를 확인했다. 계측 묶음으로 두 PC의 A·B 참가자·준비 전환과 새 서버의 스테이지 1 동시 입장을 확인했다. 종료 감지 지연과 연타 취소 표시는 로컬에서 수정·검증했다. 최신 묶음의 두 PC 시험에서 정상 종료·재접속과 진행 중 종료·0점을 확인했다. 두 PC에서 첫 접속 클릭 후 버튼 잠금을 사용자 확인했다. 실행 확인 취소는 중립 상태로 표시하도록 보완하고 로컬에서 취소·실제 오류·재접속을 검증했다. [취소 표시](Validation/LanBaseline.md#validation-launcher-start-canceled) · [두 PC 검증](Validation/LanBaseline.md#validation-launcher-client-lifecycle-two-pc) · [검증 근거](Validation/LanBaseline.md#validation-launcher-server-participants) · [묶음 기동과 검증](Validation/LanBaseline.md#validation-launcher-two-pc-bundle)
 
 [현재 도구와 개선 후보](Validation/Environment.md#phase2-test-environment)
 

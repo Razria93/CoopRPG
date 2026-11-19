@@ -95,12 +95,15 @@ try{
     $otherFile=New-HealthFixture $replication b 1 1
     $unknownWorld=New-HealthFixture $replication b 0
     $weaponEvidence=New-HealthFixture ($equipped+'256') b
+    $rejoined=Add-CombatEventContext (ConvertTo-CombatLogEvent ($prefix+$replication)) 'health-test' 'b' 'b' "$path-rejoined" `
+        ([pscustomobject]@{ByteOffset=11;FileGeneration=0;WorldSequence=1}) 12
     $clients=@{'256'='a';'257'='b'}
     $labels=@{a='클라이언트 1';b='클라이언트 2'}
-    $events=@($direct,$enemy,$legacy,$otherSource,$otherWorld,$otherFile,$unknownWorld,$weaponEvidence)
+    $events=@($direct,$enemy,$legacy,$otherSource,$otherWorld,$otherFile,$unknownWorld,$weaponEvidence,$rejoined)
     Update-CombatHealthLabels $events $clients $labels
     Check 'explicit subject identifies remote player, and legacy enemy type is recognized' ($direct.HealthSubject -eq '플레이어 2 (257)' -and $enemy.Summary -eq '체력 복제 · 적 · 100.00 → 90.00')
     Check 'legacy actor evidence is scoped by source, world, and file, with no cross-scope inference' ($legacy.HealthSubject -eq '플레이어 1 (256)' -and @($otherSource,$otherWorld,$otherFile,$unknownWorld | Where-Object HealthSubject -eq '플레이어 (ID 미확인)').Count -eq 4)
+    Check 'reconnect files isolate actor evidence and event IDs for the same source and offset' ($rejoined.HealthSubject -eq '플레이어 (ID 미확인)' -and $rejoined.EventId -ne $legacy.EventId)
     Check 'search uses the same subject label and preserves the raw line' (@(Select-CombatEvents $events -Search '플레이어 1 (256)').Count -eq 1 -and $legacy.Raw.EndsWith($replication))
     Update-CombatHealthLabels ($events+@(New-HealthFixture ($equipped+'257') b)) $clients $labels
     Check 'conflicting older evidence drops the inferred ID' ($legacy.HealthSubject -eq '플레이어 (ID 미확인)' -and $direct.HealthSubject -eq '플레이어 2 (257)')

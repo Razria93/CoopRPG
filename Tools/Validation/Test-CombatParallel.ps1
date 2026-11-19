@@ -15,9 +15,7 @@ foreach($module in @('CombatLogReader.psm1','CombatViewerLayout.psm1','CombatLog
     $modulePath=(Join-Path $PSScriptRoot $module).Replace("'","''")
     $script=$script.Replace("(Join-Path `$PSScriptRoot '$module')","'$modulePath'")
 }
-$settingsPath="$out/settings.json".Replace("'","''")
-$script=$script.Replace('$settings=Read-CombatViewerSettings',"`$settings=Read-CombatViewerSettings -Path '$settingsPath'")
-$script=$script.Replace('Save-CombatViewerSettings @{',"Save-CombatViewerSettings -Path '$settingsPath' -Values @{")
+$settingsPath=Join-Path $out 'settings.json'
 $checks=@'
 $script:qaChecks=New-Object Collections.Generic.List[object];$script:qaPhase=0;$script:qaTicks=0;$script:qaFinished=$false;$script:qaStarted=[DateTime]::UtcNow
 function Check-UI([string]$Name,[bool]$Success){$script:qaChecks.Add([pscustomobject]@{name=$Name;passed=$Success});if(!$Success){throw "UI check failed: $Name"}}
@@ -197,7 +195,7 @@ $timer.Add_Tick({
 '@
 $script=$script.Replace('$form.Add_Shown(',$checks+[Environment]::NewLine+'$form.Add_Shown(')
 $runner=Join-Path $out 'ui-runner.ps1';[IO.File]::WriteAllText($runner,$script,$utf8)
-$arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',('"'+$runner+'"'),'-LogDirectory',('"'+$out+'"'),'-Left','0','-Top','0','-Width','1920','-Height','1000','-ViewMode','Single','-PaneCount','3','-DisplayMode','Compact')
+$arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',('"'+$runner+'"'),'-SettingsPath',('"'+$settingsPath+'"'),'-LogDirectory',('"'+$out+'"'),'-Left','0','-Top','0','-Width','1920','-Height','1000','-ViewMode','Single','-PaneCount','3','-DisplayMode','Compact')
 $process=Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList $arguments -RedirectStandardError "$out/stderr.log" -RedirectStandardOutput "$out/stdout.log"
 $process.Id | Set-Content "$out/process.pid"
 if(!$process.WaitForExit(210000)){$process.Kill();throw 'Parallel UI test process timed out; own test process stopped.'}

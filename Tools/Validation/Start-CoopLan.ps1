@@ -6,7 +6,9 @@ param(
     [ValidateRange(1024, 65535)][int]$Port = 7777,
     [ValidateSet('A', 'B')][string]$ClientLabel = 'A',
     [string]$PackageRoot,
-    [string]$LogRoot
+    [string]$LogRoot,
+    [switch]$AllowLoopback,
+    [switch]$PassThru
 )
 
 Set-StrictMode -Version Latest
@@ -16,7 +18,7 @@ if (!$PackageRoot) { $PackageRoot = Join-Path $PSScriptRoot 'Stage' }
 if (!$LogRoot) { $LogRoot = Join-Path $PSScriptRoot 'Logs' }
 
 if ($Address.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork -or
-    [System.Net.IPAddress]::IsLoopback($Address) -or
+    ([System.Net.IPAddress]::IsLoopback($Address) -and !$AllowLoopback) -or
     $Address.Equals([System.Net.IPAddress]::Any)) {
     throw 'Use the server PC LAN IPv4 address.'
 }
@@ -47,12 +49,24 @@ if ($Role -eq 'Server') {
     $gameArguments = @('/Game/Maps/L_Movement?EnemyCombat', "-port=$Port", "-MULTIHOME=$Address", '-unattended', '-nullrhi', '-nosound', '-log')
     $windowStyle = 'Hidden'
 } else {
-    $gameArguments = @("${Address}:$Port", '-CoopManualInput', '-windowed', '-ResX=1280', '-ResY=720')
+    $gameArguments = @("${Address}:${Port}?CoopValidationLabel=$($ClientLabel.ToUpperInvariant())", '-CoopManualInput', '-windowed', '-ResX=1280', '-ResY=720')
     $windowStyle = 'Normal'
 }
 
-$process = Start-Process -FilePath $exe -WorkingDirectory (Split-Path -Parent $exe) `
-    -ArgumentList ($gameArguments + $common) -WindowStyle $windowStyle -PassThru
+# Keep the Windows shell confirmation and preserve its Win32 error code on cancellation.
+$startInfo = [System.Diagnostics.ProcessStartInfo]@{
+    FileName = $exe
+    WorkingDirectory = Split-Path -Parent $exe
+    Arguments = ($gameArguments + $common) -join ' '
+    UseShellExecute = $true
+    WindowStyle = $windowStyle
+}
+$process = [System.Diagnostics.Process]::Start($startInfo)
+
+if ($PassThru) {
+    [pscustomobject]@{ Process = $process; LogPath = $log }
+    return
+}
 
 "Role: $Role ($label)"
 "Endpoint: ${Address}:$Port"

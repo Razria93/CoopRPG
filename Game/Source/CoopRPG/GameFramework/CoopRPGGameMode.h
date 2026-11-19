@@ -35,7 +35,7 @@ protected:
     virtual void RestartPlayer(AController* NewPlayer) override;
 
 private:
-    void PublishReadySlots(ACoopRPGGameState& State) const;
+    void PublishReadySlots(ACoopRPGGameState& State);
     FString GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId);
     bool ReserveRoundTravelSeats(const FString& Destination) const;
     bool IsRoundParticipant(const AController* Controller) const;
@@ -49,6 +49,8 @@ private:
     TObjectPtr<ACoopRPGEnemy> Enemy;
 
     TWeakObjectPtr<APlayerController> PlayerSlots[2];
+    FString ValidationClientLabels[2];
+    FString LastValidationParticipants;
     TArray<TWeakObjectPtr<ACoopRPGPlayerController>> RoundPlayers;
     TArray<TWeakObjectPtr<ACoopRPGPlayerController>> ResultAcknowledgements;
     double NextTravelTime = 0.0;

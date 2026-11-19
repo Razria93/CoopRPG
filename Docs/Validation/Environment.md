@@ -21,22 +21,22 @@
 | **에디터 PIE** | 개발 PC의 Unreal Editor에서 입력·빙의·복제와 실행 로그를 빠르게 확인한다. 멀티플레이 확인은 `Play As Client`에 클라이언트 2개를 설정한다. [PIE와 패키지 선택 기준](LogViewer.md#choose-environment) |
 | **동일 PC 패키지 · 수동** | 전용 서버 1개와 클라이언트 A·B를 루프백으로 실행한다. `Start-CombatManual.ps1`이 창 배치, 실행별 로그 폴더, 로그 뷰어 기동을 맡는다. `Watch-CombatManual.ps1`에서 서버·클라이언트 로그를 실시간으로 비교하고 화면 캡처·Excel을 저장할 수 있다. [로컬 실행과 배치](LogViewer.md#launch) |
 | **동일 PC 패키지 · 자동** | `c0fed32`의 Win64 Development 패키지로 별도 Server·Client 프로세스를 실행했다. LAN IPv4 기동·종료·재접속 시험과 `Run-RoundTravel.py`의 성공 경로 16개 판정을 수행했다. 후자는 시험용 입력·상태 설정을 사용했다. [패키지 검증](LanBaseline.md#2026-11-18-패키지-검증) |
-| **별도 PC · Tailscale 수동** | Windows PC 두 대를 하나의 Tailscale 네트워크에 등록했다. 본가 PC에서 전용 서버와 A, 노트북에서 B를 실행했다. 두 기기에 `CoopRPG-LAN-c0fed32.zip`을 풀고 `Start-CoopLan.ps1`로 역할별 기동했다. 서버는 본가의 Tailscale IPv4에 UDP 7777로 바인딩했다. 네트워크 경로는 Tailscale을 통한 접속까지 확인했다. [실제 수동 검증](LanBaseline.md#manual-tailscale-20261118) |
+| **별도 PC · Tailscale 수동** | Windows PC 두 대를 하나의 Tailscale 네트워크에 등록했다. 데스크톱에서 전용 서버와 A, 노트북에서 B를 실행했다. 두 기기에 `CoopRPG-LAN-c0fed32.zip`을 풀고 `Start-CoopLan.ps1`로 역할별 기동했다. 서버는 데스크톱의 Tailscale IPv4에 UDP 7777로 바인딩했다. 네트워크 경로는 Tailscale을 통한 접속까지 확인했다. [실제 수동 검증](LanBaseline.md#manual-tailscale-20261118) |
 | **기존 로그 재생** | 실행 폴더를 로그 뷰어에 넘겨 서버·클라이언트별 이벤트를 확인한다. 화면과 표를 내보내 원본 로그와 함께 판본 비교에 활용한다. [기존 로그 열기](LogViewer.md#실행과-배치) |
 
 ### 별도 PC 실행에서 자료를 교환하고 대조한 방법
 
-1. **빌드 식별** · UE 5.8.4 Win64 Development Server·Client의 소스 커밋을 `c0fed32`로 고정했다. ZIP에서 푼 130개 파일의 해시 목록을 보존했다. 실제 수동 실행 뒤 본가의 서버·A 실행 파일을 매니페스트와 대조했고, 노트북 B는 기동 로그의 엔진·빌드 설정과 배포 폴더명을 대조했다. B 실행 파일의 해시는 수집하지 않았다.
-2. **수집과 전달** · 런처가 `-ABSLOG`로 각 PC의 `Logs`에 기록했다. 본가의 서버·A 로그와 노트북 B 로그를 기기별 자료 공유 채팅에 첨부했다. AI가 세 파일을 읽어 실행 폴더에 복사하고 SHA-256을 대조했다.
-3. **같은 실행 확인** · 서버의 접속 기록, 양쪽의 `Welcomed by server`, 같은 Round ID를 대조했다. `ExtractionResult`와 양쪽 `ExtractionResultReplicated`의 성공·1점, `L_Movement_Round2` 입장과 양쪽 `Waiting`을 연결했다. 본가와 노트북 로그의 시각 차이가 약 4.7초여서, 기기 간 타임스탬프 차이는 복제 지연으로 해석하지 않았다.
+1. **빌드 식별** · UE 5.8.4 Win64 Development Server·Client의 소스 커밋을 `c0fed32`로 고정했다. ZIP에서 푼 130개 파일의 해시 목록을 보존했다. 실제 수동 실행 뒤 데스크톱의 서버·A 실행 파일을 매니페스트와 대조했고, 노트북 B는 기동 로그의 엔진·빌드 설정과 배포 폴더명을 대조했다. B 실행 파일의 해시는 수집하지 않았다.
+2. **수집과 전달** · 런처가 `-ABSLOG`로 각 PC의 `Logs`에 기록했다. 데스크톱의 서버·A 로그와 노트북 B 로그를 기기별 자료 공유 채팅에 첨부했다. AI가 세 파일을 읽어 실행 폴더에 복사하고 SHA-256을 대조했다.
+3. **같은 실행 확인** · 서버의 접속 기록, 양쪽의 `Welcomed by server`, 같은 Round ID를 대조했다. `ExtractionResult`와 양쪽 `ExtractionResultReplicated`의 성공·1점, `L_Movement_Round2` 입장과 양쪽 `Waiting`을 연결했다. 데스크톱와 노트북 로그의 시각 차이가 약 4.7초여서, 기기 간 타임스탬프 차이는 복제 지연으로 해석하지 않았다.
 4. **보존과 공개** · 원본 3개와 파일별 해시·역할·Round ID는 Git 제외 경로 `Artifacts/Validation/phase2-lan-c0fed32-20261118-082619/manual-tailscale-20261118-110313/`의 `manifest.json`과 함께 보관했다. 저장소에는 판정과 재현 절차를 기록하고, 원본에 포함된 접속 주소와 개인 경로는 로컬 자료에 둔다. [판정과 보존 위치](LanBaseline.md#manual-tailscale-20261118)
 
 첫 수동 실행은 완주와 다음 맵 준비 대기까지 확인했다. 후속 실행에서는 같은 서버의 그 스테이지 2에 다시 접속해 양쪽 초기 HUD와 `R` 재준비를 확인했다. 서버·A·B 로그 3개와 화면 20장을 채팅으로 받아 Round ID별로 대조하고 별도 매니페스트에 보존했다. [후속 결과와 근거 범위](LanBaseline.md#manual-tailscale-20261118-rerun)
 
 ### 반복 실행 개선 후보
 
-- **클릭 실행기** · 기존 런처를 재사용해 로컬 2인, Tailscale 호스트, 클라이언트만 접속, 기존 로그 열기를 선택하는 안이다. PC별 주소·패키지·로그 창 선택을 기억하는 범위를 검토 중이다.
-- **자료 전송과 가져오기** · 같은 실행 ID와 빌드 정보를 붙인 로그·선택 캡처를 묶어 [Taildrop](https://tailscale.com/docs/features/taildrop?tab=windows)으로 보내고 본가에서 가져오는 안이다. 이번 수동 검증의 전달 방법은 채팅 첨부였다. CoopRPG 실행기, Taildrop 연동과 원격 B 로그의 실시간 수집은 구현·검증 전이다.
+- **검증 실행기** · 기존 기동 스크립트를 재사용해 로컬 2인, Tailscale 호스트, 접속 전용과 기존 로그 열기를 제공한다. 로컬 2인 기동·종료·재실행과 포트 충돌·정원 초과를 확인했다. 데스크톱과 노트북에서 실행기를 이용한 기존 서버 확인·종료와 양쪽 재접속도 확인했다. [별도 PC 결과](LanBaseline.md#validation-launcher-two-pc)
+- **자료 전송과 가져오기** · 같은 실행 ID와 빌드 정보를 붙인 로그·선택 캡처를 묶어 [Taildrop](https://tailscale.com/docs/features/taildrop?tab=windows)으로 보내고 데스크톱에서 가져오는 안이다. 이번 수동 검증의 전달 방법은 채팅 첨부였다. Taildrop 연동과 원격 B 로그의 실시간 수집은 구현·검증 전이다.
 
 <a id="v01-source-build"></a>
 ## 2026-11-07 · V01용 소스 엔진 패키지 빌드
