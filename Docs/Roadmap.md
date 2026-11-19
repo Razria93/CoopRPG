@@ -96,6 +96,8 @@
 
 두 히어로에 각자 스켈레톤의 대기·걷기·달리기를 연결했다. 기존 최고 속도 300cm/s에서 보폭이 맞도록 이동 클립과 재생 속도를 히어로별로 정했다. [선정 근거와 패키지 검증](Validation/ForestExpedition.md#hero-locomotion)
 
+게임 콘텐츠를 히어로별 애니메이션, 숲 머티리얼, 비공개 공급 파일로 재분류했다. 새 작업 폴더의 복원과 같은 PC에서의 새 패키지 2인 완주를 확인했다. [비공개 에셋 배치와 재검증](Validation/ForestExpedition.md#asset-layout)
+
 ## V01 재현 결과와 V02 첫 단타
 
 - **L00 결과** · 기준 커밋 `5dd6669`에서 AI가 기본 이동을 확인했고 사용자가 [캐릭터 생성자](../Game/Source/CoopRPG/Character/CoopRPGCharacter.cpp)의 속도를 500에서 300 cm/s로 바꿔 직접 빌드하고 플레이 차이를 확인했다. [시험 근거](Validation/Index.md#l00-movement)

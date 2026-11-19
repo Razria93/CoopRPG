@@ -193,8 +193,8 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
     }
 
     const TCHAR* AssetPath = Identity->GetSelectedHero() == ECoopRPGHero::Adventurer
-        ? TEXT("/Game/RPGHeroSquad/Mesh/Character/SK_RPGHeroPolyart.SK_RPGHeroPolyart")
-        : TEXT("/Game/RPGHeroSquad/Mesh/Character/SK_DogPolyart.SK_DogPolyart");
+        ? TEXT("/Game/ThirdParty/RPGHeroSquad/Mesh/Character/SK_RPGHeroPolyart.SK_RPGHeroPolyart")
+        : TEXT("/Game/ThirdParty/RPGHeroSquad/Mesh/Character/SK_DogPolyart.SK_DogPolyart");
     USkeletalMesh* HeroMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(AssetPath)).LoadSynchronous();
     if (HeroMesh != GetMesh()->GetSkeletalMeshAsset())
     {
@@ -213,8 +213,8 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
             CacheInitialMeshOffset(FeetOffset, Facing);
 
             const TCHAR* LocomotionPath = Identity->GetSelectedHero() == ECoopRPGHero::Adventurer
-                ? TEXT("/Game/Characters/Locomotion/BS_Adventurer.BS_Adventurer")
-                : TEXT("/Game/Characters/Locomotion/BS_AnimalHero.BS_AnimalHero");
+                ? TEXT("/Game/Characters/Heroes/Adventurer/Animation/BS_Adventurer.BS_Adventurer")
+                : TEXT("/Game/Characters/Heroes/AnimalHero/Animation/BS_AnimalHero.BS_AnimalHero");
             UBlendSpace1D* Locomotion = TSoftObjectPtr<UBlendSpace1D>(FSoftObjectPath(LocomotionPath)).LoadSynchronous();
             if (Locomotion && Locomotion->GetSkeleton() == HeroMesh->GetSkeleton())
             {

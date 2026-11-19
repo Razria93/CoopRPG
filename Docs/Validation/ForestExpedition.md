@@ -184,3 +184,36 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Start-CoopLan.ps1 -Rol
 - 로컬 `Artifacts/Validation/mvp02-02-hero-locomotion-20261120/VideoEvidence/`에서 `P1-from-P2.webp`, `P2-from-P1.webp`와 각각의 GIF를 볼 수 있다. `comparison.png`는 같은 장면을 같은 표시 크기로 대조한다.
 - 각 출력의 81프레임을 모두 디코딩해 누락·크기·재생 간격을 검사했다. WebP의 디코딩 픽셀은 잘라낸 원본과 일치했다. 양쪽 GIF의 출발·방향 전환·바위 정지·재출발은 대표 프레임으로 검수했다.
 - 원본 파일 저장 간격을 유지한 재편집본이다. 두 회차의 캡처 밀도는 초당 약 7.4~7.7장이므로 세밀한 모션 타이밍은 이 자료로 판정하지 않는다. `manifest.json`에 회차·빌드·크롭 범위·프레임별 원본 해시·출력 시간을 남겼다. 다음 녹화부터 [플레이 영상 증거 기준](Index.md#플레이-영상-증거)을 적용한다.
+
+<a id="asset-layout"></a>
+## 11/20 프로젝트 에셋 경로 재분류와 복원
+
+사용자가 외부 팩 원본과 프로젝트에서 사용하는 파일을 분리하고, 프로젝트 콘텐츠는 역할별로 정리하는 방식을 채택했다. 숲·실행기·히어로·영상 규칙의 기준을 `37d041d`까지 네 로컬 커밋으로 고정한 뒤 이동했다.
+
+| 위치 | 보관 대상 |
+|---|---|
+| 저장소 밖 `CoopRPG-SourceAssets/Environment/` | 숲 팩 원본 82개 |
+| `CoopRPG-SourceAssets/Characters/Heroes/`, `Characters/Enemies/` | 영웅 팩 원본 51개, 몬스터 팩 원본 44개 |
+| `CoopRPG-SourceAssets/MapSources/` | 원본 `L_Round_Base.umap` |
+| `Game/Content/Characters/Heroes/<히어로>/Animation/` | 프로젝트에서 제작한 Blend Space 2개 |
+| `Game/Content/Environment/Forest/Materials/`, `Game/Content/Maps/` | 프로젝트 머티리얼 5개와 플레이 맵 |
+| `Game/Content/ThirdParty/` | 숲 23개와 영웅 28개의 작업용 파일. 영웅 수에는 스켈레톤과 물리 에셋의 미리보기 의존 파일 12개가 포함된다. |
+
+**다른 작업 폴더나 PC에 배치하는 방법.** Git LFS 파일을 받은 뒤, 비공개 경로에서 받은 `Prepared/CoopRPG-ThirdParty-20261120.zip`을 저장소 루트에 푼다. ZIP 안의 `Game/Content/ThirdParty/` 구조를 유지한다. `third-party-manifest.json`으로 51개 파일의 해시를 확인할 수 있다. 소스 빌드 장비에서는 프로젝트와 호환되는 UE 5.8.4 CoopRPG 에디터 모듈을 빌드하고 프로젝트를 연다. 외부 에셋과 생성 로그는 Git에서 제외한다.
+
+**이전 과정.** Unreal 에디터에서 에셋을 이동하고 맵을 다시 저장했다. 첫 쿠킹에서 두 Blend Space에 남은 이전 스켈레톤·클립 참조가 드러났다. 임시 패키지 리다이렉트를 사용한 에디터에서 새 클립을 명시적으로 다시 연결하고 가중치를 확인해 저장한 뒤 임시 설정을 제거했다. 양쪽의 세 클립, 속도 기준, 배율과 0.1초 보간은 이전 결과와 대조했다.
+
+**별도 경로에서 복원.** 스테이징한 Git 파일과 비공개 ZIP만 새 경로에 풀고 같은 장비에서 새로 빌드한 에디터 모듈로 열었다. 옛 경로 없이 새 에셋 58개, 맵 두 개, 각 맵의 시작점 2개·상자·적·발판을 확인했다. 두 히어로에서 메시·Blend Space·대기 및 이동 클립 3개의 스켈레톤이 일치했다. 원본 파일 178개의 해시는 보관 복사본과 대조했다.
+
+**패키지.** 클라이언트·서버·에디터 모듈 빌드와 최종 쿠킹, 스테이징이 통과했다. `asset-layout-20261120` 빌드의 `CoopRPG-MVP02-02-AssetLayout-2PC.zip` 93개 파일을 검증 대상과 해시로 대조했다. 기존 GameplayCue 경로 경고 1개가 남았다. 실행기에서는 숲 맵 선택·두 클라이언트 접속·서버 종료와 포트 해제·기본 맵 기동·선택 복원을 확인했다.
+
+로컬 검증 자료는 `Artifacts/Validation/mvp02-02-asset-layout-20261120/`에 있다. `source-archive.json`, `prepared-bundle.json`, `restored-editor.json`, `archive-verification.json`과 `Live-20d05472/checks.txt`를 남겼다.
+
+**로컬 전용 서버·두 클라이언트.** 같은 패키지에서 숲 배치·시야와 측면 우회, 양쪽 무장, 적 처치, 팀 전리품 1개를 확인했다. B만 발판에 3.763초 있었을 때 미개시였고, 공동으로 3.016초 유지하자 서버가 성공을 한 번 확정했다. 양쪽 결과 화면과 로그에서 팀 점수 1을 확인했다. `Playthrough/audit.json`은 이전 경로의 바위 증거 파일을 찾는 항목을 제외한 20개가 통과했다. 바위 시험은 아래 두 회차에 실제로 수행했고 합친 결과는 `asset-layout-regression.json`이다.
+
+| 이동 입력 | 바위에 막힌 구간 | 상대 화면 |
+|---|---|---|
+| A가 P1 조작 | 이동 키를 유지한 수평 속도 0 표본 64개. 반대로 입력하자 두 화면에서 이동 애니메이션 재개 | `Motion-a/motion-review.webp` |
+| B가 P2 조작 | 같은 조건에서 66개. 반대로 입력하자 두 화면에서 이동 애니메이션 재개 | `Motion-b/motion-review.webp` |
+
+각 이동 폴더에 `server.log`, `a.log`, `b.log` 및 양쪽 720p 원본을 보관했다. 검토용 WebP는 원본 81장을 고정 크롭하고 저장 간격을 유지했다. 원본 저장 간격 중앙값은 188~209ms이고, 이번 영상은 출발·회전·정지·재출발의 장면 비교에 사용했다. 새 에셋 배치에서의 별도 물리 PC 접속은 이번 검증 범위 밖이다.
