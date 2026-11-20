@@ -92,7 +92,7 @@
 
 MVP02-02는 두 히어로 조작·이동과 장착·서버 기본 공격에 이어 방패 적을 연결했다. 방패 적의 발밑 이중 링과 좌우 45° 차단을 채택했다. 같은 PC의 전용 서버·두 클라이언트에서 경계와 기존 반격, 역할 교대, 공동 탈출과 양쪽 1점을 확인했다. 고정 카메라와 기존 이동 입력을 사용한다. 로비에서의 캐릭터 선택은 후속 범위다. [두 히어로 조작](Validation/ForestExpedition.md#playable-heroes) · [서버 기본 공격](Validation/ForestExpedition.md#hero-server-basic-attack) · [방패 적 검증](Validation/ForestExpedition.md#shield-ground-ring-verification)
 
-라운드 종료는 결과별로 처리한다. 사망·시간 초과는 같은 숲 맵에서 재준비하고, 탈출 성공은 후속 원정 맵이 연결될 때까지 1점 결과를 유지한다. 로컬 전용 서버·클라이언트 2개에서 성공·사망·시간 초과·접속 중단을 확인했다. 사용자는 같은 PC의 두 창에서 사망·0점, 같은 맵 복귀와 양쪽 재준비를 확인했다. 데스크톱·노트북 시험은 이번 범위에서 제외했다. [숲 라운드 재검증](Validation/ForestExpedition.md#forest-round-retry)
+라운드 종료는 결과별로 처리한다. 사망·시간 초과는 같은 숲 맵에서 재준비하고, 탈출 성공은 후속 원정 맵이 연결될 때까지 1점 결과를 유지한다. 로컬 전용 서버·클라이언트 2개에서 성공·사망·시간 초과·접속 중단을 확인했다. 사용자는 같은 PC의 두 창에서 사망·0점, 같은 맵 복귀와 양쪽 재준비를 확인했다. 데스크톱·노트북 시험은 이번 범위에서 제외했다. [숲 라운드 재검증](Validation/ForestExpedition.md#forest-round-retry) 방패와 적 공격을 좌우 45°로 통일한 패키지에서도 사망·0점 후 같은 맵 초기화·양쪽 재준비와 공동 탈출·양쪽 1점을 확인했다. [통합 회귀 결과](Validation/ForestExpedition.md#forest-round-retry-shield-regression)
 
 두 히어로의 이동·방향 전환은 로컬 두 창에서 사용자가 직접 확인했다. 현재 카메라 거리 650cm를 채택했다. [수동 결과와 카메라 보완](Validation/ForestExpedition.md#two-heroes-camera)
 
