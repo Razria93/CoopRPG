@@ -21,6 +21,8 @@ namespace
 {
     constexpr double RoundDurationSeconds = 300.0;
     constexpr double ExtractionHoldSeconds = 3.0;
+    constexpr TCHAR FirstValidationMap[] = TEXT("/Game/Maps/L_Movement");
+    constexpr TCHAR SecondValidationMap[] = TEXT("/Game/Maps/L_Movement_Round2");
 
     const TCHAR* GetRoundOutcome(ECoopRPGRoundEndReason Reason)
     {
@@ -213,6 +215,29 @@ double ACoopRPGGameState::GetRoundRemainingSeconds() const
 double ACoopRPGGameState::GetExtractionRemainingSeconds() const
 {
     return FMath::Max(0.0, RoundStatus.ExtractionDeadline - GetServerWorldTimeSeconds());
+}
+
+FString ACoopRPGGameState::GetRoundTravelDestination() const
+{
+    const FString CurrentMap = UWorld::RemovePIEPrefix(GetWorld()->GetPackage()->GetName());
+    switch (GetRoundEndReason())
+    {
+    case ECoopRPGRoundEndReason::Death:
+    case ECoopRPGRoundEndReason::Timeout:
+        return CurrentMap;
+    case ECoopRPGRoundEndReason::Extracted:
+        if (CurrentMap == FirstValidationMap)
+        {
+            return SecondValidationMap;
+        }
+        if (CurrentMap == SecondValidationMap)
+        {
+            return FirstValidationMap;
+        }
+        return {};
+    default:
+        return {};
+    }
 }
 
 void ACoopRPGGameState::UpdateExtraction(bool bEligible, double Now)

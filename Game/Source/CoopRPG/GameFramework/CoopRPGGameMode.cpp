@@ -23,8 +23,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGValidationRoster, Log, All);
 
 namespace
 {
-    constexpr TCHAR FirstMapPackage[] = TEXT("/Game/Maps/L_Movement");
-    constexpr TCHAR SecondMapPackage[] = TEXT("/Game/Maps/L_Movement_Round2");
     constexpr TCHAR ForestMapName[] = TEXT("L_ForestExpedition");
     constexpr TCHAR RoundOneMapName[] = TEXT("L_Round_01");
     constexpr double ResultDisplaySeconds = 3.0;
@@ -40,10 +38,6 @@ namespace
         UE_LOG(LogCoopRPGRoundAdmission, Log, TEXT("RoundJoinRejected Stage=%s Reason=%s"), Stage, *Reason);
     }
 
-    FString GetNextRoundMap(const FString& CurrentMap)
-    {
-        return CurrentMap.EndsWith(TEXT("L_Movement_Round2")) ? FirstMapPackage : SecondMapPackage;
-    }
 }
 
 ACoopRPGGameMode::ACoopRPGGameMode()
@@ -129,7 +123,7 @@ void ACoopRPGGameMode::AcknowledgeRoundResult(ACoopRPGPlayerController* Player, 
     const APlayerState* PlayerState = Player->GetPlayerState<APlayerState>();
     UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("RoundResultAcknowledged Round=%s PlayerId=%d Count=%d"),
         *RoundId.ToString(), PlayerState ? PlayerState->GetPlayerId() : INDEX_NONE, Count);
-    if (Count == RoundCapacity)
+    if (Count == RoundCapacity && !State->GetRoundTravelDestination().IsEmpty())
     {
         NextTravelTime = State->GetServerWorldTimeSeconds() + ResultDisplaySeconds;
     }
@@ -459,7 +453,7 @@ void ACoopRPGGameMode::AdvanceRoundIfReady(const ACoopRPGGameState& State)
     }
 
     bTravelAttempted = true;
-    const FString Destination = GetNextRoundMap(UGameplayStatics::GetCurrentLevelName(this));
+    const FString Destination = State.GetRoundTravelDestination();
     if (!ReserveRoundTravelSeats(Destination))
     {
         UE_LOG(LogCoopRPGRoundTravel, Error, TEXT("RoundTravelFailed Round=%s TargetMap=%s Reason=ParticipantIdentityUnavailable"),

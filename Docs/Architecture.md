@@ -90,11 +90,11 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 `L_Round_01`의 적은 새 공격 예고를 시작할 때 135cm 이내에서 가장 가까운 생존자를 고른다. 거리가 같으면 낮은 플레이어 슬롯을 고른다. 서버는 대상과 정면 방향을 1.5초 동안 고정한다. 예고가 끝날 때 대상의 생존·거리·정면 범위를 재검사하고, 0.8초 회복 뒤 다음 예고 대상을 다시 고른다. 적이 죽거나 라운드가 끝나면 예고와 대기 중인 공격이 정리된다.
 
-플레이어 기본 공격은 기존 구체 스윕으로 적을 찾는다. 적중 순간 방패가 올라 있고 적의 정면과 공격자 위치의 수평각이 45° 이하면 피해를 막는다. 45°를 넘거나 방패가 내려간 동안에는 기존 피해 처리를 적용한다. 적의 반격은 잠긴 대상에게 적용하는 기존 좌우 60° 기준을 사용한다.
+플레이어 기본 공격은 기존 구체 스윕으로 적을 찾는다. 적중 순간 방패가 올라 있고 적의 정면과 공격자 위치의 수평각이 45° 이하면 피해를 막는다. 45°를 넘거나 방패가 내려간 동안에는 기존 피해 처리를 적용한다. 적 공격도 같은 좌우 45° 기준을 사용한다. 예고 대상이 살아 있고 사거리 135cm 안의 정면 범위에 있으면 적중한다.
 
-클라이언트는 방패 적의 발밑에 이중 링을 그린다. 뒤쪽 90°는 비우고 앞에 화살표를 붙인다. 비조명 재질의 기본색은 짙은 차콜이다. 방패를 들면 서버가 복제한 예고 방향과 종료 시각을 사용해 바깥선과 안쪽 선의 앞쪽 90°, 그리고 화살표의 색을 같은 노란색으로 바꾼다. 평상시 링은 적의 방향을 따르며, 적이 사망하면 링을 숨긴다. 링은 바닥의 렌더링 구성요소로만 동작한다.
+클라이언트는 방패 적의 발밑에 이중 링을 그린다. 뒤쪽 90°는 비우고 앞에 화살표를 붙인다. 비조명 재질의 기본색은 짙은 차콜이다. 방패를 들면 서버가 복제한 예고 방향과 종료 시각을 사용해 바깥선과 안쪽 선의 앞쪽 90°, 그리고 화살표의 색을 같은 노란색으로 바꾼다. 평상시 링은 적의 방향을 따르며, 적이 사망하면 링을 숨긴다. 링은 바닥의 렌더링 구성요소로만 동작한다. 방패 적 이름표는 적의 화면상 중심에 이름·HP·대상 세 줄을 가운데 정렬한다. 배경과 각 줄 좌표는 예고 상태와 무관하게 고정하며 대상 줄은 예고 중 `Target P1` 또는 `Target P2`, 평상시 `Target —`를 표시한다.
 
-[검증 결과](Validation/ForestExpedition.md#shield-ground-ring-verification) · [서버 예고와 대상 선정](../Game/Source/CoopRPG/Character/CoopRPGEnemy.cpp) · [기본 공격 판정](../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp)
+[공통 각도와 이름표 검증](Validation/ForestExpedition.md#shield-angle-target-nameplate) · [초기 링 검증](Validation/ForestExpedition.md#shield-ground-ring-verification) · [서버 예고와 대상 선정](../Game/Source/CoopRPG/Character/CoopRPGEnemy.cpp) · [기본 공격 판정](../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp)
 
 <a id="상자-상호작용-설계-예시"></a>
 
@@ -146,11 +146,13 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 <a id="round-travel-design"></a>
 ### 서버 주도 맵 이동과 라운드 수명
 
-결과 HUD가 그려지면 각 클라이언트의 `PlayerController`가 현재 `RoundId`를 표시 확인 RPC로 보낸다. `GameMode`는 서버에 기록한 두 참가자와 현재 결과를 대조하고 중복을 제외한다. 두 확인을 받은 뒤 서버 시계로 3초가 지나면 `ServerTravel`을 한 번 요청한다. 참가자가 이탈한 회차는 `Result`에 머문다.
+결과 HUD가 그려지면 각 클라이언트의 `PlayerController`가 현재 `RoundId`를 표시 확인 RPC로 보낸다. `GameMode`는 서버에 기록한 두 참가자와 현재 결과를 대조하고 중복을 제외한다. 이동 목적지가 있는 결과는 두 확인을 받은 뒤 서버 시계로 3초가 지나면 `ServerTravel`을 한 번 요청한다. 참가자가 이탈한 회차는 `Result`에 머문다.
 
-두 맵을 번갈아 선택하도록 구성했다. 이번 시험은 `L_Movement`에서 `L_Movement_Round2`로 이동했다. 목적지는 초기화 검증을 위해 원본과 같은 배치를 가진 별도 패키지다. 비심리스 이동을 선택해 같은 클라이언트 프로세스가 새 월드에 다시 접속하고 `GameState`, `PlayerController`, Pawn을 새로 만든다. 새 서버 월드는 다음 `RoundId`로 상자·적·탈출 구역을 초기화한다. 새 Pawn과 ASC는 초기 체력·스태미나와 쿨다운 상태로 시작한다. 상자 획득은 서버의 현재 `RoundId`를 검사하므로 새 상자를 대상으로 보낸 이전 회차 ID도 거절된다.
+서버는 라운드 종료 사유와 현재 맵으로 이동 목적지를 결정한다. 사망·시간 초과는 현재 맵을 다시 열고, 탈출 성공은 연결된 다음 맵이 있을 때만 진행한다. `L_Round_01`은 후속 원정 맵이 없어 성공 결과에 머문다. 개발 검증용 `L_Movement`와 `L_Movement_Round2`는 성공 시 서로 이동한다. 결과 HUD도 같은 목적지 규칙을 사용한다.
 
-**근거** · [서버의 표시 확인과 전환](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [표시 확인 RPC와 상자 요청 검사](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [패키지 시험](Validation/Index.md#v06-round-travel) · [Epic 멀티플레이 맵 이동](https://dev.epicgames.com/documentation/unreal-engine/travelling-in-multiplayer-in-unreal-engine?lang=en-US)
+비심리스 이동을 사용해 같은 클라이언트 프로세스가 새 월드에 다시 접속하고 `GameState`, `PlayerController`, Pawn을 새로 만든다. 새 서버 월드는 새 `RoundId`로 상자·적·탈출 구역을 초기화한다. 새 Pawn과 ASC는 초기 체력·스태미나와 쿨다운 상태로 시작한다. 상자 획득은 서버의 현재 `RoundId`를 검사하므로 새 상자를 대상으로 보낸 이전 회차 ID도 거절된다.
+
+**근거** · [서버의 표시 확인과 전환](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [표시 확인 RPC와 상자 요청 검사](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [V06 패키지 시험](Validation/Index.md#v06-round-travel) · [숲 재도전 검증](Validation/ForestExpedition.md#forest-round-retry) · [Epic 멀티플레이 맵 이동](https://dev.epicgames.com/documentation/unreal-engine/travelling-in-multiplayer-in-unreal-engine?lang=en-US)
 
 <a id="round-admission-design"></a>
 ### 전용 서버 입장 판정과 맵 이동 중 두 자리

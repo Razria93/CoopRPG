@@ -341,7 +341,7 @@ void UCoopRPGMeleeAbility::ResolveHit()
     {
         const double Angle = Enemy->GetShieldAngle(Attacker->GetActorLocation());
         const bool bRaised = Enemy->IsShieldRaised();
-        // Allow roundoff at the inclusive 60-degree boundary.
+        // Allow roundoff at the inclusive shield front boundary.
         const bool bBlocked = bRaised && Angle <= ACoopRPGEnemy::ShieldHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
         UE_LOG(LogCoopRPGMelee, Log, TEXT("ShieldMeleeEvaluated Angle=%.4f Raised=%d Outcome=%s %s Swing=%u"),
             Angle, bRaised, bBlocked ? TEXT("Blocked") : TEXT("Hit"),

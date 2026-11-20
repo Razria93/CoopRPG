@@ -33,7 +33,6 @@ namespace
     constexpr float RecoverySeconds = 2.5f;
     constexpr float ShieldWindupSeconds = 1.5f;
     constexpr float ShieldRecoverySeconds = 0.8f;
-    constexpr double EnemyCounterattackHalfAngleDegrees = 60.0;
     constexpr float MovementObservationCm = 40.0f;
 
     constexpr double GroundRingEndAngle = 135.0;
@@ -411,7 +410,7 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
     const bool bLivePlayer = IsLivePlayer(Player);
     const double Distance = bLivePlayer ? FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) : 0.0;
     const bool bOutsideFacing = bShieldEncounter && bLivePlayer
-        && GetShieldAngle(Player->GetActorLocation()) > EnemyCounterattackHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
+        && GetShieldAngle(Player->GetActorLocation()) > ShieldHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
     if (!bLivePlayer || Distance > AttackRangeCm || bOutsideFacing)
     {
         const TCHAR* Reason = !bLivePlayer ? TEXT("InvalidTarget")
