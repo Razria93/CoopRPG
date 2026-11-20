@@ -90,7 +90,7 @@
 | **2. 카툰풍 숲 팩 적용** | **완료.** 사용자가 만든 `L_Round_Base`의 지면·바위 환경을 `L_Round_01`로 복제하고 승인한 시작 지점 2개·공용 상자·적·발판을 라운드 로직에 연결했다. 원본 맵과 에셋은 보존했다. |
 | **3. 시야·충돌·2인 완주 재검증** | **로컬 패키지 통과.** 두 화면에서 두 플레이어와 적 정면을 식별했고 바위 경계 충돌과 측면 우회를 확인했다. 일반 입력으로 양쪽 무장·적 처치·팀 전리품 회수 후 B 단독 3.728초 미개시, 공동 3.001초 뒤 서버 성공 1회·양쪽 1점을 확인했다. 데스크톱·노트북 사용자 확인은 대기 중이다. [재검증 근거](Validation/ForestExpedition.md#round-01-package) |
 
-방패 적의 정면·측면 판정, 역할 교대와 전투 피드백은 MVP02-02에서 다룬다. 그 선행 작업으로 같은 숲에서 두 히어로의 외형과 대기·이동을 구분할 수 있게 한다. 고정 카메라와 기존 이동 입력을 사용하며, 로비에서의 캐릭터 선택과 공격 애니메이션은 후속 범위다. [두 히어로 조작 기록](Validation/ForestExpedition.md#playable-heroes)
+MVP02-02는 두 히어로 조작·이동과 장착·서버 기본 공격에 이어 방패 적을 연결했다. 방패 적의 발밑 이중 링과 좌우 45° 차단을 채택했다. 같은 PC의 전용 서버·두 클라이언트에서 경계와 기존 반격, 역할 교대, 공동 탈출과 양쪽 1점을 확인했다. 고정 카메라와 기존 이동 입력을 사용한다. 로비에서의 캐릭터 선택은 후속 범위다. [두 히어로 조작](Validation/ForestExpedition.md#playable-heroes) · [서버 기본 공격](Validation/ForestExpedition.md#hero-server-basic-attack) · [방패 적 검증](Validation/ForestExpedition.md#shield-ground-ring-verification)
 
 두 히어로의 이동·방향 전환은 로컬 두 창에서 사용자가 직접 확인했다. 현재 카메라 거리 650cm를 채택했다. [수동 결과와 카메라 보완](Validation/ForestExpedition.md#two-heroes-camera)
 

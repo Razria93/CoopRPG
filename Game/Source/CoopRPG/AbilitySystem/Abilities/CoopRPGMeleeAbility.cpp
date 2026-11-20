@@ -337,6 +337,31 @@ void UCoopRPGMeleeAbility::ResolveHit()
         return;
     }
 
+    if (const auto* Enemy = Cast<ACoopRPGEnemy>(Target); Enemy && Enemy->IsShieldEncounter())
+    {
+        const double Angle = Enemy->GetShieldAngle(Attacker->GetActorLocation());
+        const bool bRaised = Enemy->IsShieldRaised();
+        // Allow roundoff at the inclusive 60-degree boundary.
+        const bool bBlocked = bRaised && Angle <= ACoopRPGEnemy::ShieldHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
+        UE_LOG(LogCoopRPGMelee, Log, TEXT("ShieldMeleeEvaluated Angle=%.4f Raised=%d Outcome=%s %s Swing=%u"),
+            Angle, bRaised, bBlocked ? TEXT("Blocked") : TEXT("Hit"),
+            *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)), AttackSequence);
+        if (bBlocked)
+        {
+            if (State)
+            {
+                const auto* Character = Cast<ACoopRPGCharacter>(Attacker);
+                FCoopRPGGameplayFeedback Feedback(ECoopRPGFeedbackKind::ShieldBlocked, Target, 0.0f,
+                    Character ? Character->GetDisplaySlot() : INDEX_NONE);
+                const FVector ShieldForward = FRotator(0.0, Enemy->GetShieldWarning().FacingYaw, 0.0).Vector();
+                Feedback.Location += ShieldForward * 56.0 + FVector(0.0, 0.0, 34.0);
+                State->MulticastGameplayFeedback(Feedback);
+            }
+            EndAbility(Handle, ActorInfo, ActivationInfo, false, false);
+            return;
+        }
+    }
+
     const float HealthBefore = TargetASC->GetNumericAttribute(HealthAttribute);
     const FGameplayEffectSpecHandle Damage = MakeOutgoingGameplayEffectSpec(UCoopRPGMeleeDamage::StaticClass());
     check(Damage.IsValid());

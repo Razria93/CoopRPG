@@ -12,7 +12,8 @@ enum class ECoopRPGFeedbackKind : uint8
     WeaponAcquired,
     RecoveryAcquired,
     RecoveryUsed,
-    TeamLootAcquired
+    TeamLootAcquired,
+    ShieldBlocked
 };
 
 USTRUCT()
