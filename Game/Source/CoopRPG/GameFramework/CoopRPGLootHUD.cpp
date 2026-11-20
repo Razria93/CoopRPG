@@ -35,6 +35,8 @@ namespace
     const FLinearColor ProgressColor(1.0f, 0.71f, 0.12f);
 
     constexpr float HealthNameplateLineSpacing = 17.0f;
+    constexpr float ShieldNameplateHalfWidth = 36.0f;
+    constexpr float AttackTargetTextScale = 0.85f;
 
     void PlayShieldImpact(UWorld& World, const FVector& Position)
     {
@@ -265,11 +267,13 @@ void ACoopRPGLootHUD::DrawGameplayFeedback()
     {
         if (!It->IsDead())
         {
-            const bool bWarning = It->IsShieldRaised();
-            const FString Label = bWarning ? FString::Printf(TEXT("Enemy | Target P%d"), It->GetShieldWarning().TargetSlot)
-                : TEXT("Enemy");
+            int32 AttackTargetSlot = INDEX_NONE;
+            if (It->IsShieldEncounter())
+            {
+                AttackTargetSlot = It->IsShieldRaised() ? It->GetShieldWarning().TargetSlot : 0;
+            }
             DrawHealthNameplate(It->GetActorLocation() + FVector(0.0f, 0.0f, 76.0f),
-                Label, It->GetHealth(), CoopRPG::Presentation::EnemyColor());
+                TEXT("Enemy"), It->GetHealth(), CoopRPG::Presentation::EnemyColor(), AttackTargetSlot);
         }
     }
 
@@ -325,7 +329,7 @@ void ACoopRPGLootHUD::DrawWorldLabel(const FVector& Location, const FString& Tex
 }
 
 void ACoopRPGLootHUD::DrawHealthNameplate(const FVector& Location, const FString& Name, float Health,
-    const FLinearColor& Color)
+    const FLinearColor& Color, int32 AttackTargetSlot)
 {
     const FVector Screen = Project(Location);
     if (Screen.Z <= 0.0f || Screen.X < 0.0f || Screen.X >= Canvas->ClipX || Screen.Y < 0.0f || Screen.Y >= Canvas->ClipY)
@@ -341,8 +345,9 @@ void ACoopRPGLootHUD::DrawHealthNameplate(const FVector& Location, const FString
     GetTextSize(HealthLine, HealthWidth, HealthHeight);
 
     const float RowSpacing = FMath::Max(HealthNameplateLineSpacing, NameHeight);
-    const float HalfWidth = FMath::Max(NameWidth, HealthWidth) * 0.5f;
-    const float Height = RowSpacing + HealthHeight;
+    const bool bShowAttackTarget = AttackTargetSlot != INDEX_NONE;
+    const float HalfWidth = bShowAttackTarget ? ShieldNameplateHalfWidth : FMath::Max(NameWidth, HealthWidth) * 0.5f;
+    const float Height = bShowAttackTarget ? RowSpacing * 3.0f : RowSpacing + HealthHeight;
     const float CenterX = FMath::Clamp(static_cast<float>(Screen.X), HalfWidth + 4.0f,
         FMath::Max(HalfWidth + 4.0f, Canvas->ClipX - HalfWidth - 4.0f));
     const float Top = FMath::Clamp(static_cast<float>(Screen.Y) - RowSpacing, 4.0f,
@@ -351,6 +356,17 @@ void ACoopRPGLootHUD::DrawHealthNameplate(const FVector& Location, const FString
         HalfWidth * 2.0f + 6.0f, Height + 2.0f);
     DrawText(NameLine, Color, CenterX - NameWidth * 0.5f, Top);
     DrawText(HealthLine, Color, CenterX - HealthWidth * 0.5f, Top + RowSpacing);
+    if (bShowAttackTarget)
+    {
+        const bool bHasTarget = AttackTargetSlot > 0;
+        const FString TargetLine = bHasTarget ? FString::Printf(TEXT("Target P%d"), AttackTargetSlot)
+            : TEXT("Target \u2014");
+        float TargetWidth, TargetHeight;
+        GetTextSize(TargetLine, TargetWidth, TargetHeight, nullptr, AttackTargetTextScale);
+        const float TargetY = Top + 2.0f * RowSpacing + FMath::Max(0.0f, RowSpacing - TargetHeight) * 0.5f;
+        DrawText(TargetLine, bHasTarget ? FLinearColor::White : PanelAccent,
+            CenterX - TargetWidth * 0.5f, TargetY, nullptr, AttackTargetTextScale);
+    }
 }
 
 void ACoopRPGLootHUD::DrawRoundWaiting(const ACoopRPGGameState& State,

@@ -456,6 +456,26 @@ Win64 Development 전용 서버 1개와 렌더링 클라이언트 A(P1)·B(P2)�
 
 **수동 원본** · `Artifacts/Validation/mvp02-02-shield-ring-double-gold-20261120/manual-20261120-134941-427/`의 `server.log`, `a.log`, `b.log`, `processes.json`. 빌드 식별자는 상위 폴더의 `build-identity.json`에 있다.
 
+<a id="shield-angle-target-nameplate"></a>
+### 방패 공통 45°와 고정 대상 이름표 · 11/20
+
+사용자는 적 이름 옆에 대상이 붙을 때 글자가 좌우로 움직인다고 지적했다. 방패 적의 머리 위에 `[Enemy]`, 현재/최대 HP, 대상 순서로 세 줄을 배치하고 각 줄을 적 중심에 가운데 정렬했다. 예고 중에는 `Target P1` 또는 `Target P2`, 평상시에는 `Target —`를 표시한다. 예고가 시작·종료돼도 배경 크기와 세 줄 높이는 유지한다. 방패 차단, 적 공격, 노란 링은 모두 서버가 고정한 정면의 좌우 45°를 사용한다. 양쪽의 정확한 45°를 범위에 포함한다. [서버 판정과 화면 구성](../Architecture.md#shield-encounter-authority)
+
+Win64 Development 검증 묶음은 #22 머지 `8c378e0`에 이 변경과 작업 중인 라운드 재도전 구현을 함께 빌드했다. 이전 쿠킹 콘텐츠 10개는 해시를 대조해 재사용했다. 동일 PC에서 `L_Round_01` 전용 서버 1개와 렌더링 클라이언트 A(P1)·B(P2)를 실행했다. 별도 PC 시험은 이번 범위에서 제외했다.
+
+| 검증 | 서버·A·B 대조 결과 |
+| --- | --- |
+| 플레이어 기본 공격 · 12건 | P1·P2 각각 좌우 44°·45°는 차단, 좌우 46°는 적중. 시험 배치 후 실제 왼쪽 클릭을 사용했다. 양쪽에서 공격 모션을 확인했고 적중 HP를 서버와 대조했다. `Boundary02/server.log` 803–886행. |
+| 적 공격 · 12건 | 예고 대상만 사거리 135cm 안의 거리 120cm에 두고 검사했다. P1·P2 각각 좌우 44°·45°는 10 피해, 좌우 46°는 `OutsideFacing`으로 빗나갔다. 양쪽에 적중 HP가 복제됐다. `Counter01/server.log` 796–858행. |
+| 이동으로 범위 이탈 | 예고 중 P1이 `S`로 노란 범위 밖으로 이동했다. 공격이 확정될 때 사거리 안인 95.47cm에서 `OutsideFacing`이 기록됐다. 두 화면의 예고와 이동을 대조했다. `Dodge01/server.log` 808행. |
+| 센터 정렬과 복귀 | P1·P2 예고 직전·활성·종료의 양쪽 원본 12장을 비교했다. 1280×720 화면에서 이름표 배경은 78×53px였고 각 줄의 글자 중심은 배경 중앙에서 약 1px 이내였다. 이름·HP 줄과 배경은 같은 위치를 유지했다. 근접한 캐릭터가 노란 호 일부를 가리는 장면은 남아 있다. `Counter01/nameplate-review-02/`. |
+| 역할 교대 | `Round01` 일반 입력에서 P1과 P2가 각각 새 예고 대상이 됐다. P1의 정면 차단과 양쪽의 측면 적중을 기록했다. A가 탈출 동선에서 막혀 해당 회차 완주는 확인하지 못했다. `Round02`는 P2가 다음 예고의 최근접 대상이 되는 배치를 재현하지 못했다. |
+| 공동 탈출 | `Complete01`에서 초기 HP와 전리품 시험 조건을 맞춘 뒤 실제 입력으로 전리품을 회수하고 탈출했다. B 단독 체류 3.2초 동안 진행이 시작되지 않았다. 두 사람 공동 체류 3.024초에 서버가 성공·1점을 한 번 확정했고, 같은 라운드 결과가 A·B에 복제됐다. `server.log` 813행, `a.log` 3388행, `b.log` 2560행. |
+
+**패키지·원본** · `Artifacts/Validation/shield-readability-20261120-161618-179/`에 `Stage/`와 `build-identity.json`이 있다. 각 회차 폴더에 `server.log`, `a.log`, `b.log`, 입력 기록과 원본 프레임을 남겼다. 경계 시험 결과는 `angle-audit.json`과 `Counter01/result.json`에 있다. `Boundary02`는 방패 12건을 기록한 뒤 적 공격 시험 배치에서 중단돼 해당 12건을 `Counter01`에서 마쳤다.
+
+**양쪽 영상** · `Videos01/shield-readability-a.webp`와 `shield-readability-b.webp`는 1280×720 원본에 하단 설명을 붙인 1280×760 무손실 WebP다. 실제 캡처 간격으로 재생하는 약 12초짜리 발췌 영상이다. 장면별 프레임 간격 중앙값은 161–276ms다. A 60장과 B 53장 전체를 디코딩했고, `transition-review-a.png`와 `transition-review-b.png`에 전환 시점, `video-manifest.json`에 원본 시각과 해시를 남겼다.
+
 <a id="forest-round-retry"></a>
 ## 11/20 숲 라운드 종료와 재도전
 

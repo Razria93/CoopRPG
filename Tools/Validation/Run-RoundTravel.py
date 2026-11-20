@@ -112,7 +112,7 @@ def trial(stage, output, scenario, start_map):
             command("a", "Coop.Test.Vitals " + " ".join(vitals), "server sets up reproducible health values",
                     lambda: server("TestVitals", HP=f"{vitals[0]}.00", AttackerHP=f"{vitals[1]}.00"))
             if forest:
-                layout = "shieldDown" if scenario == "success" else "counter60"
+                layout = "shieldDown" if scenario == "success" else "counter44"
                 command("a", f"Coop.Test.MeleeLayout {layout}", "server prepares the shield encounter",
                         lambda: any(row["fields"]["Layout"].lower() == layout.lower()
                                     for row in server("MeleeTestLayout")))
