@@ -87,6 +87,12 @@ ACoopRPGCharacter::ACoopRPGCharacter()
     BodyMesh->SetMaterial(0, TintableMaterial.Object);
     HeadMesh->SetMaterial(0, TintableMaterial.Object);
 
+#if !UE_SERVER
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> HitDarkenMaterial(
+        TEXT("/Game/Presentation/Materials/M_HeroHitDarken.M_HeroHitDarken"));
+    HeroHitDarkenMaterial = HitDarkenMaterial.Object;
+#endif
+
     WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeleeWeapon"));
     WeaponMesh->SetupAttachment(GetRootComponent());
     WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -194,6 +200,11 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
         HeroAttackClip = nullptr;
         if (HeroMesh)
         {
+            if (HeroHitDarkenMaterial && !GetMesh()->GetOverlayMaterial())
+            {
+                GetMesh()->SetOverlayMaterial(UMaterialInstanceDynamic::Create(HeroHitDarkenMaterial, GetMesh()));
+            }
+
             // Ground the reference pose and match the existing capsule and overhead nameplate.
             const FBoxSphereBounds Bounds = HeroMesh->GetImportedBounds();
             const float HalfHeight = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
@@ -518,13 +529,15 @@ void ACoopRPGCharacter::SetPresentationTint(bool bDarkened)
     {
         const FLinearColor Color = CoopRPG::Presentation::PlayerColor(DisplaySlot);
         PresentationMaterial->SetVectorParameterValue(TEXT("Color"), bDarkened ? Color * 0.25f : Color);
-        if (GetMesh()->GetSkeletalMeshAsset())
-        {
-            for (int32 Index = 0; Index < GetMesh()->GetNumMaterials(); ++Index)
-            {
-                GetMesh()->SetMaterial(Index, bDarkened ? PresentationMaterial.Get() : nullptr);
-            }
-        }
+    }
+
+    auto* HitOverlay = Cast<UMaterialInstanceDynamic>(GetMesh()->GetOverlayMaterial());
+    if (HitOverlay && HitOverlay->Parent == HeroHitDarkenMaterial)
+    {
+        const auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
+        const bool bAnimalHero = Identity && Identity->GetSelectedHero() == ECoopRPGHero::AnimalHero;
+        const float HitOpacity = bAnimalHero ? 0.58f : 0.30f;
+        HitOverlay->SetScalarParameterValue(TEXT("HitOpacity"), bDarkened ? HitOpacity : 0.0f);
     }
 }
 
