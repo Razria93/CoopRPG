@@ -407,9 +407,11 @@ void UCoopRPGCombatProbeComponent::ServerConfirmTwice_Implementation()
 
 void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName Layout)
 {
+    const bool bShieldAngle = Layout == TEXT("shield44") || Layout == TEXT("shield45") || Layout == TEXT("shield46");
+    const bool bEnemyCounter = Layout == TEXT("counter60") || Layout == TEXT("counter61");
     if (!IsProbeEnabled(GetWorld())
         || (Layout != TEXT("front") && Layout != TEXT("away") && Layout != TEXT("wall")
-            && Layout != TEXT("far") && Layout != TEXT("multi")))
+            && Layout != TEXT("far") && Layout != TEXT("multi") && !bShieldAngle && !bEnemyCounter && Layout != TEXT("shieldDown")))
     {
         return;
     }
@@ -430,12 +432,29 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
     Enemy->GetCharacterMovement()->StopMovementImmediately();
     Character->GetCharacterMovement()->StopMovementImmediately();
     const FVector EnemyPosition(850.0, 0.0, 90.15);
-    const FVector PlayerPosition(Layout == TEXT("far") ? 565.0 : 720.0,
+    FVector PlayerPosition(Layout == TEXT("far") ? 565.0 : 720.0,
         Character->GetDisplaySlot() == 1 ? -50.0 : 50.0, 90.15);
+    if (bShieldAngle || bEnemyCounter || Layout == TEXT("shieldDown"))
+    {
+        const double Angle = Layout == TEXT("shield44") ? 44.0 : Layout == TEXT("shield45") ? 45.0
+            : Layout == TEXT("shield46") ? 46.0 : Layout == TEXT("counter60") ? 60.0
+            : Layout == TEXT("counter61") ? 61.0 : 0.0;
+        PlayerPosition = EnemyPosition + FRotator(0.0, Angle, 0.0).Vector() * 120.0;
+        const bool bRaiseShield = bShieldAngle || bEnemyCounter;
+        Enemy->bAttackPending = bRaiseShield;
+        Enemy->NextActionTime = GetWorld()->GetTimeSeconds() + (bEnemyCounter ? 1.25 : 4.0);
+        Enemy->SetShieldWarning(bRaiseShield ? Character->GetDisplaySlot() : 0, 0.0f,
+            bRaiseShield ? Enemy->NextActionTime : 0.0);
+    }
     FRotator Facing = (EnemyPosition - PlayerPosition).Rotation();
     Facing.Yaw += Layout == TEXT("away") ? 180.0f : 0.0f;
     Enemy->TeleportTo(EnemyPosition, FRotator::ZeroRotator, false, true);
     Character->TeleportTo(PlayerPosition, Facing, false, true);
+    if (bEnemyCounter)
+    {
+        Enemy->Target = Character;
+        Enemy->SetActorTickEnabled(true);
+    }
 
     if (Layout == TEXT("multi") && !FindObject<UBoxComponent>(Enemy, TEXT("MeleeProbeContact")))
     {
