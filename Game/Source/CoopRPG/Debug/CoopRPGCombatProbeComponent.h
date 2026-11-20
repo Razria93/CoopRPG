@@ -21,6 +21,7 @@ public:
     void Snapshot(const FString& Label);
     void SetVitals(float TargetHealth, float AttackerHealth);
     void ConfirmTwice();
+    void PrepareMeleeLayout(FName Layout);
     void PositionForEnemyLoot(bool bNear);
     void PositionForExtraction(bool bInside);
     void PrepareRoundEnd(FName Scenario);
@@ -45,6 +46,9 @@ private:
     void ServerConfirmTwice();
 
     UFUNCTION(Server, Reliable)
+    void ServerPrepareMeleeLayout(FName Layout);
+
+    UFUNCTION(Server, Reliable)
     void ServerPositionForEnemyLoot(bool bNear);
 
     UFUNCTION(Server, Reliable)
@@ -63,4 +67,7 @@ private:
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);
     void WriteSnapshot(const FString& Label) const;
     void WriteRoundSnapshot(FName Label) const;
+
+private:
+    TWeakObjectPtr<AActor> MeleeTestObstacle;
 };

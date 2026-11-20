@@ -3,14 +3,18 @@
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
+#include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGGameMode.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGMelee, Log, All);
@@ -18,9 +22,85 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGMelee, Log, All);
 namespace
 {
     constexpr float MeleeRangeCm = 250.0f;
-    constexpr float WindupSeconds = 0.65f;
+    constexpr float ProbeWindupSeconds = 0.65f;
+    constexpr float SweepLengthCm = 145.0f;
+    constexpr float SweepRadiusCm = 37.0f;
 
     using CoopRPG::Debug::DescribePlayerRequestContext;
+
+    const TCHAR* SweepForEnemy(const AActor* Attacker, const AActor* Target, const FVector& Direction, uint32 Swing)
+    {
+        const FVector Start = Attacker->GetActorLocation();
+        const FVector TargetDelta = Target->GetActorLocation() - Start;
+        if (FVector::DotProduct(Direction, TargetDelta) <= 0.0)
+        {
+            return TEXT("OutsideSwing");
+        }
+
+        UWorld* World = Attacker->GetWorld();
+        FCollisionQueryParams Query(SCENE_QUERY_STAT(CoopRPGMelee), false, Attacker);
+        Query.bFindInitialOverlaps = true;
+        FCollisionObjectQueryParams Objects;
+        Objects.AddObjectTypesToQuery(ECC_Pawn);
+        Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+        Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+
+        const FVector End = Start + Direction * SweepLengthCm;
+        TArray<FHitResult> Contacts;
+        World->SweepMultiByObjectType(Contacts, Start, End, FQuat::Identity,
+            Objects, FCollisionShape::MakeSphere(SweepRadiusCm), Query);
+
+        // Resolve the earliest contact per actor and let world geometry win ties at an obstacle.
+        int32 EnemyContacts = 0;
+        float EnemyTime = TNumericLimits<float>::Max();
+        float ObstacleTime = TNumericLimits<float>::Max();
+        for (const FHitResult& Contact : Contacts)
+        {
+            if (Contact.GetActor() == Target)
+            {
+                ++EnemyContacts;
+                EnemyTime = FMath::Min(EnemyTime, Contact.Time);
+            }
+            else if (const UPrimitiveComponent* Component = Contact.GetComponent();
+                Component && Component->GetCollisionObjectType() != ECC_Pawn
+                && Component->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block)
+            {
+                ObstacleTime = FMath::Min(ObstacleTime, Contact.Time);
+            }
+        }
+
+        UE_CLOG(EnemyContacts > 1, LogCoopRPGMelee, Log,
+            TEXT("MeleeMultipleContacts Target=%s Components=%d"), *GetNameSafe(Target), EnemyContacts);
+        const bool bObstructed = ObstacleTime < TNumericLimits<float>::Max() && ObstacleTime <= EnemyTime;
+        const bool bHit = EnemyTime < TNumericLimits<float>::Max() && !bObstructed;
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+        if (FParse::Param(FCommandLine::Get(), TEXT("CoopMeleeSweepDebug")))
+        {
+            if (auto* State = World->GetGameState<ACoopRPGGameState>())
+            {
+                FCoopRPGMeleeSweepTrace Trace;
+                Trace.Start = Start;
+                Trace.End = End;
+                Trace.Radius = SweepRadiusCm;
+                const auto* Character = Cast<ACoopRPGCharacter>(Attacker);
+                Trace.Slot = Character ? Character->GetDisplaySlot() : 0;
+                Trace.Swing = Swing;
+                Trace.Result = bHit ? ECoopRPGMeleeSweepResult::Hit
+                    : bObstructed ? ECoopRPGMeleeSweepResult::Obstructed : ECoopRPGMeleeSweepResult::Missed;
+                Trace.ContactTime = bHit ? EnemyTime : bObstructed ? ObstacleTime : 0.0f;
+                UE_LOG(LogCoopRPGMelee, Log, TEXT("MeleeSweepTrace Slot=%d Swing=%u Start=%s End=%s Radius=%.2f Result=%s Contact=%.4f"),
+                    Trace.Slot, Trace.Swing, *Trace.Start.ToCompactString(), *Trace.End.ToCompactString(), Trace.Radius,
+                    *StaticEnum<ECoopRPGMeleeSweepResult>()->GetNameStringByValue(static_cast<int64>(Trace.Result)), Trace.ContactTime);
+                State->MulticastMeleeSweepTrace(Trace);
+            }
+        }
+#endif
+        if (bObstructed)
+        {
+            return TEXT("Obstructed");
+        }
+        return bHit ? nullptr : TEXT("OutsideSwing");
+    }
 
     void LogFailedCheck(const FGameplayAbilityActorInfo* ActorInfo, const TCHAR* Reason, const TCHAR* Function)
     {
@@ -135,12 +215,22 @@ void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     }
 
     PendingTarget = Target;
+    AttackSequence = 0;
+    float Windup = ProbeWindupSeconds;
+    if (Target->IsA<ACoopRPGEnemy>())
+    {
+        const float Yaw = Attacker->GetActorRotation().Yaw;
+        Windup = Attacker->GetMeleeWindup();
+        PendingRound = Attacker->GetWorld()->GetGameState<ACoopRPGGameState>()->GetRoundId();
+        AttackDirection = FRotator(0.0f, Yaw, 0.0f).Vector();
+        AttackSequence = Attacker->StartMeleePresentation(Yaw, Windup);
+    }
     bHitPending = true;
-    Attacker->GetWorldTimerManager().SetTimer(HitTimer, this, &UCoopRPGMeleeAbility::ResolveHit, WindupSeconds, false);
+    Attacker->GetWorldTimerManager().SetTimer(HitTimer, this, &UCoopRPGMeleeAbility::ResolveHit, Windup, false);
     const float StaminaAfter = Source->GetNumericAttribute(UCoopRPGCombatAttributes::GetStaminaAttribute());
-    UE_LOG(LogCoopRPGMelee, Log, TEXT("AttackStarted Attacker=%s Target=%s Windup=%.2f Stamina=%.2f->%.2f %s"),
-        *GetNameSafe(Attacker), *GetNameSafe(Target), WindupSeconds, StaminaBefore, StaminaAfter,
-        *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)));
+    UE_LOG(LogCoopRPGMelee, Log, TEXT("AttackStarted Attacker=%s Target=%s Windup=%.2f Stamina=%.2f->%.2f %s Swing=%u"),
+        *GetNameSafe(Attacker), *GetNameSafe(Target), Windup, StaminaBefore, StaminaAfter,
+        *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)), AttackSequence);
 }
 
 void UCoopRPGMeleeAbility::EndAbility(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -150,16 +240,31 @@ void UCoopRPGMeleeAbility::EndAbility(FGameplayAbilitySpecHandle Handle, const F
     const bool bCancelledBeforeHit = bHitPending && bWasCancelled;
     if (UWorld* World = GetWorld())
     {
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+        if (bCancelledBeforeHit && AttackSequence != 0 && FParse::Param(FCommandLine::Get(), TEXT("CoopMeleeSweepDebug")))
+        {
+            UE_LOG(LogCoopRPGMelee, Log, TEXT("MeleeSweepCancelled Swing=%u TimerRemainingMs=%.2f %s"), AttackSequence,
+                World->GetTimerManager().GetTimerRemaining(HitTimer) * 1000.0,
+                *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)));
+        }
+#endif
         World->GetTimerManager().ClearTimer(HitTimer);
     }
     bHitPending = false;
     PendingTarget.Reset();
+    PendingRound.Invalidate();
+
+    if (auto* Character = Cast<ACoopRPGCharacter>(Attacker); Character && AttackSequence != 0)
+    {
+        Character->FinishMeleeWindup(bCancelledBeforeHit);
+    }
 
     if (bCancelledBeforeHit)
     {
-        UE_LOG(LogCoopRPGMelee, Log, TEXT("AttackCancelled Attacker=%s Damage=0 Committed=1 %s"),
-            *GetNameSafe(Attacker), *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)));
+        UE_LOG(LogCoopRPGMelee, Log, TEXT("AttackCancelled Attacker=%s Damage=0 Committed=1 %s Swing=%u"),
+            *GetNameSafe(Attacker), *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)), AttackSequence);
     }
+    AttackSequence = 0;
     Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
@@ -190,7 +295,8 @@ void UCoopRPGMeleeAbility::ResolveHit()
     {
         MissReason = TEXT("AttackerDead");
     }
-    else if (State && State->HasRoundResult())
+    else if ((State && State->HasRoundResult())
+        || (PendingRound.IsValid() && (!State || !State->IsRoundPlaying() || State->GetRoundId() != PendingRound)))
     {
         MissReason = TEXT("NotPlaying");
     }
@@ -206,13 +312,27 @@ void UCoopRPGMeleeAbility::ResolveHit()
         {
             MissReason = TEXT("OutOfRange");
         }
+        else if (AttackSequence != 0)
+        {
+            MissReason = SweepForEnemy(Attacker, Target, AttackDirection, AttackSequence);
+        }
     }
 
     if (MissReason)
     {
-        UE_LOG(LogCoopRPGMelee, Log, TEXT("AttackMissed Attacker=%s Target=%s Reason=%s Damage=0 Committed=1 %s"),
+        UE_LOG(LogCoopRPGMelee, Log, TEXT("AttackMissed Attacker=%s Target=%s Reason=%s Damage=0 Committed=1 %s Swing=%u"),
             *GetNameSafe(Attacker), *GetNameSafe(Target), MissReason,
-            *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)));
+            *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)), AttackSequence);
+        if (AttackSequence != 0 && (!IsValid(Attacker) || !IsValid(Source)
+            || Source->GetNumericAttribute(UCoopRPGCombatAttributes::GetHealthAttribute()) <= 0.0f
+            || !State || !State->IsRoundPlaying()))
+        {
+            if (auto* Character = Cast<ACoopRPGCharacter>(ActorInfo->AvatarActor.Get()))
+            {
+                Character->FinishMeleeWindup(true);
+            }
+            AttackSequence = 0;
+        }
         EndAbility(Handle, ActorInfo, ActivationInfo, false, false);
         return;
     }
@@ -228,8 +348,8 @@ void UCoopRPGMeleeAbility::ResolveHit()
         State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::Damage, Target, DamageAmount, Slot});
     }
     UE_LOG(LogCoopRPGMelee, Log,
-        TEXT("AttackApproved Attacker=%s Target=%s Distance=%.2f Range=%.2f HP=%.2f->%.2f %s"),
+        TEXT("AttackApproved Attacker=%s Target=%s Distance=%.2f Range=%.2f HP=%.2f->%.2f %s Swing=%u"),
         *GetNameSafe(Attacker), *GetNameSafe(Target), Distance, MeleeRangeCm, HealthBefore, TargetASC->GetNumericAttribute(HealthAttribute),
-        *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)));
+        *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)), AttackSequence);
     EndAbility(Handle, ActorInfo, ActivationInfo, false, false);
 }

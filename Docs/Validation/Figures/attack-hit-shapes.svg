@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 780" role="img" aria-labelledby="title desc">
+  <title id="title">위에서 본 공격 판정 영역 다섯 가지</title>
+  <desc id="desc">모든 공격자는 오른쪽을 본다. 반원, 원, 전방 부채꼴, 직선 사각형, 가운데가 비어 있는 원호 띠를 비교한다. 채운 원은 몸체가 영역에 닿은 대상이다.</desc>
+  <style>
+    .paper{fill:#fff}
+    .label,.legend{fill:#222b36;font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif;font-size:20px}
+    .area{fill:#dbeaf9;fill-opacity:.85;stroke:#3576a6;stroke-width:2}
+    .axis{fill:none;stroke:#8294a6;stroke-width:2}
+    .origin{fill:#222b36}
+    .hit{fill:#3576a6;stroke:#3576a6;stroke-width:2}
+    .miss{fill:#fff;stroke:#627282;stroke-width:2}
+    @media (prefers-color-scheme:dark) {
+      .paper{fill:#1e2631}
+      .label,.legend{fill:#e6edf7}.area{fill:#1d4866;stroke:#85bdf0}
+      .axis{stroke:#8196ac}.origin{fill:#e6edf7}.hit{fill:#85bdf0;stroke:#85bdf0}.miss{fill:#1e2631;stroke:#a5b3c2}
+    }
+  </style>
+  <rect class="paper" width="540" height="780" rx="12"/>
+  <g transform="translate(140 145)">
+    <text class="label" y="-119" text-anchor="middle">전방 반원</text>
+    <path class="axis" d="M 0 0 H 128 m -7 -5 l 7 5 -7 5"/>
+    <path class="area" d="M 0.00 -98.00 A 98 98 0 0 1 0.00 98.00 L 0 0 Z"/>
+    <circle class="hit" cx="43" cy="10" r="11"/>
+    <circle class="hit" cx="82" cy="-25" r="11"/>
+    <circle class="hit" cx="52" cy="-61" r="11"/>
+    <circle class="hit" cx="13" cy="-90" r="11"/>
+    <circle class="miss" cx="-62" cy="25" r="11"/>
+    <circle class="miss" cx="106" cy="64" r="11"/>
+    <circle class="origin" r="5"/>
+  </g>
+  <g transform="translate(395 145)">
+    <text class="label" y="-119" text-anchor="middle">원</text>
+    <path class="axis" d="M 0 0 H 128 m -7 -5 l 7 5 -7 5"/>
+    <circle class="area" r="98"/>
+    <circle class="hit" cx="43" cy="10" r="11"/>
+    <circle class="hit" cx="82" cy="-25" r="11"/>
+    <circle class="hit" cx="52" cy="-61" r="11"/>
+    <circle class="hit" cx="13" cy="-90" r="11"/>
+    <circle class="hit" cx="-62" cy="25" r="11"/>
+    <circle class="miss" cx="106" cy="64" r="11"/>
+    <circle class="origin" r="5"/>
+  </g>
+  <g transform="translate(140 385)">
+    <text class="label" y="-119" text-anchor="middle">전방 부채꼴</text>
+    <path class="axis" d="M 0 0 H 128 m -7 -5 l 7 5 -7 5"/>
+    <path class="area" d="M 69.30 -69.30 A 98 98 0 0 1 69.30 69.30 L 0 0 Z"/>
+    <circle class="hit" cx="43" cy="10" r="11"/>
+    <circle class="hit" cx="82" cy="-25" r="11"/>
+    <circle class="hit" cx="52" cy="-61" r="11"/>
+    <circle class="miss" cx="13" cy="-90" r="11"/>
+    <circle class="miss" cx="-62" cy="25" r="11"/>
+    <circle class="miss" cx="106" cy="64" r="11"/>
+    <circle class="origin" r="5"/>
+  </g>
+  <g transform="translate(395 385)">
+    <text class="label" y="-119" text-anchor="middle">직선 사각형</text>
+    <path class="axis" d="M 0 0 H 128 m -7 -5 l 7 5 -7 5"/>
+    <rect class="area" x="0" y="-23" width="116" height="46"/>
+    <circle class="hit" cx="43" cy="10" r="11"/>
+    <circle class="hit" cx="82" cy="-25" r="11"/>
+    <circle class="miss" cx="52" cy="-61" r="11"/>
+    <circle class="miss" cx="13" cy="-90" r="11"/>
+    <circle class="miss" cx="-62" cy="25" r="11"/>
+    <circle class="miss" cx="106" cy="64" r="11"/>
+    <circle class="origin" r="5"/>
+  </g>
+  <g transform="translate(243 625)">
+    <text class="label" y="-119" text-anchor="middle">원호 띠</text>
+    <path class="axis" d="M 0 0 H 128 m -7 -5 l 7 5 -7 5"/>
+    <path class="area" d="M 69.30 -69.30 A 98 98 0 0 1 69.30 69.30 L 47.38 47.38 A 67 67 0 0 0 47.38 -47.38 Z"/>
+    <circle class="miss" cx="43" cy="10" r="11"/>
+    <circle class="hit" cx="82" cy="-25" r="11"/>
+    <circle class="hit" cx="52" cy="-61" r="11"/>
+    <circle class="miss" cx="13" cy="-90" r="11"/>
+    <circle class="miss" cx="-62" cy="25" r="11"/>
+    <circle class="miss" cx="106" cy="64" r="11"/>
+    <circle class="origin" r="5"/>
+  </g>
+  <g transform="translate(93 751)">
+    <circle class="origin" r="5"/><text class="legend" x="15" y="6">공격자</text>
+    <circle class="hit" cx="114" r="9"/><text class="legend" x="131" y="6">적중</text>
+    <circle class="miss" cx="209" r="9"/><text class="legend" x="226" y="6">빗나감</text>
+  </g>
+</svg>

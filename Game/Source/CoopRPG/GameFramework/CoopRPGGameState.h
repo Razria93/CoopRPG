@@ -69,6 +69,41 @@ struct FCoopRPGReadySlots
     ECoopRPGReadyStatus PlayerTwo = ECoopRPGReadyStatus::Disconnected;
 };
 
+UENUM()
+enum class ECoopRPGMeleeSweepResult : uint8
+{
+    Missed,
+    Hit,
+    Obstructed
+};
+
+USTRUCT()
+struct FCoopRPGMeleeSweepTrace
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FVector Start = FVector::ZeroVector;
+
+    UPROPERTY()
+    FVector End = FVector::ZeroVector;
+
+    UPROPERTY()
+    float Radius = 0.0f;
+
+    UPROPERTY()
+    float ContactTime = 0.0f;
+
+    UPROPERTY()
+    int32 Slot = 0;
+
+    UPROPERTY()
+    uint32 Swing = 0;
+
+    UPROPERTY()
+    ECoopRPGMeleeSweepResult Result = ECoopRPGMeleeSweepResult::Missed;
+};
+
 UCLASS()
 class COOPRPG_API ACoopRPGGameState : public AGameStateBase
 {
@@ -82,6 +117,10 @@ public:
 
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
+
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastMeleeSweepTrace(const FCoopRPGMeleeSweepTrace& Trace);
+
     void SetReadySlots(const FCoopRPGReadySlots& Slots);
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);

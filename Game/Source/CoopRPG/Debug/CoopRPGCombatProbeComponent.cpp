@@ -16,9 +16,11 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "Components/BoxComponent.h"
 #include "CoreGlobals.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "HAL/IConsoleManager.h"
@@ -120,6 +122,16 @@ namespace
             if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World))
             {
                 Probe->ConfirmTwice();
+            }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs MeleeLayoutCommand(TEXT("Coop.Test.MeleeLayout"),
+        TEXT("Set a controlled front, away, wall, far or multi-contact layout for the melee regression."),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World); Probe && Args.Num() == 1)
+            {
+                Probe->PrepareMeleeLayout(FName(*Args[0]));
             }
         }));
 
@@ -240,6 +252,14 @@ void UCoopRPGCombatProbeComponent::ConfirmTwice()
     if (IsProbeEnabled(GetWorld()))
     {
         ServerConfirmTwice();
+    }
+}
+
+void UCoopRPGCombatProbeComponent::PrepareMeleeLayout(FName Layout)
+{
+    if (IsProbeEnabled(GetWorld()))
+    {
+        ServerPrepareMeleeLayout(Layout);
     }
 }
 
@@ -383,6 +403,70 @@ void UCoopRPGCombatProbeComponent::ServerConfirmTwice_Implementation()
         Melee->ResolveHit();
         Melee->ResolveHit();
     }
+}
+
+void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName Layout)
+{
+    if (!IsProbeEnabled(GetWorld())
+        || (Layout != TEXT("front") && Layout != TEXT("away") && Layout != TEXT("wall")
+            && Layout != TEXT("far") && Layout != TEXT("multi")))
+    {
+        return;
+    }
+
+    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+    auto* Character = Cast<ACoopRPGCharacter>(GetOwner());
+    auto* Enemy = Mode ? Cast<ACoopRPGEnemy>(Mode->GetMeleeTarget()) : nullptr;
+    if (!Character || !Enemy)
+    {
+        return;
+    }
+
+    if (AActor* Previous = MeleeTestObstacle.Get())
+    {
+        Previous->Destroy();
+    }
+    Enemy->SetActorTickEnabled(false);
+    Enemy->GetCharacterMovement()->StopMovementImmediately();
+    Character->GetCharacterMovement()->StopMovementImmediately();
+    const FVector EnemyPosition(850.0, 0.0, 90.15);
+    const FVector PlayerPosition(Layout == TEXT("far") ? 565.0 : 720.0,
+        Character->GetDisplaySlot() == 1 ? -50.0 : 50.0, 90.15);
+    FRotator Facing = (EnemyPosition - PlayerPosition).Rotation();
+    Facing.Yaw += Layout == TEXT("away") ? 180.0f : 0.0f;
+    Enemy->TeleportTo(EnemyPosition, FRotator::ZeroRotator, false, true);
+    Character->TeleportTo(PlayerPosition, Facing, false, true);
+
+    if (Layout == TEXT("multi") && !FindObject<UBoxComponent>(Enemy, TEXT("MeleeProbeContact")))
+    {
+        auto* ExtraContact = NewObject<UBoxComponent>(Enemy, TEXT("MeleeProbeContact"));
+        Enemy->AddInstanceComponent(ExtraContact);
+        ExtraContact->SetupAttachment(Enemy->GetRootComponent());
+        ExtraContact->SetBoxExtent(FVector(26.0, 26.0, 50.0));
+        ExtraContact->SetCollisionObjectType(ECC_Pawn);
+        ExtraContact->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        ExtraContact->SetCollisionResponseToAllChannels(ECR_Overlap);
+        ExtraContact->RegisterComponent();
+    }
+    if (Layout == TEXT("wall"))
+    {
+        AActor* Obstacle = GetWorld()->SpawnActor<AActor>();
+        auto* Wall = NewObject<UBoxComponent>(Obstacle);
+        Obstacle->AddInstanceComponent(Wall);
+        Obstacle->SetRootComponent(Wall);
+        Wall->SetBoxExtent(FVector(4.0, 90.0, 95.0));
+        Wall->SetCollisionObjectType(ECC_WorldStatic);
+        Wall->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        Wall->SetCollisionResponseToAllChannels(ECR_Block);
+        Wall->RegisterComponent();
+        Obstacle->SetActorLocation(FVector(785.0, 0.0, 90.15));
+        MeleeTestObstacle = Obstacle;
+    }
+
+    Character->ForceNetUpdate();
+    Enemy->ForceNetUpdate();
+    UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
+        *Layout.ToString(), Character->GetDisplaySlot(), Facing.Yaw);
 }
 
 void UCoopRPGCombatProbeComponent::ServerPositionForEnemyLoot_Implementation(bool bNear)

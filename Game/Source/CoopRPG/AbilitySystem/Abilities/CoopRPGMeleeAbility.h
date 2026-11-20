@@ -34,6 +34,9 @@ private:
 
 private:
     TWeakObjectPtr<AActor> PendingTarget;
+    FGuid PendingRound;
+    FVector AttackDirection = FVector::ForwardVector;
+    uint32 AttackSequence = 0;
     FTimerHandle HitTimer;
     bool bHitPending = false;
 };
