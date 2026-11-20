@@ -94,6 +94,8 @@ MVP02-02는 두 히어로 조작·이동과 장착·서버 기본 공격에 이�
 
 라운드 종료는 결과별로 처리한다. 사망·시간 초과는 같은 숲 맵에서 재준비하고, 탈출 성공은 후속 원정 맵이 연결될 때까지 1점 결과를 유지한다. 로컬 전용 서버·클라이언트 2개에서 성공·사망·시간 초과·접속 중단을 확인했다. 사용자는 같은 PC의 두 창에서 사망·0점, 같은 맵 복귀와 양쪽 재준비를 확인했다. 데스크톱·노트북 시험은 이번 범위에서 제외했다. [숲 라운드 재검증](Validation/ForestExpedition.md#forest-round-retry) 방패와 적 공격을 좌우 45°로 통일한 패키지에서도 사망·0점 후 같은 맵 초기화·양쪽 재준비와 공동 탈출·양쪽 1점을 확인했다. [통합 회귀 결과](Validation/ForestExpedition.md#forest-round-retry-shield-regression)
 
+숲 방패 적의 도형 표시에 BlackKnight의 원본 도끼·방패와 대기·추적·방어·공격 모션을 적용했다. 로컬 전용 서버와 두 클라이언트에서 기존 45° 경계, P1·P2 예고와 타격, 공동 탈출·양쪽 1점을 확인했다. [BlackKnight 패키지 검증](Validation/ForestExpedition.md#black-knight-presentation)
+
 두 히어로의 이동·방향 전환은 로컬 두 창에서 사용자가 직접 확인했다. 현재 카메라 거리 650cm를 채택했다. [수동 결과와 카메라 보완](Validation/ForestExpedition.md#two-heroes-camera)
 
 두 히어로에 각자 스켈레톤의 대기·걷기·달리기를 연결했다. 기존 최고 속도 300cm/s에서 보폭이 맞도록 이동 클립과 재생 속도를 히어로별로 정했다. [선정 근거와 패키지 검증](Validation/ForestExpedition.md#hero-locomotion)

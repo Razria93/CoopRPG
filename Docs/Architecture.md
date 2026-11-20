@@ -94,6 +94,8 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 클라이언트는 방패 적의 발밑에 이중 링을 그린다. 뒤쪽 90°는 비우고 앞에 화살표를 붙인다. 비조명 재질의 기본색은 짙은 차콜이다. 방패를 들면 서버가 복제한 예고 방향과 종료 시각을 사용해 바깥선과 안쪽 선의 앞쪽 90°, 그리고 화살표의 색을 같은 노란색으로 바꾼다. 평상시 링은 적의 방향을 따르며, 적이 사망하면 링을 숨긴다. 링은 바닥의 렌더링 구성요소로만 동작한다. 방패 적 이름표는 적의 화면상 중심에 이름·HP·대상 세 줄을 가운데 정렬한다. 배경과 각 줄 좌표는 예고 상태와 무관하게 고정하며 대상 줄은 예고 중 `Target P1` 또는 `Target P2`, 평상시 `Target —`를 표시한다.
 
+`L_Round_01`의 클라이언트는 비공개 BlackKnight 에셋이 있으면 기존 적 액터에 스켈레탈 메시와 원본 도끼·방패를 표시한다. 대기·추적 이동은 속도에 따라, 방어와 공격은 복제된 예고의 방향과 종료 시각에 따라 재생한다. `Attack01` 클립의 0.400초 포즈를 서버 타격 시각에 맞춘다. 서버는 현재 캡슐과 범위 검사로 피해를 한 번 결정하고 표시 에셋을 로드하지 않는다. 에셋을 제공하지 않은 실행은 기존 도형 표시를 사용한다. [BlackKnight 적용과 확인](Validation/ForestExpedition.md#black-knight-presentation)
+
 [공통 각도와 이름표 검증](Validation/ForestExpedition.md#shield-angle-target-nameplate) · [초기 링 검증](Validation/ForestExpedition.md#shield-ground-ring-verification) · [서버 예고와 대상 선정](../Game/Source/CoopRPG/Character/CoopRPGEnemy.cpp) · [기본 공격 판정](../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp)
 
 <a id="상자-상호작용-설계-예시"></a>

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "AbilitySystemInterface.h"
+#include "Animation/AnimSequence.h"
 #include "GameFramework/Character.h"
+#include "UObject/StrongObjectPtr.h"
 #include "CoopRPGEnemy.generated.h"
 
 class ACoopRPGCharacter;
@@ -75,6 +77,8 @@ private:
     UFUNCTION()
     void OnRep_Dead();
 
+    void ConfigureBlackKnightPresentation();
+    void UpdateBlackKnightAnimation();
     void CreateGroundRing();
     void UpdateShieldPresentation(bool bRaised);
 
@@ -135,6 +139,18 @@ private:
     FCoopRPGShieldWarning ShieldWarning;
 
     FTimerHandle ShieldPresentationTimer;
+
+    TStrongObjectPtr<UAnimSequence> BlackKnightIdle;
+    TStrongObjectPtr<UAnimSequence> BlackKnightWalk;
+    TStrongObjectPtr<UAnimSequence> BlackKnightGuard;
+    TStrongObjectPtr<UAnimSequence> BlackKnightAttack;
+    UAnimSequence* BlackKnightCurrentClip = nullptr;
+
+    double BlackKnightStrikeAt = 0.0;
+    float BlackKnightFacingYaw = 0.0f;
+    uint32 BlackKnightAttackSequence = 0;
+    uint32 LastBlackKnightStrikeFrame = 0;
+    bool bBlackKnightPresentationAttempted = false;
 
     FVector ObservationOrigin = FVector::ZeroVector;
     bool bObservedMovement = false;

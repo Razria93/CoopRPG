@@ -8,8 +8,10 @@
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimSequence.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/DynamicMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DynamicMesh/DynamicMesh3.h"
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
@@ -21,6 +23,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -34,6 +37,18 @@ namespace
     constexpr float ShieldWindupSeconds = 1.5f;
     constexpr float ShieldRecoverySeconds = 0.8f;
     constexpr float MovementObservationCm = 40.0f;
+    constexpr float BlackKnightMeshScale = 0.52f;
+    constexpr float BlackKnightMeshYaw = -90.0f;
+    constexpr float BlackKnightStrikeClipTime = 0.4f;
+    const FName BlackKnightAxeSocket(TEXT("AxeSocket"));
+    const FName BlackKnightShieldSocket(TEXT("ShieldSocket"));
+
+    template <typename AssetType>
+    AssetType* LoadBlackKnightAsset(const TCHAR* Name)
+    {
+        const FString Path = FString::Printf(TEXT("/Game/ThirdParty/BlackKnight/%s.%s"), Name, Name);
+        return TSoftObjectPtr<AssetType>(FSoftObjectPath(Path)).LoadSynchronous();
+    }
 
     constexpr double GroundRingEndAngle = 135.0;
     constexpr double GroundRingOutline = 1.25;
@@ -156,6 +171,7 @@ float ACoopRPGEnemy::GetHealth() const
 void ACoopRPGEnemy::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    UpdateBlackKnightAnimation();
 
     if (!HasAuthority() || bDead)
     {
@@ -320,7 +336,8 @@ void ACoopRPGEnemy::BeginPlay()
     RestorePresentationTint();
     AbilitySystem->InitAbilityActorInfo(this, this);
     ObservationOrigin = GetActorLocation();
-    SetActorTickEnabled(HasAuthority());
+    ConfigureBlackKnightPresentation();
+    SetActorTickEnabled(HasAuthority() || BlackKnightIdle.IsValid());
     if (HasAuthority())
     {
         AbilitySystem->GetGameplayAttributeValueChangeDelegate(UCoopRPGCombatAttributes::GetHealthAttribute())
@@ -489,6 +506,10 @@ void ACoopRPGEnemy::ApplyDeathPresentation()
 {
     GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     EnemyVisual->SetVisibility(false);
+    if (BlackKnightIdle)
+    {
+        GetMesh()->SetVisibility(false, true);
+    }
     FacingMarker->SetVisibility(false);
     UpdateShieldPresentation(false);
     GetWorldTimerManager().ClearTimer(ShieldPresentationTimer);
@@ -523,6 +544,144 @@ void ACoopRPGEnemy::OnRep_Dead()
         ApplyDeathPresentation();
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyDeathReplicated Actor=%s %s"),
             *GetName(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    }
+}
+
+void ACoopRPGEnemy::ConfigureBlackKnightPresentation()
+{
+    if (bBlackKnightPresentationAttempted || !bShieldEncounter || GetNetMode() == NM_DedicatedServer
+        || UGameplayStatics::GetCurrentLevelName(this) != TEXT("L_Round_01"))
+    {
+        return;
+    }
+    bBlackKnightPresentationAttempted = true;
+
+    USkeletalMesh* MeshAsset = LoadBlackKnightAsset<USkeletalMesh>(TEXT("BlackKnight_SK"));
+    if (!MeshAsset)
+    {
+        return;
+    }
+    UStaticMesh* Axe = LoadBlackKnightAsset<UStaticMesh>(TEXT("Axe_SM"));
+    UStaticMesh* Shield = LoadBlackKnightAsset<UStaticMesh>(TEXT("Shield_SM"));
+    UAnimSequence* Idle = LoadBlackKnightAsset<UAnimSequence>(TEXT("BlackKnight_IdleNormal_ANIM"));
+    UAnimSequence* Walk = LoadBlackKnightAsset<UAnimSequence>(TEXT("BlackKnight_WalkFWD_ANIM"));
+    UAnimSequence* Guard = LoadBlackKnightAsset<UAnimSequence>(TEXT("BlackKnight_IdleDefense_ANIM"));
+    UAnimSequence* Attack = LoadBlackKnightAsset<UAnimSequence>(TEXT("BlackKnight_Attack01_ANIM"));
+    if (!Axe || !Shield || !Idle || !Walk || !Guard || !Attack
+        || Idle->GetSkeleton() != MeshAsset->GetSkeleton() || Walk->GetSkeleton() != MeshAsset->GetSkeleton()
+        || Guard->GetSkeleton() != MeshAsset->GetSkeleton() || Attack->GetSkeleton() != MeshAsset->GetSkeleton()
+        || Attack->GetPlayLength() <= BlackKnightStrikeClipTime)
+    {
+        UE_LOG(LogCoopRPGEnemy, Warning, TEXT("BlackKnight presentation assets are incomplete or incompatible"));
+        return;
+    }
+
+    USkeletalMeshComponent* KnightMesh = GetMesh();
+    KnightMesh->SetSkeletalMeshAsset(MeshAsset);
+    if (!KnightMesh->DoesSocketExist(BlackKnightAxeSocket) || !KnightMesh->DoesSocketExist(BlackKnightShieldSocket))
+    {
+        KnightMesh->SetSkeletalMeshAsset(nullptr);
+        UE_LOG(LogCoopRPGEnemy, Warning, TEXT("BlackKnight presentation is missing its weapon sockets"));
+        return;
+    }
+
+    KnightMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    KnightMesh->SetGenerateOverlapEvents(false);
+    KnightMesh->SetCanEverAffectNavigation(false);
+    const FVector FeetOffset(0.0, 0.0, -GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight());
+    const FRotator Forward(0.0, BlackKnightMeshYaw, 0.0);
+    KnightMesh->SetRelativeLocationAndRotation(FeetOffset, Forward);
+    CacheInitialMeshOffset(FeetOffset, Forward);
+    KnightMesh->SetRelativeScale3D(FVector(BlackKnightMeshScale));
+
+    auto AttachEquipment = [this, KnightMesh](UStaticMesh* Asset, FName Socket, const FTransform& Offset)
+    {
+        UStaticMeshComponent* Equipment = NewObject<UStaticMeshComponent>(this);
+        Equipment->SetStaticMesh(Asset);
+        Equipment->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        Equipment->SetGenerateOverlapEvents(false);
+        Equipment->SetCanEverAffectNavigation(false);
+        Equipment->SetupAttachment(KnightMesh, Socket);
+        Equipment->SetRelativeTransform(Offset);
+        Equipment->RegisterComponent();
+    };
+    AttachEquipment(Axe, BlackKnightAxeSocket, FTransform::Identity);
+    AttachEquipment(Shield, BlackKnightShieldSocket, FTransform(FRotator(0.0, 1.5791, 0.0), FVector(0.0, 4.7875, 0.0)));
+
+    BlackKnightIdle.Reset(Idle);
+    BlackKnightWalk.Reset(Walk);
+    BlackKnightGuard.Reset(Guard);
+    BlackKnightAttack.Reset(Attack);
+    EnemyVisual->SetVisibility(false);
+    FacingMarker->SetVisibility(false);
+    ShieldVisual->SetVisibility(false);
+    KnightMesh->SetVisibility(!bDead, true);
+    SetActorTickEnabled(HasAuthority() || !bDead);
+    UpdateBlackKnightAnimation();
+    UE_LOG(LogCoopRPGEnemy, Log, TEXT("BlackKnightPresentationReady Mesh=%s AxeSocket=%s ShieldSocket=%s"),
+        *GetNameSafe(MeshAsset), *BlackKnightAxeSocket.ToString(), *BlackKnightShieldSocket.ToString());
+}
+
+void ACoopRPGEnemy::UpdateBlackKnightAnimation()
+{
+    if (!BlackKnightIdle || bDead)
+    {
+        return;
+    }
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const bool bPlaying = State && State->IsRoundPlaying();
+    const double Now = State ? State->GetServerWorldTimeSeconds() : 0.0;
+    if (!bPlaying)
+    {
+        BlackKnightStrikeAt = 0.0;
+    }
+    else if (ShieldWarning.EndsAt > 0.0)
+    {
+        BlackKnightStrikeAt = ShieldWarning.EndsAt;
+        BlackKnightFacingYaw = ShieldWarning.FacingYaw;
+        BlackKnightAttackSequence = ShieldWarning.Sequence;
+    }
+
+    // Keep the local pose on the replicated server timeline, including after the warning clears.
+    const double AttackClipTime = Now - BlackKnightStrikeAt + BlackKnightStrikeClipTime;
+    const bool bAttack = BlackKnightStrikeAt > 0.0 && AttackClipTime >= 0.0
+        && AttackClipTime < BlackKnightAttack->GetPlayLength();
+    const bool bGuard = bPlaying && ShieldWarning.EndsAt > Now;
+    UAnimSequence* Clip = bAttack ? BlackKnightAttack.Get() : BlackKnightIdle.Get();
+    if (!bAttack && bGuard)
+    {
+        Clip = BlackKnightGuard.Get();
+    }
+    else if (!bAttack && bPlaying && GetVelocity().SizeSquared2D() > FMath::Square(5.0f))
+    {
+        Clip = BlackKnightWalk.Get();
+    }
+
+    USkeletalMeshComponent* KnightMesh = GetMesh();
+    const float RelativeYaw = bAttack || bGuard
+        ? BlackKnightFacingYaw - GetActorRotation().Yaw + BlackKnightMeshYaw : BlackKnightMeshYaw;
+    KnightMesh->SetRelativeRotation(FRotator(0.0, RelativeYaw, 0.0));
+    if (BlackKnightCurrentClip != Clip)
+    {
+        BlackKnightCurrentClip = Clip;
+        KnightMesh->PlayAnimation(Clip, !bAttack);
+        if (bAttack)
+        {
+            KnightMesh->SetPlayRate(0.0f);
+        }
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("BlackKnightClip Name=%s Pattern=%u ServerTime=%.3f StrikeAt=%.3f FacingYaw=%.2f"),
+            *GetNameSafe(Clip), BlackKnightAttackSequence, Now, BlackKnightStrikeAt, RelativeYaw + GetActorRotation().Yaw - BlackKnightMeshYaw);
+    }
+    if (bAttack)
+    {
+        KnightMesh->SetPosition(static_cast<float>(AttackClipTime), false);
+        if (Now >= BlackKnightStrikeAt && BlackKnightAttackSequence != LastBlackKnightStrikeFrame)
+        {
+            LastBlackKnightStrikeFrame = BlackKnightAttackSequence;
+            UE_LOG(LogCoopRPGEnemy, Log, TEXT("BlackKnightStrikeFrame Pattern=%u ServerTime=%.3f StrikeAt=%.3f ClipTime=%.3f"),
+                BlackKnightAttackSequence, Now, BlackKnightStrikeAt, AttackClipTime);
+        }
     }
 }
 
@@ -581,7 +740,7 @@ void ACoopRPGEnemy::CreateGroundRing()
 
 void ACoopRPGEnemy::UpdateShieldPresentation(bool bRaised)
 {
-    ShieldVisual->SetVisibility(bRaised);
+    ShieldVisual->SetVisibility(bRaised && !BlackKnightIdle.IsValid());
     if (!GroundRing)
     {
         return;
@@ -605,6 +764,7 @@ void ACoopRPGEnemy::OnRep_ShieldEncounter()
     if (HasActorBegunPlay())
     {
         CreateGroundRing();
+        ConfigureBlackKnightPresentation();
     }
 }
 
