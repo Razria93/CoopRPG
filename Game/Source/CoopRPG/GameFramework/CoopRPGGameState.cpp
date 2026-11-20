@@ -7,9 +7,12 @@
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
 #include "CoreGlobals.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRound, Log, All);
@@ -87,6 +90,36 @@ void ACoopRPGGameState::MulticastGameplayFeedback_Implementation(const FCoopRPGG
             HUD->ShowGameplayFeedback(Feedback);
         }
     }
+}
+
+void ACoopRPGGameState::MulticastMeleeSweepTrace_Implementation(const FCoopRPGMeleeSweepTrace& Trace)
+{
+#if ENABLE_DRAW_DEBUG && !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+    if (GetNetMode() == NM_DedicatedServer || !FParse::Param(FCommandLine::Get(), TEXT("CoopMeleeSweepDebug")))
+    {
+        return;
+    }
+
+    const FVector Delta = Trace.End - Trace.Start;
+    const double HalfLength = Delta.Size() * 0.5;
+    const FQuat Rotation = FQuat::FindBetweenNormals(FVector::UpVector, Delta.GetSafeNormal());
+    const bool bHit = Trace.Result == ECoopRPGMeleeSweepResult::Hit;
+    const bool bObstructed = Trace.Result == ECoopRPGMeleeSweepResult::Obstructed;
+    const FColor Color = bHit ? FColor::Cyan : bObstructed ? FColor::Orange : FColor::Red;
+    constexpr float Lifetime = 1.25f;
+    DrawDebugCapsule(GetWorld(), Trace.Start + Delta * 0.5, HalfLength + Trace.Radius, Trace.Radius,
+        Rotation, Color, false, Lifetime, SDPG_Foreground, 1.4f);
+    DrawDebugDirectionalArrow(GetWorld(), Trace.Start, Trace.End, 18.0f, Color, false, Lifetime, SDPG_Foreground, 2.0f);
+    if (bHit || bObstructed)
+    {
+        // Time is the sweep fraction at the winning contact. The marker is the sphere center at that fraction.
+        DrawDebugPoint(GetWorld(), FMath::Lerp(Trace.Start, Trace.End, Trace.ContactTime), 10.0f,
+            Color, false, Lifetime, SDPG_Foreground);
+    }
+    UE_LOG(LogCoopRPGRound, Log, TEXT("MeleeSweepDrawn Slot=%d Swing=%u Start=%s End=%s Radius=%.2f Result=%s Contact=%.4f"),
+        Trace.Slot, Trace.Swing, *Trace.Start.ToCompactString(), *Trace.End.ToCompactString(), Trace.Radius,
+        *StaticEnum<ECoopRPGMeleeSweepResult>()->GetNameStringByValue(static_cast<int64>(Trace.Result)), Trace.ContactTime);
+#endif
 }
 
 void ACoopRPGGameState::SetReadySlots(const FCoopRPGReadySlots& Slots)

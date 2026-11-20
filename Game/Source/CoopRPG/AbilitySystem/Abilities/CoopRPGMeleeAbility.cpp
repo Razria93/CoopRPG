@@ -13,6 +13,8 @@
 #include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGMelee, Log, All);
@@ -26,7 +28,7 @@ namespace
 
     using CoopRPG::Debug::DescribePlayerRequestContext;
 
-    const TCHAR* SweepForEnemy(const AActor* Attacker, const AActor* Target, const FVector& Direction)
+    const TCHAR* SweepForEnemy(const AActor* Attacker, const AActor* Target, const FVector& Direction, uint32 Swing)
     {
         const FVector Start = Attacker->GetActorLocation();
         const FVector TargetDelta = Target->GetActorLocation() - Start;
@@ -71,6 +73,28 @@ namespace
             TEXT("MeleeMultipleContacts Target=%s Components=%d"), *GetNameSafe(Target), EnemyContacts);
         const bool bObstructed = ObstacleTime < TNumericLimits<float>::Max() && ObstacleTime <= EnemyTime;
         const bool bHit = EnemyTime < TNumericLimits<float>::Max() && !bObstructed;
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+        if (FParse::Param(FCommandLine::Get(), TEXT("CoopMeleeSweepDebug")))
+        {
+            if (auto* State = World->GetGameState<ACoopRPGGameState>())
+            {
+                FCoopRPGMeleeSweepTrace Trace;
+                Trace.Start = Start;
+                Trace.End = End;
+                Trace.Radius = SweepRadiusCm;
+                const auto* Character = Cast<ACoopRPGCharacter>(Attacker);
+                Trace.Slot = Character ? Character->GetDisplaySlot() : 0;
+                Trace.Swing = Swing;
+                Trace.Result = bHit ? ECoopRPGMeleeSweepResult::Hit
+                    : bObstructed ? ECoopRPGMeleeSweepResult::Obstructed : ECoopRPGMeleeSweepResult::Missed;
+                Trace.ContactTime = bHit ? EnemyTime : bObstructed ? ObstacleTime : 0.0f;
+                UE_LOG(LogCoopRPGMelee, Log, TEXT("MeleeSweepTrace Slot=%d Swing=%u Start=%s End=%s Radius=%.2f Result=%s Contact=%.4f"),
+                    Trace.Slot, Trace.Swing, *Trace.Start.ToCompactString(), *Trace.End.ToCompactString(), Trace.Radius,
+                    *StaticEnum<ECoopRPGMeleeSweepResult>()->GetNameStringByValue(static_cast<int64>(Trace.Result)), Trace.ContactTime);
+                State->MulticastMeleeSweepTrace(Trace);
+            }
+        }
+#endif
         if (bObstructed)
         {
             return TEXT("Obstructed");
@@ -216,6 +240,14 @@ void UCoopRPGMeleeAbility::EndAbility(FGameplayAbilitySpecHandle Handle, const F
     const bool bCancelledBeforeHit = bHitPending && bWasCancelled;
     if (UWorld* World = GetWorld())
     {
+#if !(UE_BUILD_SHIPPING || UE_BUILD_TEST)
+        if (bCancelledBeforeHit && AttackSequence != 0 && FParse::Param(FCommandLine::Get(), TEXT("CoopMeleeSweepDebug")))
+        {
+            UE_LOG(LogCoopRPGMelee, Log, TEXT("MeleeSweepCancelled Swing=%u TimerRemainingMs=%.2f %s"), AttackSequence,
+                World->GetTimerManager().GetTimerRemaining(HitTimer) * 1000.0,
+                *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)));
+        }
+#endif
         World->GetTimerManager().ClearTimer(HitTimer);
     }
     bHitPending = false;
@@ -282,7 +314,7 @@ void UCoopRPGMeleeAbility::ResolveHit()
         }
         else if (AttackSequence != 0)
         {
-            MissReason = SweepForEnemy(Attacker, Target, AttackDirection);
+            MissReason = SweepForEnemy(Attacker, Target, AttackDirection, AttackSequence);
         }
     }
 
