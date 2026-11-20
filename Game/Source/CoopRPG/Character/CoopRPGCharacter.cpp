@@ -1,5 +1,7 @@
 #include "CoopRPGCharacter.h"
 
+#include "CoopRPGHeroAnimInstance.h"
+
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
@@ -8,7 +10,8 @@
 
 #include "CoopRPG/GameFramework/CoopRPGPlayerState.h"
 #include "AbilitySystemComponent.h"
-#include "Animation/AnimSingleNodeInstance.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/AnimMontage.h"
 #include "Animation/BlendSpace1D.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -20,6 +23,7 @@
 #include "Engine/StaticMesh.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputAction.h"
@@ -31,6 +35,29 @@
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGInput, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEquipment, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGLocomotion, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGMeleeMotion, Log, All);
+
+namespace
+{
+    struct FHeroAttackProfile
+    {
+        const TCHAR* ClipPath;
+        float ContactTime;
+    };
+
+    FHeroAttackProfile GetHeroAttackProfile(ECoopRPGHero Hero)
+    {
+        switch (Hero)
+        {
+        case ECoopRPGHero::Adventurer:
+            return {TEXT("/Game/ThirdParty/RPGHeroSquad/Animation/RPGHero/Anim_NormalAttack01_RPGHero.Anim_NormalAttack01_RPGHero"), 0.30f};
+        case ECoopRPGHero::AnimalHero:
+            return {TEXT("/Game/ThirdParty/RPGHeroSquad/Animation/AnimalHero/Anim_Attack01_AnimalHero.Anim_Attack01_AnimalHero"), 0.39f};
+        default:
+            return {nullptr, 0.65f};
+        }
+    }
+}
 
 ACoopRPGCharacter::ACoopRPGCharacter()
 {
@@ -110,6 +137,7 @@ void ACoopRPGCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGCharacter, bHasMeleeWeapon);
     DOREPLIFETIME(ACoopRPGCharacter, DisplaySlot);
+    DOREPLIFETIME(ACoopRPGCharacter, MeleePresentation);
 }
 
 float ACoopRPGCharacter::GetHealth() const
@@ -162,6 +190,8 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
     {
         GetMesh()->EmptyOverrideMaterials();
         GetMesh()->SetSkeletalMeshAsset(HeroMesh);
+        HeroLocomotion = nullptr;
+        HeroAttackClip = nullptr;
         if (HeroMesh)
         {
             // Ground the reference pose and match the existing capsule and overhead nameplate.
@@ -180,7 +210,14 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
             UBlendSpace1D* Locomotion = TSoftObjectPtr<UBlendSpace1D>(FSoftObjectPath(LocomotionPath)).LoadSynchronous();
             if (Locomotion && Locomotion->GetSkeleton() == HeroMesh->GetSkeleton())
             {
-                GetMesh()->PlayAnimation(Locomotion, true);
+                HeroLocomotion = Locomotion;
+                GetMesh()->SetAnimInstanceClass(UCoopRPGHeroAnimInstance::StaticClass());
+                auto* Animation = CastChecked<UCoopRPGHeroAnimInstance>(GetMesh()->GetAnimInstance());
+                Animation->ConfigureLocomotion(HeroLocomotion);
+                if (const TCHAR* AttackPath = GetHeroAttackProfile(Identity->GetSelectedHero()).ClipPath)
+                {
+                    HeroAttackClip = TSoftObjectPtr<UAnimSequence>(FSoftObjectPath(AttackPath)).LoadSynchronous();
+                }
             }
             else
             {
@@ -190,6 +227,7 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
         }
         SetPresentationTint(GetWorldTimerManager().IsTimerActive(HitFlashTimer));
         ConfigureHeroWeapon(Identity->GetSelectedHero());
+        OnRep_MeleePresentation();
     }
     BodyMesh->SetVisibility(!HeroMesh);
     HeadMesh->SetVisibility(!HeroMesh);
@@ -295,24 +333,122 @@ void ACoopRPGCharacter::OnRep_MeleeWeapon()
 
 void ACoopRPGCharacter::UpdateLocomotion(float, FVector, FVector)
 {
-    UAnimSingleNodeInstance* Animation = GetMesh()->GetSingleNodeInstance();
-    if (!Animation)
+    if (UE_LOG_ACTIVE(LogCoopRPGLocomotion, VeryVerbose))
+    {
+        if (const auto* Animation = Cast<UCoopRPGHeroAnimInstance>(GetMesh()->GetAnimInstance()))
+        {
+            float Blend = 0.0f;
+            float Time = 0.0f;
+            Animation->ReadLocomotion(Blend, Time);
+            UE_LOG(LogCoopRPGLocomotion, VeryVerbose,
+                TEXT("HeroLocomotion Slot=%d Role=%s Asset=%s Speed=%.2f Blend=%.2f Time=%.3f Yaw=%.1f"),
+                DisplaySlot, *UEnum::GetValueAsString(GetLocalRole()), *GetNameSafe(HeroLocomotion),
+                GetCharacterMovement()->Velocity.Size2D(), Blend, Time, GetActorRotation().Yaw);
+        }
+    }
+}
+
+float ACoopRPGCharacter::GetMeleeWindup() const
+{
+    const auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
+    return GetHeroAttackProfile(Identity ? Identity->GetSelectedHero() : ECoopRPGHero::Unassigned).ContactTime;
+}
+
+uint32 ACoopRPGCharacter::StartMeleePresentation(float FacingYaw, float Windup)
+{
+    check(HasAuthority());
+    ++MeleePresentation.Sequence;
+    const auto* State = GetWorld()->GetGameState();
+    MeleePresentation.StartedAt = State ? State->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+    MeleePresentation.FacingYaw = FacingYaw;
+    MeleePresentation.Windup = Windup;
+    MeleePresentation.bCancelled = false;
+    GetCharacterMovement()->bOrientRotationToMovement = false;
+    bMeleeFacingLocked = true;
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        OnRep_MeleePresentation();
+    }
+    ForceNetUpdate();
+    return MeleePresentation.Sequence;
+}
+
+void ACoopRPGCharacter::FinishMeleeWindup(bool bInterrupted)
+{
+    check(HasAuthority());
+    ReleaseMeleeFacing();
+    if (bInterrupted)
+    {
+        MeleePresentation.bCancelled = true;
+        if (GetNetMode() != NM_DedicatedServer)
+        {
+            OnRep_MeleePresentation();
+        }
+        ForceNetUpdate();
+    }
+}
+
+void ACoopRPGCharacter::ReleaseMeleeFacing()
+{
+    GetWorldTimerManager().ClearTimer(MeleeFacingTimer);
+    if (bMeleeFacingLocked)
+    {
+        GetCharacterMovement()->bOrientRotationToMovement = true;
+        bMeleeFacingLocked = false;
+    }
+}
+
+void ACoopRPGCharacter::OnRep_MeleePresentation()
+{
+    if (MeleePresentation.Sequence == 0)
     {
         return;
     }
 
-    // The owner and simulated proxies both have movement velocity after collision resolution.
-    const float GroundSpeed = GetCharacterMovement()->Velocity.Size2D();
-    Animation->SetBlendSpacePosition(FVector(GroundSpeed, 0.0f, 0.0f));
-
-    if (UE_LOG_ACTIVE(LogCoopRPGLocomotion, VeryVerbose))
+    auto* Animation = Cast<UCoopRPGHeroAnimInstance>(GetMesh()->GetAnimInstance());
+    if (MeleePresentation.bCancelled)
     {
-        FVector Input, Filtered;
-        Animation->GetBlendSpaceState(Input, Filtered);
-        UE_LOG(LogCoopRPGLocomotion, VeryVerbose,
-            TEXT("HeroLocomotion Slot=%d Role=%s Asset=%s Speed=%.2f Blend=%.2f Time=%.3f Yaw=%.1f"),
-            DisplaySlot, *UEnum::GetValueAsString(GetLocalRole()), *GetNameSafe(Animation->GetCurrentAsset()),
-            GroundSpeed, Filtered.X, Animation->GetCurrentTime(), GetActorRotation().Yaw);
+        ReleaseMeleeFacing();
+        if (Animation && LocalMeleeMontage.IsValid() && PresentedMeleeSequence == MeleePresentation.Sequence)
+        {
+            Animation->Montage_Stop(0.06f, LocalMeleeMontage.Get());
+            LocalMeleeMontage.Reset();
+            UE_LOG(LogCoopRPGMeleeMotion, Log, TEXT("MeleeMotionStopped Slot=%d Swing=%u %s"),
+                DisplaySlot, MeleePresentation.Sequence, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+        }
+        return;
+    }
+
+    if (!Animation || !HeroAttackClip || PresentedMeleeSequence == MeleePresentation.Sequence)
+    {
+        return;
+    }
+
+    const auto* State = GetWorld()->GetGameState();
+    const double Now = State ? State->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+    const float Elapsed = FMath::Max(0.0, Now - MeleePresentation.StartedAt);
+    PresentedMeleeSequence = MeleePresentation.Sequence;
+    if (Elapsed >= HeroAttackClip->GetPlayLength())
+    {
+        return;
+    }
+
+    const float FacingTimeLeft = MeleePresentation.Windup - Elapsed;
+    if (FacingTimeLeft > 0.0f && !HasAuthority())
+    {
+        GetCharacterMovement()->bOrientRotationToMovement = false;
+        bMeleeFacingLocked = true;
+        SetActorRotation(FRotator(0.0f, MeleePresentation.FacingYaw, 0.0f));
+        GetWorldTimerManager().SetTimer(MeleeFacingTimer, this, &ThisClass::ReleaseMeleeFacing, FacingTimeLeft, false);
+    }
+
+    LocalMeleeMontage = Animation->PlaySlotAnimationAsDynamicMontage(
+        HeroAttackClip, UCoopRPGHeroAnimInstance::MeleeSlot, 0.045f, 0.08f, 1.0f, 1, -1.0f, Elapsed);
+    if (LocalMeleeMontage.IsValid())
+    {
+        UE_LOG(LogCoopRPGMeleeMotion, Log, TEXT("MeleeMotionStarted Slot=%d Swing=%u Clip=%s Offset=%.3f Windup=%.3f Yaw=%.1f %s"),
+            DisplaySlot, MeleePresentation.Sequence, *GetNameSafe(HeroAttackClip), Elapsed, MeleePresentation.Windup,
+            MeleePresentation.FacingYaw, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }
 

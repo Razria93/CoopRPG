@@ -6,6 +6,6 @@ public class CoopRPG : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "GameplayAbilities" });
-        PrivateDependencyModuleNames.AddRange(new[] { "EnhancedInput", "GameplayTags", "GameplayTasks", "InputCore", "NetCore" });
+        PrivateDependencyModuleNames.AddRange(new[] { "EnhancedInput", "GameplayTags", "GameplayTasks", "InputCore", "NetCore", "AnimGraphRuntime" });
     }
 }

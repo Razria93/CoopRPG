@@ -6,12 +6,36 @@
 #include "CoopRPGCharacter.generated.h"
 
 class UAbilitySystemComponent;
+class UAnimMontage;
+class UAnimSequence;
+class UBlendSpace;
 class UCoopRPGCombatAttributes;
 class UInputAction;
 class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
 enum class ECoopRPGHero : uint8;
 struct FInputActionValue;
+
+USTRUCT()
+struct FCoopRPGMeleePresentation
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    uint32 Sequence = 0;
+
+    UPROPERTY()
+    double StartedAt = 0.0;
+
+    UPROPERTY()
+    float FacingYaw = 0.0f;
+
+    UPROPERTY()
+    float Windup = 0.0f;
+
+    UPROPERTY()
+    bool bCancelled = false;
+};
 
 UCLASS()
 class COOPRPG_API ACoopRPGCharacter : public ACharacter, public IAbilitySystemInterface
@@ -32,6 +56,9 @@ public:
     void SetDisplaySlot(int32 Slot);
     void FlashPresentationHit();
     void RefreshHeroAppearance();
+    float GetMeleeWindup() const;
+    uint32 StartMeleePresentation(float FacingYaw, float Windup);
+    void FinishMeleeWindup(bool bInterrupted);
 
 protected:
     virtual void BeginPlay() override;
@@ -56,6 +83,10 @@ private:
     UFUNCTION()
     void OnRep_DisplaySlot();
 
+    UFUNCTION()
+    void OnRep_MeleePresentation();
+
+    void ReleaseMeleeFacing();
     void ConfigureHeroWeapon(ECoopRPGHero Hero);
     void RefreshWeaponVisibility();
     void SetPresentationTint(bool bDarkened);
@@ -93,6 +124,20 @@ private:
     int32 DisplaySlot = 0;
 
     FTimerHandle HitFlashTimer;
+    FTimerHandle MeleeFacingTimer;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UBlendSpace> HeroLocomotion;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UAnimSequence> HeroAttackClip;
+
+    UPROPERTY(ReplicatedUsing = OnRep_MeleePresentation)
+    FCoopRPGMeleePresentation MeleePresentation;
+
+    TWeakObjectPtr<UAnimMontage> LocalMeleeMontage;
+    uint32 PresentedMeleeSequence = 0;
+    bool bMeleeFacingLocked = false;
 
     UPROPERTY(ReplicatedUsing = OnRep_MeleeWeapon)
     bool bHasMeleeWeapon = false;
