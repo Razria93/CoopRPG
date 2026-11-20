@@ -69,6 +69,11 @@ ACoopRPGCharacter::ACoopRPGCharacter()
     WeaponMesh->SetStaticMesh(Cube.Object);
     WeaponMesh->SetVisibility(false);
 
+    HeroWeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroMeleeWeapon"));
+    HeroWeaponMesh->SetupAttachment(GetMesh());
+    HeroWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    HeroWeaponMesh->SetVisibility(false);
+
     auto* CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(GetRootComponent());
     CameraBoom->SetUsingAbsoluteRotation(true);
@@ -122,7 +127,7 @@ void ACoopRPGCharacter::EquipMeleeWeapon()
     if (HasAuthority() && !bHasMeleeWeapon)
     {
         bHasMeleeWeapon = true;
-        WeaponMesh->SetVisibility(true);
+        RefreshWeaponVisibility();
         ForceNetUpdate();
     }
 }
@@ -184,6 +189,7 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
             }
         }
         SetPresentationTint(GetWorldTimerManager().IsTimerActive(HitFlashTimer));
+        ConfigureHeroWeapon(Identity->GetSelectedHero());
     }
     BodyMesh->SetVisibility(!HeroMesh);
     HeadMesh->SetVisibility(!HeroMesh);
@@ -280,7 +286,7 @@ void ACoopRPGCharacter::ServerCancelAttack_Implementation()
 
 void ACoopRPGCharacter::OnRep_MeleeWeapon()
 {
-    WeaponMesh->SetVisibility(bHasMeleeWeapon);
+    RefreshWeaponVisibility();
     const APlayerState* State = GetPlayerState();
     UE_LOG(LogCoopRPGEquipment, Log, TEXT("MeleeWeaponReplicated Actor=%s Equipped=%d EquippedPlayerId=%d %s"),
         *GetNameSafe(this), bHasMeleeWeapon ? 1 : 0, State ? State->GetPlayerId() : INDEX_NONE,
@@ -315,6 +321,50 @@ void ACoopRPGCharacter::OnRep_DisplaySlot()
     RestorePresentationTint();
     UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerDisplaySlot Actor=%s Slot=%d %s"),
         *GetNameSafe(this), DisplaySlot, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGCharacter::ConfigureHeroWeapon(ECoopRPGHero Hero)
+{
+    HeroWeaponMesh->SetStaticMesh(nullptr);
+
+    const bool bAdventurer = Hero == ECoopRPGHero::Adventurer;
+    const FName Socket = bAdventurer ? FName(TEXT("Sword")) : FName(TEXT("WeaponSocket"));
+    if (GetMesh()->DoesSocketExist(Socket))
+    {
+        const TCHAR* SwordPath = bAdventurer
+            ? TEXT("/Game/ThirdParty/RPGHeroSquad/Mesh/Weapon/SM_RPGHero_Sword01_Polyart.SM_RPGHero_Sword01_Polyart")
+            : TEXT("/Game/ThirdParty/RPGHeroSquad/Mesh/Weapon/SM_AnimalHero_Sword01_Polyart.SM_AnimalHero_Sword01_Polyart");
+        UStaticMesh* Sword = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(SwordPath)).LoadSynchronous();
+        if (Sword && HeroWeaponMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, Socket))
+        {
+            HeroWeaponMesh->SetStaticMesh(Sword);
+            // Match the local grip offsets of the two source hero Blueprints.
+            const FVector GripLocation = bAdventurer ? FVector(4.8856f, 0.0f, 0.0f) : FVector::ZeroVector;
+            const FRotator GripRotation(0.0f, 0.0f, bAdventurer ? 90.0f : -90.0f);
+            HeroWeaponMesh->SetRelativeTransform(FTransform(GripRotation, GripLocation));
+        }
+    }
+
+    RefreshWeaponVisibility();
+}
+
+void ACoopRPGCharacter::RefreshWeaponVisibility()
+{
+    const bool bHasHeroSword = HeroWeaponMesh->GetStaticMesh() != nullptr;
+    HeroWeaponMesh->SetVisibility(bHasMeleeWeapon && bHasHeroSword);
+    WeaponMesh->SetVisibility(bHasMeleeWeapon && !bHasHeroSword);
+
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        const APlayerState* State = GetPlayerState();
+        UE_LOG(LogCoopRPGEquipment, Verbose,
+            TEXT("MeleeWeaponPresentation Actor=%s EquippedPlayerId=%d Equipped=%d Sword=%s Socket=%s HeroVisible=%d FallbackVisible=%d GripX=%.4f GripRoll=%.1f %s"),
+            *GetName(), State ? State->GetPlayerId() : INDEX_NONE, bHasMeleeWeapon ? 1 : 0,
+            *GetNameSafe(HeroWeaponMesh->GetStaticMesh()), *HeroWeaponMesh->GetAttachSocketName().ToString(),
+            HeroWeaponMesh->IsVisible() ? 1 : 0, WeaponMesh->IsVisible() ? 1 : 0,
+            HeroWeaponMesh->GetRelativeLocation().X, HeroWeaponMesh->GetRelativeRotation().Roll,
+            *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    }
 }
 
 void ACoopRPGCharacter::SetPresentationTint(bool bDarkened)

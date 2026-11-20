@@ -10,6 +10,7 @@ class UCoopRPGCombatAttributes;
 class UInputAction;
 class UMaterialInstanceDynamic;
 class UStaticMeshComponent;
+enum class ECoopRPGHero : uint8;
 struct FInputActionValue;
 
 UCLASS()
@@ -55,6 +56,8 @@ private:
     UFUNCTION()
     void OnRep_DisplaySlot();
 
+    void ConfigureHeroWeapon(ECoopRPGHero Hero);
+    void RefreshWeaponVisibility();
     void SetPresentationTint(bool bDarkened);
     void RestorePresentationTint();
 
@@ -73,6 +76,9 @@ private:
 
     UPROPERTY()
     TObjectPtr<UStaticMeshComponent> WeaponMesh;
+
+    UPROPERTY()
+    TObjectPtr<UStaticMeshComponent> HeroWeaponMesh;
 
     UPROPERTY()
     TObjectPtr<UStaticMeshComponent> BodyMesh;
