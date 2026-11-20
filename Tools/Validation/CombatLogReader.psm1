@@ -203,6 +203,38 @@ function ConvertTo-CombatLogEvent([string]$Line) {
             $stage='복제 관찰';break
         }
         '^RecoveryCountReplicated$' {$label='내 회복약 보유량 복제';$detail="$($fields['Count'])개";$stage='복제 관찰';break}
+        '^ShieldMeleeEvaluated$' {
+            $stage='서버 판정'
+            $label=switch ($fields['Outcome']) {
+                'Blocked' {$outcome='차단';'방패 차단'}
+                'Hit' {'방패 판정 통과'}
+                default {'방패 판정 결과 미확인'}
+            }
+            $observations=@(
+                if($fields.ContainsKey('Angle')){"정면 각도 $($fields['Angle'])°"}
+                switch ($fields['Raised']) {'1' {'방패 활성'} '0' {'방패 해제'}}
+            )
+            $detail=$observations -join ' · '
+            break
+        }
+        '^ShieldWarning(?:Replicated)?$' {
+            $replicated=$eventCode -eq 'ShieldWarningReplicated'
+            $stage=if($replicated){'복제 관찰'}else{'서버 판정'}
+            $phase=switch ($fields['Active']) {'1' {'시작'} '0' {'종료'} default {'상태 미확인'}}
+            $label="방패 예고 $phase"
+            if($replicated){$kind='Replicate';$label+=' 복제'}
+            $observations=@(
+                if($fields.ContainsKey('Pattern')){"패턴 $($fields['Pattern'])"}
+                if($fields['TargetSlot'] -eq '0'){'대상 해제'}
+                elseif($fields['TargetSlot'] -match '^[1-9]\d*$'){"대상 P$($fields['TargetSlot'])"}
+                if($fields.ContainsKey('Yaw')){"방향 $($fields['Yaw'])°"}
+                if($replicated){
+                    switch ($fields['Visible']) {'1' {'예고 표시 중'} '0' {'예고 표시 없음'}}
+                }
+            )
+            $detail=$observations -join ' · '
+            break
+        }
         '^(EnemyDetected|EnemyChaseStarted|EnemyAttackStarted|EnemyAttackHit|EnemyAttackMissed)$' {
             $stage='서버 판정'
             $label=switch($eventCode){

@@ -154,7 +154,7 @@ function Align-Toolbars {
 }
 $filters=New-Bar;$options=New-Bar
 $search=New-Object Windows.Forms.TextBox;$search.Width=200
-$outcome=New-Combo @('전체','관찰','승인','거절','실패','중단','취소','빗나감','호출','수신','제출','미제출','소비','오류·경고','미분류') 115
+$outcome=New-Combo @('전체','관찰','승인','차단','거절','실패','중단','취소','빗나감','호출','수신','제출','미제출','소비','오류·경고','미분류') 115
 $order=New-Combo @('시각순','수집순') 115
 $order.AccessibleName='정렬'
 $orderTooltip=New-Object Windows.Forms.ToolTip
@@ -375,7 +375,7 @@ function New-LogPane([int]$Index,[string]$SourceId){
         $p=$sender.Tag;if($e.RowIndex -ge $p.Rows.Count){return};$event=$p.Rows[$e.RowIndex].Event
         if($null -eq $event){$e.CellStyle.BackColor=[Drawing.Color]::FromArgb(38,42,48);$e.CellStyle.ForeColor=[Drawing.Color]::FromArgb(112,118,128);return}
         if($sender.Columns[$e.ColumnIndex].Name -eq 'Outcome'){
-            $palette=@{'승인'='LightGreen';'거절'='Orange';'실패'='Salmon';'중단'='Khaki';'오류'='Salmon';'경고'='Khaki';'미분류'='LightSteelBlue'}
+            $palette=@{'승인'='LightGreen';'차단'='Orange';'거절'='Orange';'실패'='Salmon';'중단'='Khaki';'오류'='Salmon';'경고'='Khaki';'미분류'='LightSteelBlue'}
             $value=if($event.Level -in @('Error','Fatal')){'오류'}elseif($event.Level -eq 'Warning'){'경고'}else{$event.Outcome}
             $e.CellStyle.ForeColor=[Drawing.Color]::FromName($(if($palette.ContainsKey($value)){$palette[$value]}else{'Gainsboro'}))
         }

@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory)][string]$OutputDirectory)
+param([Parameter(Mandatory)][string]$OutputDirectory)
 $ErrorActionPreference='Stop'
 Import-Module (Join-Path $PSScriptRoot 'CombatLogReader.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'CombatViewerLayout.psm1') -Force
@@ -76,6 +76,48 @@ try{
     $healed = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGChestRequest: RecoveryUsed HP=80.00->100.00 Recovery=1->0')
     Check 'weapon prerequisite and grant use server outcomes, actual equipment uses replication' ($unarmed.Detail -like '*무기 미장착*' -and $weapon.Outcome -eq '승인' -and $weapon.Detail -like '*2 → 1*' -and $equipped.Topic -eq '복제' -and $equipped.Detail -like '*256*')
     Check 'healing success and rejection show exact HP, item count, and reason' ($full.Summary -like '*최대 HP*1개' -and $empty.Summary -like '*회복약 없음*0개' -and $healed.Outcome -eq '승인' -and $healed.Detail -eq 'HP 80.00 → 100.00 · 보유량 1 → 0')
+    # Taken from the final double-ring package's Visual01 server and client logs.
+    $shieldBlockRaw='[2026.11.20-04.44.59:961][539]LogCoopRPGMelee: ShieldMeleeEvaluated Angle=0.0000 Raised=1 Outcome=Blocked NetMode=DedicatedServer PIE=-1 Func=UCoopRPGMeleeAbility::ResolveHit LocalRole=Authority RequesterPlayerId=256 Swing=1'
+    $shieldPassRaw='[2026.11.20-04.45.07:195][827]LogCoopRPGMelee: ShieldMeleeEvaluated Angle=102.3520 Raised=1 Outcome=Hit NetMode=DedicatedServer PIE=-1 Func=UCoopRPGMeleeAbility::ResolveHit LocalRole=Authority RequesterPlayerId=257 Swing=1'
+    $shieldStartRaw='[2026.11.20-04.45.11:052][980]LogCoopRPGEnemy: ShieldWarning Active=1 Pattern=7 TargetSlot=2 Yaw=101.72 EndsAt=51.613 X=664.87 Y=-45.52'
+    $shieldEndRaw='[2026.11.20-04.45.12:553][ 40]LogCoopRPGEnemy: ShieldWarning Active=0 Pattern=7 TargetSlot=0 Yaw=101.72 EndsAt=0.000 X=664.87 Y=-45.52'
+    $shieldCopyStartRaw='[2026.11.20-04.45.11:102][859]LogCoopRPGEnemy: ShieldWarningReplicated Active=1 Pattern=7 TargetSlot=2 Yaw=101.72 EndsAt=51.613 Visible=1 RingVisible=1'
+    $shieldCopyEndRaw='[2026.11.20-04.45.12:588][236]LogCoopRPGEnemy: ShieldWarningReplicated Active=0 Pattern=7 TargetSlot=0 Yaw=101.72 EndsAt=0.000 Visible=0 RingVisible=1'
+    $shieldBlock=ConvertTo-CombatLogEvent $shieldBlockRaw
+    $shieldPass=ConvertTo-CombatLogEvent $shieldPassRaw
+    $shieldStart=ConvertTo-CombatLogEvent $shieldStartRaw
+    $shieldEnd=ConvertTo-CombatLogEvent $shieldEndRaw
+    $shieldCopyStart=ConvertTo-CombatLogEvent $shieldCopyStartRaw
+    $shieldCopyEnd=ConvertTo-CombatLogEvent $shieldCopyEndRaw
+    Check 'shield block is a server combat outcome with the raw requester and swing' (
+        $shieldBlock.Topic -eq '서버 판정' -and
+        $shieldBlock.Outcome -eq '차단' -and
+        $shieldBlock.Level -eq 'Log' -and
+        $shieldBlock.Fields['RequesterPlayerId'] -eq '256' -and
+        $shieldBlock.Fields['Swing'] -eq '1' -and
+        $shieldBlock.Raw -ceq $shieldBlockRaw)
+    Check 'shield pass is an observation before damage approval' (
+        $shieldPass.Outcome -eq '관찰' -and
+        $shieldPass.Label -eq '방패 판정 통과' -and
+        $shieldPass.Detail -eq '정면 각도 102.3520° · 방패 활성' -and
+        $shieldPass.Raw -ceq $shieldPassRaw)
+    Check 'server starts and clears a shield warning without inventing player IDs' (
+        $shieldStart.Topic -eq '서버 판정' -and
+        $shieldStart.Summary -like '방패 예고 시작*패턴 7*대상 P2*' -and
+        !$shieldStart.Fields.ContainsKey('TargetPlayerId') -and
+        $shieldEnd.Summary -like '방패 예고 종료*대상 해제*' -and
+        $shieldEnd.Raw -ceq $shieldEndRaw)
+    Check 'clients observe shield activation and clearing as replication' (
+        $shieldCopyStart.Topic -eq '복제' -and
+        $shieldCopyStart.Summary -like '방패 예고 시작 복제*대상 P2*예고 표시 중' -and
+        $shieldCopyEnd.Summary -like '방패 예고 종료 복제*대상 해제*예고 표시 없음' -and
+        $shieldCopyEnd.Raw -ceq $shieldCopyEndRaw)
+    $shieldLate=ConvertTo-CombatLogEvent ($shieldCopyStartRaw.Replace('Visible=1 RingVisible=1','Visible=0 RingVisible=1'))
+    $shieldIncomplete=ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemy: ShieldWarningReplicated Pattern=9')
+    Check 'late or incomplete replication does not invent a visible warning or target' (
+        $shieldLate.Summary -like '방패 예고 시작 복제*예고 표시 없음' -and
+        $shieldIncomplete.Summary -eq '방패 예고 상태 미확인 복제 · 패턴 9')
+    Check 'shield blocks can be filtered independently of server rejections and damage' (@(Select-CombatEvents @($shieldBlock,$shieldPass,$a,$hit) -Outcome '차단').Count -eq 1)
     $enemyHit = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemy: EnemyAttackHit Actor=Enemy Target=PawnA TargetPlayerId=256 HP=100.00->90.00')
     $enemyMiss = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemy: EnemyAttackMissed Actor=Enemy Target=PawnA TargetPlayerId=256 Reason=OutOfRange Distance=200.00 Range=135.00')
     $enemyMove = ConvertTo-CombatLogEvent ($prefix+'LogCoopRPGEnemy: EnemyMovementObserved Actor=Enemy Distance=45.00')
