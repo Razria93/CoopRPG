@@ -11,14 +11,15 @@ class UCoopRPGHeroAnimInstance : public UAnimInstance
     GENERATED_BODY()
 
 public:
-    static const FName MeleeSlot;
-
     void ConfigureLocomotion(UBlendSpace* BlendSpace);
     void ReadLocomotion(float& OutBlend, float& OutTime) const;
 
 protected:
     virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
     virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* Proxy) override;
+
+public:
+    static const FName MeleeSlot;
 
 private:
     friend struct FCoopRPGHeroAnimProxy;

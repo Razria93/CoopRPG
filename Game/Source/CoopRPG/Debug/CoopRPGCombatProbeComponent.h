@@ -64,9 +64,10 @@ private:
     void OnPeerLogout(AGameModeBase* Mode, AController* Exiting);
 #endif
 
-    TWeakObjectPtr<AActor> MeleeTestObstacle;
-
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);
     void WriteSnapshot(const FString& Label) const;
     void WriteRoundSnapshot(FName Label) const;
+
+private:
+    TWeakObjectPtr<AActor> MeleeTestObstacle;
 };

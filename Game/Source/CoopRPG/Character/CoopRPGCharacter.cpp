@@ -236,6 +236,46 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
         *UEnum::GetValueAsString(GetLocalRole()));
 }
 
+float ACoopRPGCharacter::GetMeleeWindup() const
+{
+    const auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
+    return GetHeroAttackProfile(Identity ? Identity->GetSelectedHero() : ECoopRPGHero::Unassigned).ContactTime;
+}
+
+uint32 ACoopRPGCharacter::StartMeleePresentation(float FacingYaw, float Windup)
+{
+    check(HasAuthority());
+    ++MeleePresentation.Sequence;
+    const auto* State = GetWorld()->GetGameState();
+    MeleePresentation.StartedAt = State ? State->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+    MeleePresentation.FacingYaw = FacingYaw;
+    MeleePresentation.Windup = Windup;
+    MeleePresentation.bCancelled = false;
+    GetCharacterMovement()->bOrientRotationToMovement = false;
+    bMeleeFacingLocked = true;
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        OnRep_MeleePresentation();
+    }
+    ForceNetUpdate();
+    return MeleePresentation.Sequence;
+}
+
+void ACoopRPGCharacter::FinishMeleeWindup(bool bInterrupted)
+{
+    check(HasAuthority());
+    ReleaseMeleeFacing();
+    if (bInterrupted)
+    {
+        MeleePresentation.bCancelled = true;
+        if (GetNetMode() != NM_DedicatedServer)
+        {
+            OnRep_MeleePresentation();
+        }
+        ForceNetUpdate();
+    }
+}
+
 void ACoopRPGCharacter::BeginPlay()
 {
     Super::BeginPlay();
@@ -348,54 +388,11 @@ void ACoopRPGCharacter::UpdateLocomotion(float, FVector, FVector)
     }
 }
 
-float ACoopRPGCharacter::GetMeleeWindup() const
+void ACoopRPGCharacter::OnRep_DisplaySlot()
 {
-    const auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
-    return GetHeroAttackProfile(Identity ? Identity->GetSelectedHero() : ECoopRPGHero::Unassigned).ContactTime;
-}
-
-uint32 ACoopRPGCharacter::StartMeleePresentation(float FacingYaw, float Windup)
-{
-    check(HasAuthority());
-    ++MeleePresentation.Sequence;
-    const auto* State = GetWorld()->GetGameState();
-    MeleePresentation.StartedAt = State ? State->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
-    MeleePresentation.FacingYaw = FacingYaw;
-    MeleePresentation.Windup = Windup;
-    MeleePresentation.bCancelled = false;
-    GetCharacterMovement()->bOrientRotationToMovement = false;
-    bMeleeFacingLocked = true;
-    if (GetNetMode() != NM_DedicatedServer)
-    {
-        OnRep_MeleePresentation();
-    }
-    ForceNetUpdate();
-    return MeleePresentation.Sequence;
-}
-
-void ACoopRPGCharacter::FinishMeleeWindup(bool bInterrupted)
-{
-    check(HasAuthority());
-    ReleaseMeleeFacing();
-    if (bInterrupted)
-    {
-        MeleePresentation.bCancelled = true;
-        if (GetNetMode() != NM_DedicatedServer)
-        {
-            OnRep_MeleePresentation();
-        }
-        ForceNetUpdate();
-    }
-}
-
-void ACoopRPGCharacter::ReleaseMeleeFacing()
-{
-    GetWorldTimerManager().ClearTimer(MeleeFacingTimer);
-    if (bMeleeFacingLocked)
-    {
-        GetCharacterMovement()->bOrientRotationToMovement = true;
-        bMeleeFacingLocked = false;
-    }
+    RestorePresentationTint();
+    UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerDisplaySlot Actor=%s Slot=%d %s"),
+        *GetNameSafe(this), DisplaySlot, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGCharacter::OnRep_MeleePresentation()
@@ -452,11 +449,14 @@ void ACoopRPGCharacter::OnRep_MeleePresentation()
     }
 }
 
-void ACoopRPGCharacter::OnRep_DisplaySlot()
+void ACoopRPGCharacter::ReleaseMeleeFacing()
 {
-    RestorePresentationTint();
-    UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerDisplaySlot Actor=%s Slot=%d %s"),
-        *GetNameSafe(this), DisplaySlot, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    GetWorldTimerManager().ClearTimer(MeleeFacingTimer);
+    if (bMeleeFacingLocked)
+    {
+        GetCharacterMovement()->bOrientRotationToMovement = true;
+        bMeleeFacingLocked = false;
+    }
 }
 
 void ACoopRPGCharacter::ConfigureHeroWeapon(ECoopRPGHero Hero)
