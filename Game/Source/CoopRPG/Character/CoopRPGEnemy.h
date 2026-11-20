@@ -69,13 +69,14 @@ private:
     void HandleHealthChanged(const FOnAttributeChangeData& Change);
     void SpawnDeathLoot(const FGuid& RoundId);
     void ApplyDeathPresentation();
-    void CreateGroundRing();
-    void UpdateShieldPresentation(bool bRaised);
     void SetPresentationTint(bool bDarkened);
     void RestorePresentationTint();
 
     UFUNCTION()
     void OnRep_Dead();
+
+    void CreateGroundRing();
+    void UpdateShieldPresentation(bool bRaised);
 
     UFUNCTION()
     void OnRep_ShieldEncounter();
