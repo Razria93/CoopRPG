@@ -85,6 +85,17 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 **근거** · [적 캐릭터](../Game/Source/CoopRPG/Character/CoopRPGEnemy.cpp) · [게임 모드의 표적 선택](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [패키지 검증](Validation/Index.md#v04-enemy-first-combat)
 
+<a id="shield-encounter-authority"></a>
+### 숲 스테이지 방패 적의 서버 판정
+
+`L_Round_01`의 적은 새 공격 예고를 시작할 때 135cm 이내에서 가장 가까운 생존자를 고른다. 거리가 같으면 낮은 플레이어 슬롯을 고른다. 서버는 대상과 정면 방향을 1.5초 동안 고정한다. 예고가 끝날 때 대상의 생존·거리·정면 범위를 재검사하고, 0.8초 회복 뒤 다음 예고 대상을 다시 고른다. 적이 죽거나 라운드가 끝나면 예고와 대기 중인 공격이 정리된다.
+
+플레이어 기본 공격은 기존 구체 스윕으로 적을 찾는다. 적중 순간 방패가 올라 있고 적의 정면과 공격자 위치의 수평각이 45° 이하면 피해를 막는다. 45°를 넘거나 방패가 내려간 동안에는 기존 피해 처리를 적용한다. 적의 반격은 잠긴 대상에게 적용하는 기존 좌우 60° 기준을 사용한다.
+
+클라이언트는 방패 적의 발밑에 이중 링을 그린다. 뒤쪽 90°는 비우고 앞에 화살표를 붙인다. 비조명 재질의 기본색은 짙은 차콜이다. 방패를 들면 서버가 복제한 예고 방향과 종료 시각을 사용해 바깥선과 안쪽 선의 앞쪽 90°, 그리고 화살표의 색을 같은 노란색으로 바꾼다. 평상시 링은 적의 방향을 따르며, 적이 사망하면 링을 숨긴다. 링은 바닥의 렌더링 구성요소로만 동작한다.
+
+[검증 결과](Validation/ForestExpedition.md#shield-ground-ring-verification) · [서버 예고와 대상 선정](../Game/Source/CoopRPG/Character/CoopRPGEnemy.cpp) · [기본 공격 판정](../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp)
+
 <a id="상자-상호작용-설계-예시"></a>
 
 <a id="shared-chest-implementation"></a>
