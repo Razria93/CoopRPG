@@ -409,8 +409,20 @@ void ACoopRPGLootHUD::DrawRoundResult(const ACoopRPGGameState& State,
     const FCoopRPGReadySlots& Slots = State.GetReadySlots();
     const bool bPlayerMissing = Reason == ECoopRPGRoundEndReason::Disconnected
         || Slots.PlayerOne == ECoopRPGReadyStatus::Disconnected || Slots.PlayerTwo == ECoopRPGReadyStatus::Disconnected;
-    DrawText(bPlayerMissing ? TEXT("Reopen the client to join another session.") : TEXT("Next stage loads automatically."),
-        PanelAccent, X + 18.0f, Y + 122.0f);
+    const TCHAR* NextAction = TEXT("Expedition complete.");
+    if (bPlayerMissing)
+    {
+        NextAction = TEXT("Reopen the client to join another session.");
+    }
+    else if (Reason == ECoopRPGRoundEndReason::Death || Reason == ECoopRPGRoundEndReason::Timeout)
+    {
+        NextAction = TEXT("This stage reloads automatically.");
+    }
+    else if (!State.GetRoundTravelDestination().IsEmpty())
+    {
+        NextAction = TEXT("Next stage loads automatically.");
+    }
+    DrawText(NextAction, PanelAccent, X + 18.0f, Y + 122.0f);
     Controller.AcknowledgeRoundResult(State.GetRoundId());
 }
 

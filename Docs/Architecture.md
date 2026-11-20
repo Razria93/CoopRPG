@@ -146,11 +146,13 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 <a id="round-travel-design"></a>
 ### 서버 주도 맵 이동과 라운드 수명
 
-결과 HUD가 그려지면 각 클라이언트의 `PlayerController`가 현재 `RoundId`를 표시 확인 RPC로 보낸다. `GameMode`는 서버에 기록한 두 참가자와 현재 결과를 대조하고 중복을 제외한다. 두 확인을 받은 뒤 서버 시계로 3초가 지나면 `ServerTravel`을 한 번 요청한다. 참가자가 이탈한 회차는 `Result`에 머문다.
+결과 HUD가 그려지면 각 클라이언트의 `PlayerController`가 현재 `RoundId`를 표시 확인 RPC로 보낸다. `GameMode`는 서버에 기록한 두 참가자와 현재 결과를 대조하고 중복을 제외한다. 이동 목적지가 있는 결과는 두 확인을 받은 뒤 서버 시계로 3초가 지나면 `ServerTravel`을 한 번 요청한다. 참가자가 이탈한 회차는 `Result`에 머문다.
 
-두 맵을 번갈아 선택하도록 구성했다. 이번 시험은 `L_Movement`에서 `L_Movement_Round2`로 이동했다. 목적지는 초기화 검증을 위해 원본과 같은 배치를 가진 별도 패키지다. 비심리스 이동을 선택해 같은 클라이언트 프로세스가 새 월드에 다시 접속하고 `GameState`, `PlayerController`, Pawn을 새로 만든다. 새 서버 월드는 다음 `RoundId`로 상자·적·탈출 구역을 초기화한다. 새 Pawn과 ASC는 초기 체력·스태미나와 쿨다운 상태로 시작한다. 상자 획득은 서버의 현재 `RoundId`를 검사하므로 새 상자를 대상으로 보낸 이전 회차 ID도 거절된다.
+서버는 라운드 종료 사유와 현재 맵으로 이동 목적지를 결정한다. 사망·시간 초과는 현재 맵을 다시 열고, 탈출 성공은 연결된 다음 맵이 있을 때만 진행한다. `L_Round_01`은 후속 원정 맵이 없어 성공 결과에 머문다. 개발 검증용 `L_Movement`와 `L_Movement_Round2`는 성공 시 서로 이동한다. 결과 HUD도 같은 목적지 규칙을 사용한다.
 
-**근거** · [서버의 표시 확인과 전환](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [표시 확인 RPC와 상자 요청 검사](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [패키지 시험](Validation/Index.md#v06-round-travel) · [Epic 멀티플레이 맵 이동](https://dev.epicgames.com/documentation/unreal-engine/travelling-in-multiplayer-in-unreal-engine?lang=en-US)
+비심리스 이동을 사용해 같은 클라이언트 프로세스가 새 월드에 다시 접속하고 `GameState`, `PlayerController`, Pawn을 새로 만든다. 새 서버 월드는 새 `RoundId`로 상자·적·탈출 구역을 초기화한다. 새 Pawn과 ASC는 초기 체력·스태미나와 쿨다운 상태로 시작한다. 상자 획득은 서버의 현재 `RoundId`를 검사하므로 새 상자를 대상으로 보낸 이전 회차 ID도 거절된다.
+
+**근거** · [서버의 표시 확인과 전환](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [표시 확인 RPC와 상자 요청 검사](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [V06 패키지 시험](Validation/Index.md#v06-round-travel) · [숲 재도전 검증](Validation/ForestExpedition.md#forest-round-retry) · [Epic 멀티플레이 맵 이동](https://dev.epicgames.com/documentation/unreal-engine/travelling-in-multiplayer-in-unreal-engine?lang=en-US)
 
 <a id="round-admission-design"></a>
 ### 전용 서버 입장 판정과 맵 이동 중 두 자리

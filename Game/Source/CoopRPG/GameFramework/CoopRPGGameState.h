@@ -127,6 +127,7 @@ public:
     void EvaluateRound(bool bDisconnected, bool bDeath, bool bBothInside);
     double GetRoundRemainingSeconds() const;
     double GetExtractionRemainingSeconds() const;
+    FString GetRoundTravelDestination() const;
 
     ACoopRPGSharedChest* GetSharedChest() const { return SharedChest.Get(); }
     FGuid GetRoundId() const { return RoundId; }
