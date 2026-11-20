@@ -15,6 +15,8 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Sound/SoundWaveProcedural.h"
+#include "Components/AudioComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGGameplayFeedback, Log, All);
 
@@ -33,6 +35,32 @@ namespace
     const FLinearColor ProgressColor(1.0f, 0.71f, 0.12f);
 
     constexpr float HealthNameplateLineSpacing = 17.0f;
+
+    void PlayShieldImpact(UWorld& World, const FVector& Position)
+    {
+        constexpr uint32 SampleRate = 24000;
+        constexpr float Duration = 0.10f;
+        TArray<int16> Samples;
+        Samples.SetNumUninitialized(static_cast<int32>(SampleRate * Duration));
+        for (int32 Index = 0; Index < Samples.Num(); ++Index)
+        {
+            const double Time = static_cast<double>(Index) / SampleRate;
+            const double Envelope = FMath::Min(Time * 600.0, 1.0) * FMath::Exp(-50.0 * Time);
+            Samples[Index] = static_cast<int16>(7000.0 * Envelope
+                * (0.7 * FMath::Sin(2.0 * UE_DOUBLE_PI * 890.0 * Time)
+                    + 0.3 * FMath::Sin(2.0 * UE_DOUBLE_PI * 1430.0 * Time)));
+        }
+
+        auto* Sound = NewObject<USoundWaveProcedural>(&World);
+        Sound->SetSampleRate(SampleRate);
+        Sound->NumChannels = 1;
+        Sound->Duration = Duration;
+        Sound->QueueAudio(reinterpret_cast<const uint8*>(Samples.GetData()), Samples.Num() * sizeof(int16));
+        if (UAudioComponent* Audio = UGameplayStatics::SpawnSoundAtLocation(&World, Sound, Position, FRotator::ZeroRotator, 0.65f))
+        {
+            Audio->FadeOut(Duration, 0.0f);
+        }
+    }
 
     const TCHAR* ReadyStatusLabel(ECoopRPGReadyStatus Status)
     {
@@ -153,6 +181,7 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
     FString Text;
     FLinearColor Color(0.35f, 0.72f, 1.0f);
     bool bNextToActor = true;
+    const bool bAtContact = Feedback.Kind == ECoopRPGFeedbackKind::ShieldBlocked;
     switch (Feedback.Kind)
     {
     case ECoopRPGFeedbackKind::Damage:
@@ -184,6 +213,12 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
         Color = FLinearColor(1.0f, 0.83f, 0.32f);
         break;
     case ECoopRPGFeedbackKind::TeamLootAcquired: Text = TEXT("Team loot acquired"); break;
+    case ECoopRPGFeedbackKind::ShieldBlocked:
+        Text = TEXT("Blocked");
+        Color = FLinearColor(1.0f, 0.78f, 0.24f);
+        bNextToActor = false;
+        PlayShieldImpact(*GetWorld(), Feedback.Location);
+        break;
     }
 
     if (FeedbackEntries.Num() >= 24)
@@ -208,7 +243,7 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
             ItemRow = NextRow;
         }
     }
-    FeedbackEntries.Add({Subject, Feedback.Location, Text, Color, Now, bNextToActor, ItemRow});
+    FeedbackEntries.Add({Subject, Feedback.Location, Text, Color, Now, bNextToActor, ItemRow, bAtContact});
     const auto* Player = Cast<ACoopRPGCharacter>(Subject);
     UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("GameplayFeedback Kind=%s Subject=%s Slot=%d Amount=%.2f AttackerSlot=%d %s"),
         *UEnum::GetValueAsString(Feedback.Kind), *GetNameSafe(Subject), Player ? Player->GetDisplaySlot() : 0,
@@ -230,8 +265,11 @@ void ACoopRPGLootHUD::DrawGameplayFeedback()
     {
         if (!It->IsDead())
         {
+            const bool bWarning = It->IsShieldRaised();
+            const FString Label = bWarning ? FString::Printf(TEXT("Enemy | Target P%d"), It->GetShieldWarning().TargetSlot)
+                : TEXT("Enemy");
             DrawHealthNameplate(It->GetActorLocation() + FVector(0.0f, 0.0f, 76.0f),
-                TEXT("Enemy"), It->GetHealth(), CoopRPG::Presentation::EnemyColor());
+                Label, It->GetHealth(), CoopRPG::Presentation::EnemyColor());
         }
     }
 
@@ -241,6 +279,11 @@ void ACoopRPGLootHUD::DrawGameplayFeedback()
     for (int32 Index = FeedbackEntries.Num() - 1; Index >= 0; --Index)
     {
         const FFeedbackEntry& Entry = FeedbackEntries[Index];
+        if (Entry.bAtContact)
+        {
+            DrawWorldLabel(Entry.Location, Entry.Text, Entry.Color, FVector2D(36.0, 14.0));
+            continue;
+        }
         const int32 Row = RowsBySubject.FindOrAdd(Entry.Subject)++;
         const AActor* Subject = Entry.Subject.Get();
         const FVector Location = Subject ? Subject->GetActorLocation() : Entry.Location;

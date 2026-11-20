@@ -5,6 +5,7 @@
 #include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGLootHUD.generated.h"
 
+class ACoopRPGEnemy;
 class ACoopRPGGameState;
 class ACoopRPGPlayerController;
 
@@ -27,6 +28,7 @@ private:
         double StartedAt;
         bool bNextToActor;
         int32 ItemRow = INDEX_NONE;
+        bool bAtContact = false;
     };
 
     void DrawGameplayFeedback();

@@ -155,6 +155,10 @@ void ACoopRPGGameMode::BeginPlay()
         if (ensureMsgf(Chest && Zone && IsValid(Enemy.Get()) && State,
             TEXT("Round map %s requires a shared chest, enemy, and extraction zone."), *MapName))
         {
+            if (MapName == RoundOneMapName)
+            {
+                Enemy->EnableShieldEncounter();
+            }
             State->InitializeLootRound(Chest, Zone);
             PublishReadySlots(*State);
             const TCHAR* Event = MapName == ForestMapName ? TEXT("ForestStageReady") : TEXT("RoundStageReady");

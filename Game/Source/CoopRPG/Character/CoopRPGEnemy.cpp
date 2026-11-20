@@ -9,7 +9,11 @@
 
 #include "AbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/DynamicMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DynamicMesh/DynamicMesh3.h"
+#include "DynamicMesh/DynamicMeshAttributeSet.h"
+#include "DynamicMesh/MeshNormals.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TimerManager.h"
 #include "Engine/StaticMesh.h"
@@ -25,10 +29,57 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEnemy, Log, All);
 namespace
 {
     constexpr float DetectionRangeCm = 360.0f;
-    constexpr float AttackRangeCm = 135.0f;
     constexpr float EnemyWindupSeconds = 0.9f;
     constexpr float RecoverySeconds = 2.5f;
+    constexpr float ShieldWindupSeconds = 1.5f;
+    constexpr float ShieldRecoverySeconds = 0.8f;
+    constexpr double EnemyCounterattackHalfAngleDegrees = 60.0;
     constexpr float MovementObservationCm = 40.0f;
+
+    constexpr double GroundRingEndAngle = 135.0;
+    constexpr double GroundRingOutline = 1.25;
+    constexpr double GroundRingRadius = 82.0;
+    constexpr double OuterRingWidth = 7.0;
+    constexpr double InnerRingWidth = 2.5;
+    constexpr double RingPadding = 5.0;
+    constexpr int32 RingOutlineMaterial = 0;
+    constexpr int32 RingSideMaterial = 1;
+    constexpr int32 RingFrontMaterial = 2;
+    const FLinearColor RingOutlineColor(FColor(13, 17, 20));
+    const FLinearColor RingBaseColor(FColor(36, 42, 47));
+    const FLinearColor RingGuardColor(FColor(255, 215, 37));
+
+    void AddRingArc(UE::Geometry::FDynamicMesh3& Mesh, double Inner, double Outer,
+        double StartAngle, double EndAngle, double Height, int32 Material)
+    {
+        const int32 Segments = FMath::CeilToInt((EndAngle - StartAngle) / 5.0);
+        int32 LastInner = INDEX_NONE;
+        int32 LastOuter = INDEX_NONE;
+        for (int32 Index = 0; Index <= Segments; ++Index)
+        {
+            const double Angle = FMath::Lerp(StartAngle, EndAngle, static_cast<double>(Index) / Segments);
+            const FVector Direction = FRotator(0.0, Angle, 0.0).Vector();
+            const int32 ThisInner = Mesh.AppendVertex(Direction * Inner + FVector(0.0, 0.0, Height));
+            const int32 ThisOuter = Mesh.AppendVertex(Direction * Outer + FVector(0.0, 0.0, Height));
+            if (Index > 0)
+            {
+                auto* MaterialIds = Mesh.Attributes()->GetMaterialID();
+                MaterialIds->SetValue(Mesh.AppendTriangle(LastInner, ThisOuter, LastOuter), Material);
+                MaterialIds->SetValue(Mesh.AppendTriangle(LastInner, ThisInner, ThisOuter), Material);
+            }
+            LastInner = ThisInner;
+            LastOuter = ThisOuter;
+        }
+    }
+
+    void AddRingArrow(UE::Geometry::FDynamicMesh3& Mesh, double BaseX, double HalfWidth,
+        double TipX, double Height, int32 Material)
+    {
+        const int32 Left = Mesh.AppendVertex(FVector(BaseX, -HalfWidth, Height));
+        const int32 Right = Mesh.AppendVertex(FVector(BaseX, HalfWidth, Height));
+        const int32 Tip = Mesh.AppendVertex(FVector(TipX, 0.0, Height));
+        Mesh.Attributes()->GetMaterialID()->SetValue(Mesh.AppendTriangle(Left, Right, Tip), Material);
+    }
 
     bool IsLivePlayer(const ACoopRPGCharacter* Player)
     {
@@ -74,6 +125,19 @@ ACoopRPGEnemy::ACoopRPGEnemy()
     FacingMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     FacingMarker->SetVisibility(false);
 
+    ShieldVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ShieldVisual"));
+    ShieldVisual->SetupAttachment(GetRootComponent());
+    ShieldVisual->SetStaticMesh(Cube.Object);
+    ShieldVisual->SetMaterial(0, TintableMaterial.Object);
+    ShieldVisual->SetRelativeLocation(FVector(41.0, 0.0, 12.0));
+    ShieldVisual->SetRelativeScale3D(FVector(0.12, 0.72, 0.93));
+    ShieldVisual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    ShieldVisual->SetVisibility(false);
+
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> RingMaterial(
+        TEXT("/Game/Presentation/Materials/M_EnemyGroundRing.M_EnemyGroundRing"));
+    GroundRingMaterial = RingMaterial.Object;
+
     AbilitySystem = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystem"));
     AbilitySystem->SetIsReplicated(true);
     AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
@@ -112,17 +176,34 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
         if (Now >= NextActionTime)
         {
             bAttackPending = false;
-            NextActionTime = Now + RecoverySeconds;
+            NextActionTime = Now + (bShieldEncounter ? ShieldRecoverySeconds : RecoverySeconds);
+            if (bShieldEncounter)
+            {
+                SetShieldWarning(0, ShieldWarning.FacingYaw, 0.0);
+            }
             ResolveAttack(Player);
         }
         return;
+    }
+
+    if (bShieldEncounter && Now < NextActionTime)
+    {
+        return;
+    }
+    if (bShieldEncounter)
+    {
+        if (ACoopRPGCharacter* InRange = FindTarget(AttackRangeCm))
+        {
+            Player = InRange;
+            Target = InRange;
+        }
     }
 
     if (!IsLivePlayer(Player) ||
         FVector::DistSquared2D(GetActorLocation(), Player->GetActorLocation()) > FMath::Square(DetectionRangeCm))
     {
         StopChasing();
-        Player = FindTarget();
+        Player = FindTarget(DetectionRangeCm);
         Target = Player;
         if (Player)
         {
@@ -155,10 +236,17 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
     StopChasing();
     if (Now >= NextActionTime)
     {
+        const float WindupSeconds = bShieldEncounter ? ShieldWindupSeconds : EnemyWindupSeconds;
         bAttackPending = true;
-        NextActionTime = Now + EnemyWindupSeconds;
+        NextActionTime = Now + WindupSeconds;
+        if (bShieldEncounter)
+        {
+            const float FacingYaw = Offset.Rotation().Yaw;
+            SetActorRotation(FRotator(0.0, FacingYaw, 0.0));
+            SetShieldWarning(Player->GetDisplaySlot(), FacingYaw, NextActionTime);
+        }
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackStarted Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f Windup=%.2f %s"),
-            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm, EnemyWindupSeconds,
+            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm, WindupSeconds,
             *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }
@@ -184,6 +272,8 @@ void ACoopRPGEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGEnemy, bDead);
+    DOREPLIFETIME(ACoopRPGEnemy, bShieldEncounter);
+    DOREPLIFETIME(ACoopRPGEnemy, ShieldWarning);
 }
 
 void ACoopRPGEnemy::FlashPresentationHit()
@@ -192,10 +282,42 @@ void ACoopRPGEnemy::FlashPresentationHit()
     GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestorePresentationTint, 0.22f);
 }
 
+void ACoopRPGEnemy::EnableShieldEncounter()
+{
+    check(HasAuthority());
+    bShieldEncounter = true;
+    ForceNetUpdate();
+    OnRep_ShieldEncounter();
+}
+
+bool ACoopRPGEnemy::IsShieldRaised() const
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    return !bDead && State && State->IsRoundPlaying() && ShieldWarning.EndsAt > 0.0
+        && State->GetServerWorldTimeSeconds() < ShieldWarning.EndsAt;
+}
+
+double ACoopRPGEnemy::GetShieldAngle(const FVector& Position) const
+{
+    const FVector Facing = FRotator(0.0, ShieldWarning.FacingYaw, 0.0).Vector();
+    const FVector Offset = (Position - GetActorLocation()).GetSafeNormal2D();
+    const double Dot = FMath::Clamp(FVector::DotProduct(Facing, Offset), -1.0, 1.0);
+    return FMath::RadiansToDegrees(FMath::Acos(Dot));
+}
+
 void ACoopRPGEnemy::BeginPlay()
 {
     Super::BeginPlay();
     FacingMarker->SetVisibility(bShowFacingMarker);
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        if (auto* Material = ShieldVisual->CreateDynamicMaterialInstance(0))
+        {
+            Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.56f, 0.12f));
+        }
+        CreateGroundRing();
+        OnRep_ShieldWarning();
+    }
     RestorePresentationTint();
     AbilitySystem->InitAbilityActorInfo(this, this);
     ObservationOrigin = GetActorLocation();
@@ -216,10 +338,10 @@ void ACoopRPGEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
-ACoopRPGCharacter* ACoopRPGEnemy::FindTarget() const
+ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range) const
 {
     ACoopRPGCharacter* Nearest = nullptr;
-    double NearestDistanceSquared = FMath::Square(DetectionRangeCm);
+    double NearestDistanceSquared = FMath::Square(static_cast<double>(Range));
     for (auto It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
         const APlayerController* PlayerController = It->Get();
@@ -227,7 +349,13 @@ ACoopRPGCharacter* ACoopRPGEnemy::FindTarget() const
         if (IsLivePlayer(Player))
         {
             const double DistanceSquared = FVector::DistSquared2D(GetActorLocation(), Player->GetActorLocation());
-            if (DistanceSquared <= NearestDistanceSquared)
+            if (DistanceSquared > FMath::Square(static_cast<double>(Range)))
+            {
+                continue;
+            }
+            const bool bTied = bShieldEncounter && FMath::IsNearlyEqual(DistanceSquared, NearestDistanceSquared);
+            if (!Nearest || (bTied ? Player->GetDisplaySlot() < Nearest->GetDisplaySlot()
+                                  : DistanceSquared <= NearestDistanceSquared))
             {
                 Nearest = Player;
                 NearestDistanceSquared = DistanceSquared;
@@ -235,6 +363,29 @@ ACoopRPGCharacter* ACoopRPGEnemy::FindTarget() const
         }
     }
     return Nearest;
+}
+
+void ACoopRPGEnemy::SetShieldWarning(int32 TargetSlot, float FacingYaw, double EndsAt)
+{
+    if (EndsAt > 0.0)
+    {
+        ++ShieldWarning.Sequence;
+    }
+    else if (ShieldWarning.EndsAt == 0.0)
+    {
+        return;
+    }
+
+    ShieldWarning.FacingYaw = FacingYaw;
+    ShieldWarning.TargetSlot = TargetSlot;
+    ShieldWarning.EndsAt = EndsAt;
+    UE_LOG(LogCoopRPGEnemy, Log, TEXT("ShieldWarning Active=%d Pattern=%u TargetSlot=%d Yaw=%.2f EndsAt=%.3f X=%.2f Y=%.2f"),
+        EndsAt > 0.0, ShieldWarning.Sequence, TargetSlot, FacingYaw, EndsAt, GetActorLocation().X, GetActorLocation().Y);
+    ForceNetUpdate();
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        OnRep_ShieldWarning();
+    }
 }
 
 void ACoopRPGEnemy::StopChasing()
@@ -250,6 +401,7 @@ void ACoopRPGEnemy::StopCombat()
 {
     StopChasing();
     Target.Reset();
+    SetShieldWarning(0, ShieldWarning.FacingYaw, 0.0);
     NextActionTime = 0.0;
     bAttackPending = false;
 }
@@ -258,10 +410,14 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
 {
     const bool bLivePlayer = IsLivePlayer(Player);
     const double Distance = bLivePlayer ? FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) : 0.0;
-    if (!bLivePlayer || Distance > AttackRangeCm)
+    const bool bOutsideFacing = bShieldEncounter && bLivePlayer
+        && GetShieldAngle(Player->GetActorLocation()) > EnemyCounterattackHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
+    if (!bLivePlayer || Distance > AttackRangeCm || bOutsideFacing)
     {
+        const TCHAR* Reason = !bLivePlayer ? TEXT("InvalidTarget")
+            : Distance > AttackRangeCm ? TEXT("OutOfRange") : TEXT("OutsideFacing");
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackMissed Actor=%s Target=%s TargetPlayerId=%d Reason=%s Distance=%.2f Range=%.2f %s"),
-            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), bLivePlayer ? TEXT("OutOfRange") : TEXT("InvalidTarget"),
+            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Reason,
             Distance, AttackRangeCm, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
         return;
     }
@@ -335,6 +491,8 @@ void ACoopRPGEnemy::ApplyDeathPresentation()
     GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     EnemyVisual->SetVisibility(false);
     FacingMarker->SetVisibility(false);
+    UpdateShieldPresentation(false);
+    GetWorldTimerManager().ClearTimer(ShieldPresentationTimer);
 }
 
 void ACoopRPGEnemy::SetPresentationTint(bool bDarkened)
@@ -366,5 +524,107 @@ void ACoopRPGEnemy::OnRep_Dead()
         ApplyDeathPresentation();
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyDeathReplicated Actor=%s %s"),
             *GetName(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    }
+}
+
+void ACoopRPGEnemy::CreateGroundRing()
+{
+    if (!bShieldEncounter || GroundRing || !GroundRingMaterial || GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    using namespace UE::Geometry;
+    FDynamicMesh3 RingMesh;
+    RingMesh.EnableAttributes();
+    RingMesh.Attributes()->EnableMaterialID();
+    RingMesh.EnableVertexNormals(FVector3f(0.0f, 0.0f, 1.0f));
+
+    const auto AddStroke = [&RingMesh](double Inner, double Outer)
+    {
+        AddRingArc(RingMesh, Inner - GroundRingOutline, Outer + GroundRingOutline,
+            -GroundRingEndAngle, GroundRingEndAngle, 0.0, RingOutlineMaterial);
+        AddRingArc(RingMesh, Inner, Outer, -GroundRingEndAngle, -ShieldHalfAngleDegrees, 0.15, RingSideMaterial);
+        AddRingArc(RingMesh, Inner, Outer, -ShieldHalfAngleDegrees, ShieldHalfAngleDegrees, 0.15, RingFrontMaterial);
+        AddRingArc(RingMesh, Inner, Outer, ShieldHalfAngleDegrees, GroundRingEndAngle, 0.15, RingSideMaterial);
+    };
+    const double OuterInnerEdge = GroundRingRadius - OuterRingWidth;
+    const double InnerOuterEdge = OuterInnerEdge - RingPadding;
+    AddStroke(OuterInnerEdge, GroundRingRadius);
+    AddStroke(InnerOuterEdge - InnerRingWidth, InnerOuterEdge);
+
+    // Start the arrow inside the outer stroke so they read as one continuous shape.
+    AddRingArrow(RingMesh, GroundRingRadius - 3.0, 8.5, GroundRingRadius + 15.0, 0.05, RingOutlineMaterial);
+    AddRingArrow(RingMesh, GroundRingRadius - 2.0, 6.5, GroundRingRadius + 12.5, 0.25, RingFrontMaterial);
+    FMeshNormals::InitializeOverlayToPerVertexNormals(RingMesh.Attributes()->PrimaryNormals());
+
+    GroundRing = NewObject<UDynamicMeshComponent>(this);
+    GroundRing->SetupAttachment(GetRootComponent());
+    GroundRing->SetRelativeLocation(FVector(0.0, 0.0, 3.0 - GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight()));
+    GroundRing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    GroundRing->SetGenerateOverlapEvents(false);
+    GroundRing->SetCanEverAffectNavigation(false);
+    GroundRing->SetCastShadow(false);
+    GroundRing->SetReceivesDecals(false);
+    GroundRing->SetAffectDistanceFieldLighting(false);
+
+    auto* Outline = UMaterialInstanceDynamic::Create(GroundRingMaterial, GroundRing);
+    auto* Sides = UMaterialInstanceDynamic::Create(GroundRingMaterial, GroundRing);
+    GroundRingFrontMaterial = UMaterialInstanceDynamic::Create(GroundRingMaterial, GroundRing);
+    Outline->SetVectorParameterValue(TEXT("Color"), RingOutlineColor);
+    Sides->SetVectorParameterValue(TEXT("Color"), RingBaseColor);
+    GroundRingFrontMaterial->SetVectorParameterValue(TEXT("Color"), RingBaseColor);
+    GroundRing->ConfigureMaterialSet({Outline, Sides, GroundRingFrontMaterial});
+    GroundRing->SetMesh(MoveTemp(RingMesh));
+    UpdateShieldPresentation(IsShieldRaised());
+    GroundRing->RegisterComponent();
+}
+
+void ACoopRPGEnemy::UpdateShieldPresentation(bool bRaised)
+{
+    ShieldVisual->SetVisibility(bRaised);
+    if (!GroundRing)
+    {
+        return;
+    }
+
+    GroundRing->SetVisibility(!bDead);
+    GroundRing->SetAbsolute(false, bRaised, false);
+    if (bRaised)
+    {
+        GroundRing->SetWorldRotation(FRotator(0.0, ShieldWarning.FacingYaw, 0.0));
+    }
+    else
+    {
+        GroundRing->SetRelativeRotation(FRotator::ZeroRotator);
+    }
+    GroundRingFrontMaterial->SetVectorParameterValue(TEXT("Color"), bRaised ? RingGuardColor : RingBaseColor);
+}
+
+void ACoopRPGEnemy::OnRep_ShieldEncounter()
+{
+    if (HasActorBegunPlay())
+    {
+        CreateGroundRing();
+    }
+}
+
+void ACoopRPGEnemy::OnRep_ShieldWarning()
+{
+    GetWorldTimerManager().ClearTimer(ShieldPresentationTimer);
+    const bool bVisible = IsShieldRaised();
+    UpdateShieldPresentation(bVisible);
+    if (bVisible)
+    {
+        const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+        const float Remaining = ShieldWarning.EndsAt - State->GetServerWorldTimeSeconds();
+        GetWorldTimerManager().SetTimer(ShieldPresentationTimer,
+            FTimerDelegate::CreateWeakLambda(this, [this] { UpdateShieldPresentation(false); }), Remaining, false);
+    }
+    if (ShieldWarning.Sequence != 0)
+    {
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("ShieldWarningReplicated Active=%d Pattern=%u TargetSlot=%d Yaw=%.2f EndsAt=%.3f Visible=%d RingVisible=%d"),
+            ShieldWarning.EndsAt > 0.0, ShieldWarning.Sequence, ShieldWarning.TargetSlot, ShieldWarning.FacingYaw, ShieldWarning.EndsAt,
+            bVisible, GroundRing && GroundRing->IsVisible());
     }
 }
