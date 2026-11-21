@@ -62,6 +62,51 @@ void ACoopRPGSharedChest::BeginPlay()
     }
 }
 
+void ACoopRPGSharedChest::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(ACoopRPGSharedChest, RecoveryStock);
+    DOREPLIFETIME(ACoopRPGSharedChest, WeaponStock);
+    DOREPLIFETIME(ACoopRPGSharedChest, FirstOpenedAt);
+}
+
+bool ACoopRPGSharedChest::TryTakeRecovery()
+{
+    return TryTakeStock(RecoveryStock);
+}
+
+bool ACoopRPGSharedChest::TryTakeWeapon()
+{
+    return TryTakeStock(WeaponStock);
+}
+
+void ACoopRPGSharedChest::RecordFirstOpen()
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!HasAuthority() || FirstOpenedAt > 0.0 || !State)
+    {
+        return;
+    }
+
+    FirstOpenedAt = State->GetServerWorldTimeSeconds();
+    UE_LOG(LogCoopRPGChest, Log, TEXT("ChestLidOpened Round=%s Chest=%s StartedAt=%.3f"),
+        *State->GetRoundId().ToString(), *GetName(), FirstOpenedAt);
+    ForceNetUpdate();
+    OnRep_FirstOpenedAt();
+}
+
+bool ACoopRPGSharedChest::TryTakeStock(int32& Stock)
+{
+    if (!HasAuthority() || Stock <= 0)
+    {
+        return false;
+    }
+
+    --Stock;
+    ForceNetUpdate();
+    return true;
+}
+
 void ACoopRPGSharedChest::InitializeForestPresentation()
 {
     if (!FPackageName::DoesPackageExist(FPackageName::ObjectPathToPackageName(FString(ChestBodyAsset))))
@@ -98,21 +143,6 @@ void ACoopRPGSharedChest::InitializeForestPresentation()
     OnRep_FirstOpenedAt();
 }
 
-void ACoopRPGSharedChest::RecordFirstOpen()
-{
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    if (!HasAuthority() || FirstOpenedAt > 0.0 || !State)
-    {
-        return;
-    }
-
-    FirstOpenedAt = State->GetServerWorldTimeSeconds();
-    UE_LOG(LogCoopRPGChest, Log, TEXT("ChestLidOpened Round=%s Chest=%s StartedAt=%.3f"),
-        *State->GetRoundId().ToString(), *GetName(), FirstOpenedAt);
-    ForceNetUpdate();
-    OnRep_FirstOpenedAt();
-}
-
 void ACoopRPGSharedChest::OnRep_FirstOpenedAt()
 {
     if (!ChestBody || FirstOpenedAt <= 0.0)
@@ -131,36 +161,6 @@ void ACoopRPGSharedChest::OnRep_FirstOpenedAt()
     }
     UE_LOG(LogCoopRPGChest, Log, TEXT("ChestLidPresented Chest=%s StartedAt=%.3f Position=%.3f Length=%.3f"),
         *GetName(), FirstOpenedAt, Position, Length);
-}
-
-void ACoopRPGSharedChest::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    DOREPLIFETIME(ACoopRPGSharedChest, RecoveryStock);
-    DOREPLIFETIME(ACoopRPGSharedChest, WeaponStock);
-    DOREPLIFETIME(ACoopRPGSharedChest, FirstOpenedAt);
-}
-
-bool ACoopRPGSharedChest::TryTakeRecovery()
-{
-    return TryTakeStock(RecoveryStock);
-}
-
-bool ACoopRPGSharedChest::TryTakeWeapon()
-{
-    return TryTakeStock(WeaponStock);
-}
-
-bool ACoopRPGSharedChest::TryTakeStock(int32& Stock)
-{
-    if (!HasAuthority() || Stock <= 0)
-    {
-        return false;
-    }
-
-    --Stock;
-    ForceNetUpdate();
-    return true;
 }
 
 void ACoopRPGSharedChest::OnRep_RecoveryStock()

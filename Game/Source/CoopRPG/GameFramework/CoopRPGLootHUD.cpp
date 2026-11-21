@@ -216,6 +216,81 @@ void ACoopRPGLootHUD::DrawHUD()
     }
 }
 
+void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback)
+{
+    AActor* Subject = Feedback.Subject.Get();
+    FString Text;
+    FLinearColor Color(0.35f, 0.72f, 1.0f);
+    bool bNextToActor = true;
+    const bool bAtContact = Feedback.Kind == ECoopRPGFeedbackKind::ShieldBlocked;
+    switch (Feedback.Kind)
+    {
+    case ECoopRPGFeedbackKind::Damage:
+    {
+        const FString Attacker = Feedback.AttackerSlot > 0 ? FString::Printf(TEXT("P%d"), Feedback.AttackerSlot)
+            : (Feedback.AttackerSlot == 0 ? TEXT("Enemy") : TEXT("Player"));
+        Text = FString::Printf(TEXT("-%.0f HP (By %s)"), Feedback.Amount, *Attacker);
+        Color = FLinearColor(1.0f, 0.36f, 0.33f);
+        bNextToActor = false;
+        if (auto* Player = Cast<ACoopRPGCharacter>(Subject))
+        {
+            Player->FlashPresentationHit();
+        }
+        else if (auto* Enemy = Cast<ACoopRPGEnemy>(Subject))
+        {
+            Enemy->FlashPresentationHit();
+        }
+        break;
+    }
+    case ECoopRPGFeedbackKind::Recovery:
+        Text = FString::Printf(TEXT("+%.0f HP"), Feedback.Amount);
+        Color = FLinearColor(0.36f, 1.0f, 0.55f);
+        bNextToActor = false;
+        break;
+    case ECoopRPGFeedbackKind::WeaponAcquired: Text = TEXT("Melee weapon acquired"); break;
+    case ECoopRPGFeedbackKind::RecoveryAcquired: Text = TEXT("Recovery item acquired"); break;
+    case ECoopRPGFeedbackKind::RecoveryUsed:
+        Text = TEXT("Recovery item used");
+        Color = FLinearColor(1.0f, 0.83f, 0.32f);
+        break;
+    case ECoopRPGFeedbackKind::TeamLootAcquired: Text = TEXT("Team loot acquired"); break;
+    case ECoopRPGFeedbackKind::ShieldBlocked:
+        Text = TEXT("Blocked");
+        Color = FLinearColor(1.0f, 0.78f, 0.24f);
+        bNextToActor = false;
+        PlayShieldImpact(*GetWorld(), Feedback.Location);
+        break;
+    }
+
+    if (FeedbackEntries.Num() >= 24)
+    {
+        FeedbackEntries.RemoveAt(0);
+    }
+    const double Now = GetWorld()->GetTimeSeconds();
+    int32 ItemRow = INDEX_NONE;
+    if (bNextToActor)
+    {
+        const TWeakObjectPtr<AActor> SubjectKey(Subject);
+        int32 NextRow = 0;
+        for (const FFeedbackEntry& Entry : FeedbackEntries)
+        {
+            if (Entry.Subject == SubjectKey && Entry.ItemRow != INDEX_NONE && Now - Entry.StartedAt <= FeedbackLifetimeSeconds)
+            {
+                NextRow = FMath::Max(NextRow, Entry.ItemRow + 1);
+            }
+        }
+        if (NextRow < MaxItemRows)
+        {
+            ItemRow = NextRow;
+        }
+    }
+    FeedbackEntries.Add({Subject, Feedback.Location, Text, Color, Now, bNextToActor, ItemRow, bAtContact});
+    const auto* Player = Cast<ACoopRPGCharacter>(Subject);
+    UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("GameplayFeedback Kind=%s Subject=%s Slot=%d Amount=%.2f AttackerSlot=%d %s"),
+        *UEnum::GetValueAsString(Feedback.Kind), *GetNameSafe(Subject), Player ? Player->GetDisplaySlot() : 0,
+        Feedback.Amount, Feedback.AttackerSlot, *CoopRPG::Debug::DescribeLogContext(GetOwningPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
 void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
     const ACoopRPGPlayerController& Controller, bool bBoss)
 {
@@ -349,81 +424,6 @@ void ACoopRPGLootHUD::DrawPartyStatus(const ACoopRPGPlayerController& Controller
             : (It->HasMeleeWeapon() ? TEXT("Sword") : TEXT("Unarmed"));
         DrawText(Inventory, FLinearColor::White, X + 10.0f, Y + 47.0f);
     }
-}
-
-void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback)
-{
-    AActor* Subject = Feedback.Subject.Get();
-    FString Text;
-    FLinearColor Color(0.35f, 0.72f, 1.0f);
-    bool bNextToActor = true;
-    const bool bAtContact = Feedback.Kind == ECoopRPGFeedbackKind::ShieldBlocked;
-    switch (Feedback.Kind)
-    {
-    case ECoopRPGFeedbackKind::Damage:
-    {
-        const FString Attacker = Feedback.AttackerSlot > 0 ? FString::Printf(TEXT("P%d"), Feedback.AttackerSlot)
-            : (Feedback.AttackerSlot == 0 ? TEXT("Enemy") : TEXT("Player"));
-        Text = FString::Printf(TEXT("-%.0f HP (By %s)"), Feedback.Amount, *Attacker);
-        Color = FLinearColor(1.0f, 0.36f, 0.33f);
-        bNextToActor = false;
-        if (auto* Player = Cast<ACoopRPGCharacter>(Subject))
-        {
-            Player->FlashPresentationHit();
-        }
-        else if (auto* Enemy = Cast<ACoopRPGEnemy>(Subject))
-        {
-            Enemy->FlashPresentationHit();
-        }
-        break;
-    }
-    case ECoopRPGFeedbackKind::Recovery:
-        Text = FString::Printf(TEXT("+%.0f HP"), Feedback.Amount);
-        Color = FLinearColor(0.36f, 1.0f, 0.55f);
-        bNextToActor = false;
-        break;
-    case ECoopRPGFeedbackKind::WeaponAcquired: Text = TEXT("Melee weapon acquired"); break;
-    case ECoopRPGFeedbackKind::RecoveryAcquired: Text = TEXT("Recovery item acquired"); break;
-    case ECoopRPGFeedbackKind::RecoveryUsed:
-        Text = TEXT("Recovery item used");
-        Color = FLinearColor(1.0f, 0.83f, 0.32f);
-        break;
-    case ECoopRPGFeedbackKind::TeamLootAcquired: Text = TEXT("Team loot acquired"); break;
-    case ECoopRPGFeedbackKind::ShieldBlocked:
-        Text = TEXT("Blocked");
-        Color = FLinearColor(1.0f, 0.78f, 0.24f);
-        bNextToActor = false;
-        PlayShieldImpact(*GetWorld(), Feedback.Location);
-        break;
-    }
-
-    if (FeedbackEntries.Num() >= 24)
-    {
-        FeedbackEntries.RemoveAt(0);
-    }
-    const double Now = GetWorld()->GetTimeSeconds();
-    int32 ItemRow = INDEX_NONE;
-    if (bNextToActor)
-    {
-        const TWeakObjectPtr<AActor> SubjectKey(Subject);
-        int32 NextRow = 0;
-        for (const FFeedbackEntry& Entry : FeedbackEntries)
-        {
-            if (Entry.Subject == SubjectKey && Entry.ItemRow != INDEX_NONE && Now - Entry.StartedAt <= FeedbackLifetimeSeconds)
-            {
-                NextRow = FMath::Max(NextRow, Entry.ItemRow + 1);
-            }
-        }
-        if (NextRow < MaxItemRows)
-        {
-            ItemRow = NextRow;
-        }
-    }
-    FeedbackEntries.Add({Subject, Feedback.Location, Text, Color, Now, bNextToActor, ItemRow, bAtContact});
-    const auto* Player = Cast<ACoopRPGCharacter>(Subject);
-    UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("GameplayFeedback Kind=%s Subject=%s Slot=%d Amount=%.2f AttackerSlot=%d %s"),
-        *UEnum::GetValueAsString(Feedback.Kind), *GetNameSafe(Subject), Player ? Player->GetDisplaySlot() : 0,
-        Feedback.Amount, Feedback.AttackerSlot, *CoopRPG::Debug::DescribeLogContext(GetOwningPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGLootHUD::DrawGameplayFeedback()

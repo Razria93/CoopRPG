@@ -215,12 +215,6 @@ int32 ACoopRPGGameState::RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated)
     return SkirmishDefeats;
 }
 
-void ACoopRPGGameState::OnRep_SkirmishDefeats()
-{
-    UE_LOG(LogCoopRPGRound, Log, TEXT("SkirmishDefeatsReplicated Round=%s Defeated=%d Total=%d"),
-        *RoundId.ToString(), SkirmishDefeats, CoopRPG::Expedition::SkirmishEnemyCount);
-}
-
 bool ACoopRPGGameState::RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop)
 {
     if (!HasAuthority() || !RoundId.IsValid() || !IsRoundPlaying() || !IsValid(Drop) || !Drop->GetDropId().IsValid())
@@ -432,6 +426,12 @@ void ACoopRPGGameState::OnRep_TeamLootCount(int32 PreviousCount)
         PreviousCount, TeamLootCount, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
+void ACoopRPGGameState::OnRep_SkirmishDefeats()
+{
+    UE_LOG(LogCoopRPGRound, Log, TEXT("SkirmishDefeatsReplicated Round=%s Defeated=%d Total=%d"),
+        *RoundId.ToString(), SkirmishDefeats, CoopRPG::Expedition::SkirmishEnemyCount);
+}
+
 void ACoopRPGGameState::OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousStatus)
 {
     OnRep_ExtractionZone();
@@ -480,6 +480,25 @@ void ACoopRPGGameState::UpdatePuzzlePlatePresentation()
     }
     UpdatePuzzlePlate(PuzzlePlateA, PuzzleStatus.OccupantsA);
     UpdatePuzzlePlate(PuzzlePlateB, PuzzleStatus.OccupantsB);
+}
+
+void ACoopRPGGameState::UpdatePuzzlePlate(UDynamicMeshComponent* Plate, uint8 Occupants) const
+{
+    if (!Plate)
+    {
+        return;
+    }
+
+    Plate->SetVisibility(Occupants != 0);
+    if (Occupants)
+    {
+        const bool bP1 = (Occupants & 1) != 0;
+        const bool bP2 = (Occupants & 2) != 0;
+        CastChecked<UMaterialInstanceDynamic>(Plate->GetMaterial(0))->SetVectorParameterValue(
+            TEXT("Color"), CoopRPG::Presentation::PlayerColor(bP1 ? 1 : 2));
+        CastChecked<UMaterialInstanceDynamic>(Plate->GetMaterial(1))->SetVectorParameterValue(
+            TEXT("Color"), CoopRPG::Presentation::PlayerColor(bP2 ? 2 : 1));
+    }
 }
 
 UDynamicMeshComponent* ACoopRPGGameState::CreatePuzzlePlate(FName PlateTag)
@@ -541,25 +560,6 @@ UDynamicMeshComponent* ACoopRPGGameState::CreatePuzzlePlate(FName PlateTag)
     Plate->SetMesh(MoveTemp(Mesh));
     Plate->RegisterComponent();
     return Plate;
-}
-
-void ACoopRPGGameState::UpdatePuzzlePlate(UDynamicMeshComponent* Plate, uint8 Occupants) const
-{
-    if (!Plate)
-    {
-        return;
-    }
-
-    Plate->SetVisibility(Occupants != 0);
-    if (Occupants)
-    {
-        const bool bP1 = (Occupants & 1) != 0;
-        const bool bP2 = (Occupants & 2) != 0;
-        CastChecked<UMaterialInstanceDynamic>(Plate->GetMaterial(0))->SetVectorParameterValue(
-            TEXT("Color"), CoopRPG::Presentation::PlayerColor(bP1 ? 1 : 2));
-        CastChecked<UMaterialInstanceDynamic>(Plate->GetMaterial(1))->SetVectorParameterValue(
-            TEXT("Color"), CoopRPG::Presentation::PlayerColor(bP2 ? 2 : 1));
-    }
 }
 
 void ACoopRPGGameState::OnRep_ReadySlots()

@@ -88,6 +88,105 @@ bool ACoopRPGExtractionZone::ContainsPawn(const APawn& Pawn) const
     return FBox(-ZoneHalfExtent, ZoneHalfExtent).IsInsideOrOn(Offset);
 }
 
+void ACoopRPGExtractionZone::SetPresentationColor(const FLinearColor& Color)
+{
+    if (PresentationColor == Color)
+    {
+        return;
+    }
+    if (!PresentationMaterial)
+    {
+        PresentationMaterial = ZoneVisual->CreateDynamicMaterialInstance(0);
+    }
+    if (PresentationMaterial)
+    {
+        PresentationMaterial->SetVectorParameterValue(TEXT("Color"), Color);
+        PresentationColor = Color;
+    }
+}
+
+void ACoopRPGExtractionZone::PresentSkirmishPortal(bool bActive, bool bCountingDown)
+{
+    if (!CoopRPG::Expedition::IsSkirmish(GetWorld()) || GetNetMode() == NM_DedicatedServer || !HasActorBegunPlay())
+    {
+        return;
+    }
+
+    const uint8 Phase = bCountingDown ? 2 : bActive ? 1 : 0;
+    if (PortalEffectPhase == Phase)
+    {
+        return;
+    }
+    PortalEffectPhase = Phase;
+    const FLinearColor& WaitingTint = bActive ? PortalGuideOpenTeal : PortalGuideLockedTeal;
+    const FLinearColor& GuideTint = bCountingDown ? FLinearColor::White : WaitingTint;
+    const TCHAR* WaitingTone = bActive ? TEXT("Teal") : TEXT("MutedTeal");
+    const TCHAR* GuideTone = bCountingDown ? TEXT("White") : WaitingTone;
+    if (PortalBoundaryMaterial)
+    {
+        PortalBoundaryMaterial->SetVectorParameterValue(TEXT("Color"), GuideTint);
+    }
+    if (auto* Glyph = PortalGlyphMaterial.Get())
+    {
+        Glyph->SetVectorParameterValue(TEXT("GlyphColor"), GuideTint);
+        Glyph->SetScalarParameterValue(TEXT("GlyphOpacity"), bCountingDown ? 0.78f : bActive ? 0.86f : 0.40f);
+    }
+
+    const bool bShowCountdown = bCountingDown && PortalFX->GetAsset();
+    if (bShowCountdown)
+    {
+        PortalFX->Activate(true);
+    }
+    else
+    {
+        PortalFX->DeactivateImmediate();
+    }
+    UE_LOG(LogCoopRPGExtractionZone, Log,
+        TEXT("SkirmishPortalPresentation Phase=%d Asset=%s Niagara=%d Boundary=%s Glyph=%d GlyphTone=%s"),
+        Phase, *GetNameSafe(PortalFX->GetAsset()), bShowCountdown,
+        GuideTone, PortalGlyphMaterial.IsValid(), GuideTone);
+}
+
+void ACoopRPGExtractionZone::OpenPortal()
+{
+    if (bPortalOpened)
+    {
+        return;
+    }
+
+    TArray<AActor*> GateActors;
+    UGameplayStatics::GetAllActorsWithTag(this, ForestPortalGateTag, GateActors);
+    if (GateActors.IsEmpty())
+    {
+        return;
+    }
+
+    bPortalOpened = true;
+    for (AActor* Gate : GateActors)
+    {
+        Gate->SetActorEnableCollision(false);
+        Gate->SetActorHiddenInGame(true);
+    }
+
+    UMaterialInterface* OpenMaterial = nullptr;
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        TArray<AActor*> PortalActors;
+        UGameplayStatics::GetAllActorsWithTag(this, ForestPortalVisualTag, PortalActors);
+        for (AActor* Portal : PortalActors)
+        {
+            if (auto* Surface = Portal->FindComponentByClass<UStaticMeshComponent>(); Surface && Surface->GetStaticMesh())
+            {
+                OpenMaterial = Surface->GetStaticMesh()->GetMaterial(0);
+                Surface->SetMaterial(0, OpenMaterial);
+            }
+        }
+    }
+
+    UE_LOG(LogCoopRPGExtractionZone, Log, TEXT("ForestPortalOpened GateActors=%d PortalMaterial=%s Authority=%d"),
+        GateActors.Num(), *GetNameSafe(OpenMaterial), HasAuthority());
+}
+
 void ACoopRPGExtractionZone::BeginPlay()
 {
     Super::BeginPlay();
@@ -162,103 +261,4 @@ void ACoopRPGExtractionZone::BeginPlay()
     }
 
     PresentSkirmishPortal(false, false);
-}
-
-void ACoopRPGExtractionZone::PresentSkirmishPortal(bool bActive, bool bCountingDown)
-{
-    if (!CoopRPG::Expedition::IsSkirmish(GetWorld()) || GetNetMode() == NM_DedicatedServer || !HasActorBegunPlay())
-    {
-        return;
-    }
-
-    const uint8 Phase = bCountingDown ? 2 : bActive ? 1 : 0;
-    if (PortalEffectPhase == Phase)
-    {
-        return;
-    }
-    PortalEffectPhase = Phase;
-    const FLinearColor& WaitingTint = bActive ? PortalGuideOpenTeal : PortalGuideLockedTeal;
-    const FLinearColor& GuideTint = bCountingDown ? FLinearColor::White : WaitingTint;
-    const TCHAR* WaitingTone = bActive ? TEXT("Teal") : TEXT("MutedTeal");
-    const TCHAR* GuideTone = bCountingDown ? TEXT("White") : WaitingTone;
-    if (PortalBoundaryMaterial)
-    {
-        PortalBoundaryMaterial->SetVectorParameterValue(TEXT("Color"), GuideTint);
-    }
-    if (auto* Glyph = PortalGlyphMaterial.Get())
-    {
-        Glyph->SetVectorParameterValue(TEXT("GlyphColor"), GuideTint);
-        Glyph->SetScalarParameterValue(TEXT("GlyphOpacity"), bCountingDown ? 0.78f : bActive ? 0.86f : 0.40f);
-    }
-
-    const bool bShowCountdown = bCountingDown && PortalFX->GetAsset();
-    if (bShowCountdown)
-    {
-        PortalFX->Activate(true);
-    }
-    else
-    {
-        PortalFX->DeactivateImmediate();
-    }
-    UE_LOG(LogCoopRPGExtractionZone, Log,
-        TEXT("SkirmishPortalPresentation Phase=%d Asset=%s Niagara=%d Boundary=%s Glyph=%d GlyphTone=%s"),
-        Phase, *GetNameSafe(PortalFX->GetAsset()), bShowCountdown,
-        GuideTone, PortalGlyphMaterial.IsValid(), GuideTone);
-}
-
-void ACoopRPGExtractionZone::SetPresentationColor(const FLinearColor& Color)
-{
-    if (PresentationColor == Color)
-    {
-        return;
-    }
-    if (!PresentationMaterial)
-    {
-        PresentationMaterial = ZoneVisual->CreateDynamicMaterialInstance(0);
-    }
-    if (PresentationMaterial)
-    {
-        PresentationMaterial->SetVectorParameterValue(TEXT("Color"), Color);
-        PresentationColor = Color;
-    }
-}
-
-void ACoopRPGExtractionZone::OpenPortal()
-{
-    if (bPortalOpened)
-    {
-        return;
-    }
-
-    TArray<AActor*> GateActors;
-    UGameplayStatics::GetAllActorsWithTag(this, ForestPortalGateTag, GateActors);
-    if (GateActors.IsEmpty())
-    {
-        return;
-    }
-
-    bPortalOpened = true;
-    for (AActor* Gate : GateActors)
-    {
-        Gate->SetActorEnableCollision(false);
-        Gate->SetActorHiddenInGame(true);
-    }
-
-    UMaterialInterface* OpenMaterial = nullptr;
-    if (GetNetMode() != NM_DedicatedServer)
-    {
-        TArray<AActor*> PortalActors;
-        UGameplayStatics::GetAllActorsWithTag(this, ForestPortalVisualTag, PortalActors);
-        for (AActor* Portal : PortalActors)
-        {
-            if (auto* Surface = Portal->FindComponentByClass<UStaticMeshComponent>(); Surface && Surface->GetStaticMesh())
-            {
-                OpenMaterial = Surface->GetStaticMesh()->GetMaterial(0);
-                Surface->SetMaterial(0, OpenMaterial);
-            }
-        }
-    }
-
-    UE_LOG(LogCoopRPGExtractionZone, Log, TEXT("ForestPortalOpened GateActors=%d PortalMaterial=%s Authority=%d"),
-        GateActors.Num(), *GetNameSafe(OpenMaterial), HasAuthority());
 }

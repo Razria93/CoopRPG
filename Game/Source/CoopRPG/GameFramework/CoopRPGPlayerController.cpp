@@ -125,6 +125,24 @@ void ACoopRPGPlayerController::AcknowledgeRoundResult(FGuid RoundId)
     }
 }
 
+void ACoopRPGPlayerController::ResetLobbyReady()
+{
+    if (HasAuthority() && bRoundReady)
+    {
+        bRoundReady = false;
+        ForceNetUpdate();
+    }
+}
+
+void ACoopRPGPlayerController::RestoreTravelRecovery(int32 Count)
+{
+    if (HasAuthority())
+    {
+        RecoveryCount = FMath::Clamp(Count, 0, 1);
+        ForceNetUpdate();
+    }
+}
+
 void ACoopRPGPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
@@ -163,24 +181,6 @@ void ACoopRPGPlayerController::ReadyForRound()
         UE_LOG(LogCoopRPGRoundReady, Log, TEXT("LootReadyRequested Round=%s %s"),
             *State->GetRoundId().ToString(), *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         ServerReadyForRound(State->GetRoundId());
-    }
-}
-
-void ACoopRPGPlayerController::ResetLobbyReady()
-{
-    if (HasAuthority() && bRoundReady)
-    {
-        bRoundReady = false;
-        ForceNetUpdate();
-    }
-}
-
-void ACoopRPGPlayerController::RestoreTravelRecovery(int32 Count)
-{
-    if (HasAuthority())
-    {
-        RecoveryCount = FMath::Clamp(Count, 0, 1);
-        ForceNetUpdate();
     }
 }
 

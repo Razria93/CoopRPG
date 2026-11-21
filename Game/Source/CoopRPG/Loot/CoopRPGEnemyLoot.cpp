@@ -48,6 +48,14 @@ void ACoopRPGEnemyLoot::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGEnemyLoot, bClaimed);
 }
 
+void ACoopRPGEnemyLoot::ConfigureSkirmishDrop(bool bIsPotion, const FVector& Origin)
+{
+    check(HasAuthority());
+    bSkirmishDrop = true;
+    bPotion = bIsPotion;
+    DropOrigin = Origin;
+}
+
 bool ACoopRPGEnemyLoot::TryClaim()
 {
     if (!HasAuthority() || bClaimed)
@@ -61,6 +69,25 @@ bool ACoopRPGEnemyLoot::TryClaim()
     return true;
 }
 
+void ACoopRPGEnemyLoot::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    const double Elapsed = GetWorld()->GetTimeSeconds() - AnimationStart;
+    const double Alpha = FMath::Clamp(Elapsed / 0.48, 0.0, 1.0);
+    const FVector StartOffset = FVector(DropOrigin) - GetActorLocation();
+    const double Lift = FMath::Sin(Alpha * UE_PI) * 66.0;
+    const double Bob = Alpha >= 1.0 ? FMath::Sin((Elapsed - 0.48) * 3.0) * DropBobCm : 0.0;
+    LootVisual->SetRelativeLocation(StartOffset * (1.0 - Alpha)
+        + FVector(0.0, 0.0, SettledVisualOffset * Alpha + Lift + Bob));
+    LootVisual->SetRelativeRotation(FRotator(0.0, Elapsed * 55.0, 0.0));
+    if (!bSettled && Alpha >= 1.0)
+    {
+        bSettled = true;
+        UE_LOG(LogCoopRPGEnemyLoot, Log, TEXT("SkirmishDropSettled Kind=%s BaseFloorGap=%.1f BeamFloorGap=%.1f"),
+            bPotion ? TEXT("Potion") : TEXT("MagicStone"), DropFloatCm, BeamGroundClearanceCm);
+    }
+}
+
 void ACoopRPGEnemyLoot::BeginPlay()
 {
     Super::BeginPlay();
@@ -71,12 +98,17 @@ void ACoopRPGEnemyLoot::BeginPlay()
     OnRep_SkirmishAppearance();
 }
 
-void ACoopRPGEnemyLoot::ConfigureSkirmishDrop(bool bIsPotion, const FVector& Origin)
+void ACoopRPGEnemyLoot::OnRep_DropId()
 {
-    check(HasAuthority());
-    bSkirmishDrop = true;
-    bPotion = bIsPotion;
-    DropOrigin = Origin;
+    UE_LOG(LogCoopRPGEnemyLoot, Log, TEXT("EnemyLootReplicated Actor=%s DropId=%s %s"),
+        *GetName(), *DropId.ToString(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGEnemyLoot::OnRep_Claimed()
+{
+    ApplyClaimPresentation();
+    UE_LOG(LogCoopRPGEnemyLoot, Log, TEXT("EnemyLootClaimReplicated DropId=%s Claimed=%d %s"),
+        *DropId.ToString(), bClaimed ? 1 : 0, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGEnemyLoot::OnRep_SkirmishAppearance()
@@ -113,38 +145,6 @@ void ACoopRPGEnemyLoot::OnRep_SkirmishAppearance()
     UE_LOG(LogCoopRPGEnemyLoot, Log, TEXT("SkirmishDropPresentation Kind=%s Mesh=%s Effect=%s"),
         bPotion ? TEXT("Potion") : TEXT("MagicStone"), *GetNameSafe(LootVisual->GetStaticMesh()),
         *GetNameSafe(RarityEffect->GetAsset()));
-}
-
-void ACoopRPGEnemyLoot::Tick(float DeltaSeconds)
-{
-    Super::Tick(DeltaSeconds);
-    const double Elapsed = GetWorld()->GetTimeSeconds() - AnimationStart;
-    const double Alpha = FMath::Clamp(Elapsed / 0.48, 0.0, 1.0);
-    const FVector StartOffset = FVector(DropOrigin) - GetActorLocation();
-    const double Lift = FMath::Sin(Alpha * UE_PI) * 66.0;
-    const double Bob = Alpha >= 1.0 ? FMath::Sin((Elapsed - 0.48) * 3.0) * DropBobCm : 0.0;
-    LootVisual->SetRelativeLocation(StartOffset * (1.0 - Alpha)
-        + FVector(0.0, 0.0, SettledVisualOffset * Alpha + Lift + Bob));
-    LootVisual->SetRelativeRotation(FRotator(0.0, Elapsed * 55.0, 0.0));
-    if (!bSettled && Alpha >= 1.0)
-    {
-        bSettled = true;
-        UE_LOG(LogCoopRPGEnemyLoot, Log, TEXT("SkirmishDropSettled Kind=%s BaseFloorGap=%.1f BeamFloorGap=%.1f"),
-            bPotion ? TEXT("Potion") : TEXT("MagicStone"), DropFloatCm, BeamGroundClearanceCm);
-    }
-}
-
-void ACoopRPGEnemyLoot::OnRep_DropId()
-{
-    UE_LOG(LogCoopRPGEnemyLoot, Log, TEXT("EnemyLootReplicated Actor=%s DropId=%s %s"),
-        *GetName(), *DropId.ToString(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
-}
-
-void ACoopRPGEnemyLoot::OnRep_Claimed()
-{
-    ApplyClaimPresentation();
-    UE_LOG(LogCoopRPGEnemyLoot, Log, TEXT("EnemyLootClaimReplicated DropId=%s Claimed=%d %s"),
-        *DropId.ToString(), bClaimed ? 1 : 0, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGEnemyLoot::ApplyClaimPresentation()
