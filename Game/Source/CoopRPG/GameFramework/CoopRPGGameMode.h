@@ -39,7 +39,7 @@ private:
     FString GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId);
     bool ReserveRoundTravelSeats(const FString& Destination) const;
     bool IsRoundParticipant(const AController* Controller) const;
-    void AdvanceRoundIfReady(const ACoopRPGGameState& State);
+    void AdvanceRoundIfReady(ACoopRPGGameState& State, const FString& Destination);
 
 private:
     UPROPERTY()
@@ -57,4 +57,7 @@ private:
     bool bTravelAttempted = false;
     bool bParticipantDisconnected = false;
     bool bEnemyCombat = false;
+    bool bExpeditionLobby = false;
+    bool bExpeditionPuzzle = false;
+    bool bExpeditionBoss = false;
 };

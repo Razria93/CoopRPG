@@ -4,6 +4,7 @@
   "Category": "",
   "Description": "Cooperative RPG portfolio",
   "Plugins": [
+    { "Name": "Niagara", "Enabled": true },
     { "Name": "EnhancedInput", "Enabled": true },
     { "Name": "GameplayAbilities", "Enabled": true },
     { "Name": "AndroidFileServer", "Enabled": false }

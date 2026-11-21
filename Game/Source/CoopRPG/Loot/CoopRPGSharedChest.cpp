@@ -2,6 +2,7 @@
 
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
+#include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
 
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimSingleNodeInstance.h"
@@ -52,7 +53,10 @@ ACoopRPGSharedChest::ACoopRPGSharedChest()
 void ACoopRPGSharedChest::BeginPlay()
 {
     Super::BeginPlay();
-    if (GetNetMode() != NM_DedicatedServer && UGameplayStatics::GetCurrentLevelName(this) == TEXT("L_Round_01"))
+    const FString MapName = UGameplayStatics::GetCurrentLevelName(this);
+    if (GetNetMode() != NM_DedicatedServer
+        && (MapName == TEXT("L_Round_01") || MapName == CoopRPG::Expedition::SkirmishMap
+            || MapName == CoopRPG::Expedition::BossMap))
     {
         InitializeForestPresentation();
     }

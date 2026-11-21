@@ -17,6 +17,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "CoreGlobals.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -411,9 +412,10 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
     const bool bShieldLayout = LayoutName.StartsWith(TEXT("shield"));
     const bool bCounterLayout = LayoutName.StartsWith(TEXT("counter"));
     int32 Angle = 0;
-    const bool bAngleLayout = (bShieldLayout || bCounterLayout)
+    const bool bCounterBoundary = Layout == TEXT("counterInside") || Layout == TEXT("counterOutside");
+    const bool bAngleLayout = bCounterBoundary || ((bShieldLayout || bCounterLayout)
         && LexTryParseString(Angle, *LayoutName.Mid(bCounterLayout ? 7 : 6))
-        && Angle >= -180 && Angle <= 180;
+        && Angle >= -180 && Angle <= 180);
     const bool bEnemyCounter = bAngleLayout && bCounterLayout;
     if (!IsProbeEnabled(GetWorld())
         || (Layout != TEXT("front") && Layout != TEXT("away") && Layout != TEXT("wall")
@@ -437,20 +439,28 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
     Enemy->SetActorTickEnabled(false);
     Enemy->GetCharacterMovement()->StopMovementImmediately();
     Character->GetCharacterMovement()->StopMovementImmediately();
-    const FVector EnemyPosition(850.0, 0.0, 90.15);
+    const FVector EnemyPosition(850.0, 0.0, Enemy->GetActorLocation().Z);
     FVector PlayerPosition(Layout == TEXT("far") ? 565.0 : 720.0,
         Character->GetDisplaySlot() == 1 ? -50.0 : 50.0, 90.15);
     if (bAngleLayout || Layout == TEXT("shieldDown"))
     {
         const int32 PositionAngle = bAngleLayout ? Angle : 0;
-        PlayerPosition = EnemyPosition + FRotator(0.0, PositionAngle, 0.0).Vector() * 120.0;
+        double Distance = 120.0;
+        if (Enemy->bLargeExpeditionBoss)
+        {
+            Distance = Enemy->GetCapsuleComponent()->GetScaledCapsuleRadius()
+                + Character->GetCapsuleComponent()->GetScaledCapsuleRadius()
+                + (bCounterBoundary ? Enemy->GetAttackRange() + (Layout == TEXT("counterInside") ? -1.0 : 1.0) : 20.0);
+        }
+        PlayerPosition = EnemyPosition + FRotator(0.0, PositionAngle, 0.0).Vector() * Distance;
+        PlayerPosition.Z = 90.15;
         const bool bRaiseShield = bAngleLayout;
         Enemy->bAttackPending = bRaiseShield;
         Enemy->NextActionTime = GetWorld()->GetTimeSeconds() + (bEnemyCounter ? 1.25 : 4.0);
         Enemy->SetShieldWarning(bRaiseShield ? Character->GetDisplaySlot() : 0, 0.0f,
             bRaiseShield ? Enemy->NextActionTime : 0.0);
     }
-    FRotator Facing = (EnemyPosition - PlayerPosition).Rotation();
+    FRotator Facing(0.0, (EnemyPosition - PlayerPosition).Rotation().Yaw, 0.0);
     Facing.Yaw += Layout == TEXT("away") ? 180.0f : 0.0f;
     Enemy->TeleportTo(EnemyPosition, FRotator::ZeroRotator, false, true);
     Character->TeleportTo(PlayerPosition, Facing, false, true);

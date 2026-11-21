@@ -75,6 +75,8 @@ public:
     void FlashPresentationHit();
     void EnableShieldEncounter();
     bool IsShieldEncounter() const { return bShieldEncounter; }
+    bool IsBlackKnight() const { return Kind == ECoopRPGEnemyKind::BlackKnight; }
+    float GetMeleeRangeBonus() const;
     bool IsShieldRaised() const;
     double GetShieldAngle(const FVector& Position) const;
     const FCoopRPGShieldWarning& GetShieldWarning() const { return ShieldWarning; }
@@ -87,13 +89,16 @@ protected:
 private:
     friend class UCoopRPGCombatProbeComponent;
 
-    ACoopRPGCharacter* FindTarget(float Range) const;
+    ACoopRPGCharacter* FindTarget(float Range, bool bMeasureAttackDistance = false) const;
+    double GetAttackDistance(const ACoopRPGCharacter& Player) const;
+    float GetAttackRange() const;
     void SetShieldWarning(int32 TargetSlot, float FacingYaw, double EndsAt);
     void StopChasing();
     void StopCombat();
     void ResolveAttack(ACoopRPGCharacter* Player);
     void HandleHealthChanged(const FOnAttributeChangeData& Change);
     void SpawnDeathLoot(const FGuid& RoundId);
+    void SpawnSkirmishLoot(const FGuid& RoundId);
     bool ApplyModel();
     void StartAnimation();
     void UpdateAttackPose();
@@ -119,6 +124,8 @@ public:
     static constexpr double ShieldHalfAngleDegrees = 45.0;
 
 private:
+    bool bLargeExpeditionBoss = false;
+
     UPROPERTY()
     TObjectPtr<UAbilitySystemComponent> AbilitySystem;
 

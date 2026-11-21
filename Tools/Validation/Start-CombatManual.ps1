@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$PackageRoot,
     [string]$GameMonitor='',[string]$LogMonitor='',[switch]$ListMonitors,
     [ValidateSet('SideBySide','Stacked')][string]$Layout='SideBySide',
@@ -7,7 +7,7 @@
     [switch]$NoLogViewer,
     [switch]$EnemyCombat,
     [ValidateSet('A','B')][string]$FocusClient='A',
-    [ValidateSet('L_Movement','L_ForestExpedition','L_Round_01')][string]$Map='L_Movement'
+    [ValidateSet('L_Movement','L_ForestExpedition','L_Round_01','L_ExpeditionLobby','L_ExpeditionSkirmish')][string]$Map='L_Movement'
 )
 $ErrorActionPreference='Stop'
 Import-Module (Join-Path $PSScriptRoot 'CombatViewerLayout.psm1') -Force

@@ -5,6 +5,7 @@
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Character/CoopRPGLocomotionAnimInstance.h"
+#include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 
@@ -42,11 +43,17 @@ namespace
     constexpr float ShieldRecoverySeconds = 0.8f;
     constexpr float MovementObservationCm = 40.0f;
     constexpr float BlackKnightStrikeClipTime = 0.4f;
+    constexpr float DefaultCapsuleRadius = 34.0f;
+    constexpr float ExpeditionBossCapsuleRadius = 96.0f;
+    constexpr float ExpeditionBossCapsuleHalfHeight = 152.0f;
+    constexpr float ExpeditionBossModelScale = 2.0f;
+    constexpr float PlayerCapsuleRadiusForLegacyReach = 34.0f;
     constexpr float MushroomCapsuleRadius = 25.0f;
     constexpr float MushroomCapsuleHalfHeight = 44.0f;
     constexpr double GroundRingEndAngle = 135.0;
     constexpr double GroundRingOutline = 1.25;
     constexpr double GroundRingRadius = 82.0;
+    constexpr double ExpeditionBossRingRadius = 114.0;
     constexpr double OuterRingWidth = 7.0;
     constexpr double InnerRingWidth = 2.5;
     constexpr double RingPadding = 5.0;
@@ -107,7 +114,7 @@ ACoopRPGEnemy::ACoopRPGEnemy()
     bReplicates = true;
     SetReplicateMovement(true);
     AutoPossessAI = EAutoPossessAI::Disabled;
-    GetCapsuleComponent()->InitCapsuleSize(34.0f, 88.0f);
+    GetCapsuleComponent()->InitCapsuleSize(DefaultCapsuleRadius, 88.0f);
 
     UCharacterMovementComponent* Movement = GetCharacterMovement();
     Movement->bRunPhysicsWithNoController = true;
@@ -211,7 +218,7 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
     }
     if (bShieldEncounter)
     {
-        if (ACoopRPGCharacter* InRange = FindTarget(AttackRangeCm))
+        if (ACoopRPGCharacter* InRange = FindTarget(GetAttackRange(), true))
         {
             Player = InRange;
             Target = InRange;
@@ -238,8 +245,8 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
     }
 
     const FVector Offset = Player->GetActorLocation() - GetActorLocation();
-    const float Distance = Offset.Size2D();
-    if (Distance > AttackRangeCm)
+    const double Distance = GetAttackDistance(*Player);
+    if (Distance > GetAttackRange())
     {
         if (!bChasing)
         {
@@ -274,7 +281,7 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
                 GetTargetPlayerId(Player), FacingYaw, NextActionTime);
         }
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackStarted Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f Windup=%.2f %s"),
-            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm, WindupSeconds,
+            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, GetAttackRange(), WindupSeconds,
             *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }
@@ -351,20 +358,29 @@ void ACoopRPGEnemy::BeginPlay()
 {
     Super::BeginPlay();
     bMushroomEncounter = Kind == ECoopRPGEnemyKind::Mushroom;
-    if (HasAuthority() && Kind == ECoopRPGEnemyKind::BlackKnight)
-    {
-        EnableShieldEncounter();
-    }
+    bLargeExpeditionBoss = IsBlackKnight() && CoopRPG::Expedition::IsBoss(GetWorld());
     FacingMarker->SetVisibility(bShowFacingMarker && !bMushroomEncounter);
-    if (bMushroomEncounter)
+    if (bMushroomEncounter || bLargeExpeditionBoss)
     {
         const float PreviousHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-        GetCapsuleComponent()->SetCapsuleSize(MushroomCapsuleRadius, MushroomCapsuleHalfHeight);
+        GetCapsuleComponent()->SetCapsuleSize(bLargeExpeditionBoss ? ExpeditionBossCapsuleRadius : MushroomCapsuleRadius,
+            bLargeExpeditionBoss ? ExpeditionBossCapsuleHalfHeight : MushroomCapsuleHalfHeight);
         if (HasAuthority())
         {
             const float NewHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
             AddActorWorldOffset(FVector(0.0, 0.0, NewHalfHeight - PreviousHalfHeight), false, nullptr, ETeleportType::TeleportPhysics);
         }
+    }
+    if (bLargeExpeditionBoss)
+    {
+        UE_LOG(LogCoopRPGEnemy, Log,
+            TEXT("ExpeditionBossGeometry Actor=%s Height=%.1f CapsuleRadius=%.1f CapsuleHalfHeight=%.1f RingOuter=%.1f CounterSurfaceRange=%.1f"),
+            *GetName(), ModelHeight * ExpeditionBossModelScale, GetCapsuleComponent()->GetScaledCapsuleRadius(),
+            GetCapsuleComponent()->GetScaledCapsuleHalfHeight(), ExpeditionBossRingRadius, GetAttackRange());
+    }
+    if (HasAuthority() && IsBlackKnight())
+    {
+        EnableShieldEncounter();
     }
     if (GetNetMode() != NM_DedicatedServer)
     {
@@ -403,7 +419,26 @@ void ACoopRPGEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
-ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range) const
+float ACoopRPGEnemy::GetMeleeRangeBonus() const
+{
+    return bLargeExpeditionBoss ? GetCapsuleComponent()->GetScaledCapsuleRadius() - DefaultCapsuleRadius : 0.0f;
+}
+
+float ACoopRPGEnemy::GetAttackRange() const
+{
+    // Preserve the old counter's reach outside both bodies as the boss capsule grows.
+    return bLargeExpeditionBoss ? AttackRangeCm - DefaultCapsuleRadius - PlayerCapsuleRadiusForLegacyReach
+        : AttackRangeCm;
+}
+
+double ACoopRPGEnemy::GetAttackDistance(const ACoopRPGCharacter& Player) const
+{
+    const double CenterDistance = FVector::Dist2D(GetActorLocation(), Player.GetActorLocation());
+    return bLargeExpeditionBoss ? FMath::Max(0.0, CenterDistance - GetCapsuleComponent()->GetScaledCapsuleRadius()
+        - Player.GetCapsuleComponent()->GetScaledCapsuleRadius()) : CenterDistance;
+}
+
+ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range, bool bMeasureAttackDistance) const
 {
     ACoopRPGCharacter* Nearest = nullptr;
     double NearestDistanceSquared = FMath::Square(static_cast<double>(Range));
@@ -413,7 +448,8 @@ ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range) const
         auto* Player = PlayerController ? Cast<ACoopRPGCharacter>(PlayerController->GetPawn()) : nullptr;
         if (IsLivePlayer(Player))
         {
-            const double DistanceSquared = FVector::DistSquared2D(GetActorLocation(), Player->GetActorLocation());
+            const double DistanceSquared = bMeasureAttackDistance ? FMath::Square(GetAttackDistance(*Player))
+                : FVector::DistSquared2D(GetActorLocation(), Player->GetActorLocation());
             if (DistanceSquared > FMath::Square(static_cast<double>(Range)))
             {
                 continue;
@@ -475,16 +511,16 @@ void ACoopRPGEnemy::StopCombat()
 void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
 {
     const bool bLivePlayer = IsLivePlayer(Player);
-    const double Distance = bLivePlayer ? FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) : 0.0;
+    const double Distance = bLivePlayer ? GetAttackDistance(*Player) : 0.0;
     const bool bOutsideFacing = bShieldEncounter && bLivePlayer
         && GetShieldAngle(Player->GetActorLocation()) > ShieldHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
-    if (!bLivePlayer || Distance > AttackRangeCm || bOutsideFacing)
+    if (!bLivePlayer || Distance > GetAttackRange() || bOutsideFacing)
     {
         const TCHAR* Reason = !bLivePlayer ? TEXT("InvalidTarget")
-            : Distance > AttackRangeCm ? TEXT("OutOfRange") : TEXT("OutsideFacing");
+            : Distance > GetAttackRange() ? TEXT("OutOfRange") : TEXT("OutsideFacing");
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackMissed Actor=%s Target=%s TargetPlayerId=%d Reason=%s Distance=%.2f Range=%.2f %s"),
             *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Reason,
-            Distance, AttackRangeCm, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+            Distance, GetAttackRange(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
         return;
     }
 
@@ -501,7 +537,7 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
         }
     }
     UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackHit Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f HP=%.2f->%.2f %s"),
-        *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm,
+        *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, GetAttackRange(),
         HealthBefore, Player->GetHealth(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
@@ -525,11 +561,19 @@ void ACoopRPGEnemy::HandleHealthChanged(const FOnAttributeChangeData& Change)
     UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyDeathConfirmed Actor=%s Round=%s HP=%.2f->%.2f PendingAttackDiscarded=%d %s"),
         *GetName(), *RoundId.ToString(), Change.OldValue, Change.NewValue, bDiscardedAttack ? 1 : 0,
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
-    SpawnDeathLoot(RoundId);
+    if (!CoopRPG::Expedition::IsBoss(GetWorld()))
+    {
+        SpawnDeathLoot(RoundId);
+    }
 }
 
 void ACoopRPGEnemy::SpawnDeathLoot(const FGuid& RoundId)
 {
+    if (bMushroomEncounter)
+    {
+        SpawnSkirmishLoot(RoundId);
+        return;
+    }
     const FVector Location = GetActorLocation() - FVector(0.0f, 0.0f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 20.0f);
     const FTransform Transform(FRotator(0.0f, 45.0f, 0.0f), Location, FVector(0.35f));
     FActorSpawnParameters SpawnParameters;
@@ -552,6 +596,92 @@ void ACoopRPGEnemy::SpawnDeathLoot(const FGuid& RoundId)
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
+void ACoopRPGEnemy::SpawnSkirmishLoot(const FGuid& RoundId)
+{
+    auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State || !State->IsRoundPlaying())
+    {
+        return;
+    }
+
+    const FVector Feet = GetActorLocation() - GetActorUpVector() * GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+    const FVector Origin = Feet + FVector(0.0, 0.0, 35.0);
+    const FCollisionObjectQueryParams WorldGeometry(ECC_WorldStatic);
+    const FCollisionQueryParams Query(SCENE_QUERY_STAT(SkirmishLootLanding), false, this);
+    TArray<FVector, TInlineAllocator<2>> Locations;
+    constexpr double SearchAngles[] = {-90.0, 90.0, 0.0, 180.0, -45.0, 45.0, -135.0, 135.0};
+    for (const double SearchRadius : {85.0, 135.0, 185.0})
+    {
+        for (const double Angle : SearchAngles)
+        {
+            const FVector Point = Feet + FRotator(0.0, GetActorRotation().Yaw + Angle, 0.0).Vector() * SearchRadius;
+            FHitResult Ground;
+            if (!GetWorld()->LineTraceSingleByObjectType(Ground, Point + FVector(0.0, 0.0, 55.0),
+                Point - FVector(0.0, 0.0, 70.0), WorldGeometry, Query) || Ground.ImpactNormal.Z < 0.7)
+            {
+                continue;
+            }
+            const FVector Landing = Ground.ImpactPoint + FVector(0.0, 0.0, ACoopRPGEnemyLoot::GroundToAnchorCm);
+            if (GetWorld()->OverlapAnyTestByObjectType(Landing, FQuat::Identity, WorldGeometry,
+                FCollisionShape::MakeSphere(28.0f), Query)
+                || Locations.ContainsByPredicate([&Landing](const FVector& Other)
+                    { return FVector::DistSquared2D(Landing, Other) < FMath::Square(85.0); }))
+            {
+                continue;
+            }
+            Locations.Add(Landing);
+            if (Locations.Num() == 2)
+            {
+                break;
+            }
+        }
+        if (Locations.Num() == 2)
+        {
+            break;
+        }
+    }
+
+    // Keep the portal item obtainable even if the enemy dies against unusual level geometry.
+    if (Locations.IsEmpty())
+    {
+        Locations.Add(Origin);
+        UE_LOG(LogCoopRPGEnemy, Warning, TEXT("SkirmishLootLandingFallback Round=%s"), *RoundId.ToString());
+    }
+    if (Locations.Num() == 1)
+    {
+        const FVector Second = Locations[0] + FVector(0.0, 0.0, 78.0);
+        Locations.Add(Second);
+        UE_LOG(LogCoopRPGEnemy, Warning, TEXT("SkirmishLootLandingFallback Round=%s SecondDropElevated=1"), *RoundId.ToString());
+    }
+
+    for (int32 Index = 0; Index < Locations.Num(); ++Index)
+    {
+        const bool bPotion = Index == 1;
+        const FTransform Transform(Locations[Index]);
+        auto* Drop = GetWorld()->SpawnActorDeferred<ACoopRPGEnemyLoot>(ACoopRPGEnemyLoot::StaticClass(), Transform,
+            nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+        if (Drop)
+        {
+            Drop->ConfigureSkirmishDrop(bPotion, Origin);
+            Drop->FinishSpawning(Transform);
+        }
+        if (!State->RegisterEnemyLoot(Drop))
+        {
+            if (IsValid(Drop))
+            {
+                Drop->Destroy();
+            }
+            UE_LOG(LogCoopRPGEnemy, Error, TEXT("EnemyLootSpawnFailed Actor=%s Round=%s Kind=%s"),
+                *GetName(), *RoundId.ToString(), bPotion ? TEXT("Potion") : TEXT("MagicStone"));
+            continue;
+        }
+
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyLootSpawned Actor=%s Enemy=%s Round=%s DropId=%s Kind=%s Landing=%s"),
+            *GetNameSafe(Drop), *GetName(), *RoundId.ToString(), *Drop->GetDropId().ToString(),
+            bPotion ? TEXT("Potion") : TEXT("MagicStone"), *Locations[Index].ToCompactString());
+    }
+}
+
 bool ACoopRPGEnemy::ApplyModel()
 {
     if (Kind == ECoopRPGEnemyKind::Training)
@@ -565,7 +695,9 @@ bool ACoopRPGEnemy::ApplyModel()
         return false;
     }
     const FBoxSphereBounds Bounds = Asset->GetBounds();
-    const double Scale = ModelHeight / FMath::Max(Bounds.BoxExtent.Z * 2.0, 1.0);
+    const bool bLargeModel = bLargeExpeditionBoss || (IsBlackKnight() && CoopRPG::Expedition::IsBoss(GetWorld()));
+    const double Height = bLargeModel ? ModelHeight * ExpeditionBossModelScale : ModelHeight;
+    const double Scale = Height / FMath::Max(Bounds.BoxExtent.Z * 2.0, 1.0);
     const FVector Offset(0.0, 0.0, -GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight()
         - (Bounds.Origin.Z - Bounds.BoxExtent.Z) * Scale);
     const FRotator Facing(0.0, ModelYaw, 0.0);
@@ -834,14 +966,15 @@ void ACoopRPGEnemy::CreateGroundRing()
         AddRingArc(RingMesh, Inner, Outer, -ShieldHalfAngleDegrees, ShieldHalfAngleDegrees, 0.15, RingFrontMaterial);
         AddRingArc(RingMesh, Inner, Outer, ShieldHalfAngleDegrees, GroundRingEndAngle, 0.15, RingSideMaterial);
     };
-    const double OuterInnerEdge = GroundRingRadius - OuterRingWidth;
+    const double Radius = bLargeExpeditionBoss ? ExpeditionBossRingRadius : GroundRingRadius;
+    const double OuterInnerEdge = Radius - OuterRingWidth;
     const double InnerOuterEdge = OuterInnerEdge - RingPadding;
-    AddStroke(OuterInnerEdge, GroundRingRadius);
+    AddStroke(OuterInnerEdge, Radius);
     AddStroke(InnerOuterEdge - InnerRingWidth, InnerOuterEdge);
 
     // Start the arrow inside the outer stroke so they read as one continuous shape.
-    AddRingArrow(RingMesh, GroundRingRadius - 3.0, 8.5, GroundRingRadius + 15.0, 0.05, RingOutlineMaterial);
-    AddRingArrow(RingMesh, GroundRingRadius - 2.0, 6.5, GroundRingRadius + 12.5, 0.25, RingFrontMaterial);
+    AddRingArrow(RingMesh, Radius - 3.0, 8.5, Radius + 15.0, 0.05, RingOutlineMaterial);
+    AddRingArrow(RingMesh, Radius - 2.0, 6.5, Radius + 12.5, 0.25, RingFrontMaterial);
     FMeshNormals::InitializeOverlayToPerVertexNormals(RingMesh.Attributes()->PrimaryNormals());
 
     GroundRing = NewObject<UDynamicMeshComponent>(this);

@@ -5,6 +5,8 @@
 #include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGPlayerController.generated.h"
 
+class ACoopRPGEnemyLoot;
+
 class ACoopRPGSharedChest;
 class UCoopRPGCombatProbeComponent;
 
@@ -31,6 +33,8 @@ public:
     void AcknowledgeRoundResult(FGuid RoundId);
 
     bool IsRoundReady() const { return bRoundReady; }
+    void ResetLobbyReady();
+    void RestoreTravelRecovery(int32 Count);
     ACoopRPGSharedChest* GetOpenedChest() const { return OpenedChest.Get(); }
     int32 GetRecoveryCount() const { return RecoveryCount; }
 
@@ -69,11 +73,13 @@ private:
     void ClientGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
 
     void TakeEnemyLoot();
+    void TakeEnemyPotion();
+    void RequestEnemyDrop(bool bPotion);
 
     UFUNCTION(Server, Reliable)
     void ServerTakeEnemyLoot(FGuid RoundId, FGuid DropId);
 
-    const TCHAR* GetEnemyLootRejection(FGuid RoundId, FGuid DropId) const;
+    const TCHAR* GetEnemyLootRejection(FGuid RoundId, FGuid DropId, const ACoopRPGEnemyLoot* Drop) const;
 
     void LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId) const;
 
