@@ -56,6 +56,8 @@
 <a id="phase2-current"></a>
 ## 2차 MVP 현행 작업 · 2026-11-18
 
+11/21 기준 후속 구현 순서는 [2인 원정 4구간](#four-area-expedition)에 있다. 로비에서 보스 최종 결과까지 같은 패키지의 로컬 2인 검증을 통과했다.
+
 ### 별도 PC 2인 기준선
 
 - **확인 완료** · `c0fed32` 패키지로 본가 PC의 전용 서버·A와 노트북 B를 Tailscale로 연결했다. 두 PC에서 준비·무장·전리품 획득·공동 탈출을 진행해 양쪽의 성공·1점과 `L_Movement_Round2` 재접속 및 준비 대기를 확인했다. [수동 검증 결과와 원본 위치](Validation/LanBaseline.md#manual-tailscale-20261118)
@@ -96,11 +98,54 @@ MVP02-02는 두 히어로 조작·이동과 장착·서버 기본 공격에 이�
 
 숲 방패 적의 도형 표시에 BlackKnight의 원본 도끼·방패와 대기·추적·방어·공격 모션을 적용했다. 로컬 전용 서버와 두 클라이언트에서 기존 45° 경계, P1·P2 예고와 타격, 공동 탈출·양쪽 1점을 확인했다. [BlackKnight 패키지 검증](Validation/ForestExpedition.md#black-knight-presentation)
 
+**숲 포탈 1단계 · 로컬 패키지 통과.** 전투 중 입구를 바위로 막고 팀 전리품을 회수하면 통행을 열면서 포탈을 검정에서 초록으로 바꾼다. 한 명이 먼저 도착하면 기다리고 두 명이 함께 3초를 유지하면 성공·1점을 한 번 확정한다. [통로 개방과 공동 탈출 검증](Validation/ForestExpedition.md#forest-portal-gate-first)
+
+**숲 포탈 2단계 · 로컬 패키지 통과.** 열쇠 획득 후 방향을 안내하고, 서버 기준의 동료 대기·공동 카운트다운을 고정된 HUD 위치에 표시한다. A·B 선진입과 이탈 뒤 초기화, 재진입 후 양쪽 1점을 확인했다. 사용자가 실제 동선에서 방향·동료 대기와 공동 탈출을 확인했다. 카운트다운 중 이탈·초기화의 원본은 자동 회차에 있다. 다음은 포탈 변경을 PR 범위로 정리하는 단계다. 다음 원정 맵 연결은 이후 범위다. [방향 안내와 카운트다운](Validation/ForestExpedition.md#forest-portal-guidance) · [사용자 확인](Validation/ForestExpedition.md#forest-portal-guidance-user)
+
 두 히어로의 이동·방향 전환은 로컬 두 창에서 사용자가 직접 확인했다. 현재 카메라 거리 650cm를 채택했다. [수동 결과와 카메라 보완](Validation/ForestExpedition.md#two-heroes-camera)
 
 두 히어로에 각자 스켈레톤의 대기·걷기·달리기를 연결했다. 기존 최고 속도 300cm/s에서 보폭이 맞도록 이동 클립과 재생 속도를 히어로별로 정했다. [선정 근거와 패키지 검증](Validation/ForestExpedition.md#hero-locomotion)
 
 게임 콘텐츠를 히어로별 애니메이션, 숲 머티리얼, 비공개 공급 파일로 재분류했다. 새 작업 폴더의 복원과 같은 PC에서의 새 패키지 2인 완주를 확인했다. [비공개 에셋 배치와 재검증](Validation/ForestExpedition.md#asset-layout)
+
+**숲 공용 상자 · 로컬 패키지 통과.** 기존 위치와 거리 제한을 사용해 RPG 상자와 1초 열기 모션을 연결했다. 두 화면의 단일 재생, 개인 열람창, 기존 지급과 같은 맵 재도전 초기 상태를 확인했다. 사용자가 고정 카메라에서 상자 배치와 열기를 직접 확인했다. 다음 후보는 기존 팀 전리품에 포탈 활성화석 외형을 입히는 작업이다. [숲 공용 상자 검증](Validation/ForestExpedition.md#forest-shared-chest-presentation) · [사용자 확인](Validation/ForestExpedition.md#forest-shared-chest-user)
+
+<a id="four-area-expedition"></a>
+### 2차 MVP · 2인 원정 4구간 완주
+
+목표일은 2026-11-21~22이며 패키지 전용 서버와 클라이언트 두 개로 로비 → 잡몹전 → 2인 퍼즐 → 보스 결과까지 연결한다. `feat/expedition-flow`의 계승 기준은 BlackKnight, 숲 포탈과 공용 상자를 함께 올린 로컬 스냅샷이다. 원래 포탈·상자 워크트리를 보존한다.
+
+| 시점 | 작업 순서 | 완료 기준 |
+| --- | --- | --- |
+| 11/21 · 첫 검증 | 통합 패키지에서 BlackKnight·포탈·새 상자를 대조한다. 로비의 두 사람 준비를 서버에서 집계해 잡몹전 맵으로 이동한다. | 한 사람 또는 중복 준비에서는 출발하지 않는다. 두 사람이 준비하면 서버 맵 전환 1회, 원래 두 클라이언트의 슬롯과 새 라운드 ID, 잡몹전 초기 상태를 확인한다. |
+| 11/21 · 잡몹전 | 잡몹 한 종, 물약·마법석 드롭, 포탈 상태 연출과 하단 HUD·최소 인벤토리. | 처치·두 종류 지급·공동 탈출·양쪽 1점과 실패 후 같은 구간 초기화를 확인한다. 성공 목적지와 물약 이월은 퍼즐 연결에서 확인한다. |
+| 11/22 · 퍼즐과 보스 | 서로 다른 발판에 한 명씩 서는 퍼즐, 기존 BlackKnight 정면 차단과 측면 적중을 활용한 보스, 최종 결과. | 로비부터 양쪽 최종 결과까지 한 패키지로 완주한다. 실패 후 같은 구간 재도전과 마지막 성공 단일 확정을 확인한다. |
+
+드롭은 서버가 겹치지 않는 두 착지 위치와 단일 지급을 정한다. 물약은 개인 `NS_LootDrop_Uncommon`, 마법석은 팀 `NS_LootDrop_Rare`를 사용한다. 튀어나오기와 부유는 로컬 표시다. 포탈은 `NS_MagicCircle_19`의 흰 기본 원을 사용하고 `MAinCircle2`와 `CircleDefault Cylinder2`는 비활성화 후보로 확인한다. 마법석 획득 시 `MeshRing` 3종을 추가하고, 공동 대기 중에만 `Particle`을 켠다. 이탈하면 진행 표시를 지운다. 원형 표시와 서버 영역의 경계를 맞춘다.
+
+적중·차단의 VFX·SFX를 먼저 붙이고 HitStop·CameraShake는 적중 확정 뒤에 화면 효과로 조정한다. 닉네임·HP·스태미나는 하단에 표시하고 최소 인벤토리는 장착 무기·개인 물약·팀 마법석을 보여준다. 성공 전환의 보유 상태는 물약 최대 1개 이월을 목표로 별도 검증한다. 일정이 밀리면 화면 효과 강도와 인벤토리 꾸미기를 뒤로 미룬다.
+
+코드 검토는 서버 권한·보상 중복·맵 전환과 초기화부터 병렬 진행한다. 포트폴리오와 촬영 목록을 함께 준비하고 통과한 빌드의 두 화면과 같은 회차의 원본 로그를 연결한다.
+
+**첫 검증 통과** · UE 5.8.4 전용 서버와 클라이언트 두 개로 같은 빌드의 `L_Round_01`에서 BlackKnight·상자·포탈을 대조했다. `L_ExpeditionLobby`에서 한 사람의 반복 준비는 출발하지 않았고, 두 명이 준비하면 `L_ExpeditionSkirmish`로 한 번 이동했다. 기존 슬롯과 영웅을 유지했고, 출발 직전 한 명이 나가면 대기했고 재접속·재준비 후에만 이동했다. 새 라운드에서 다시 두 명이 준비하면 전투가 시작됐다. 다음 구현은 잡몹 외형과 물약·마법석 드롭이다. [패키지 검증과 원본](Validation/ForestExpedition.md#expedition-first-transition)
+
+**잡몹전 완료** · 같은 패키지의 로비부터 잡몹전 성공 화면까지 전용 서버와 클라이언트 두 개로 확인했다. Mushroom, 물약·마법석, 포탈 대기·이탈·재진입, 동시 획득 단일 지급과 시간 초과 후 잡몹전 초기화가 통과했다. 다음은 2인 퍼즐 맵과 잡몹전 성공 경로를 연결하고, 물약 최대 1개 이월과 퍼즐 상태 초기화를 시험하는 작업이다. [잡몹전 패키지 검증](Validation/ForestExpedition.md#expedition-skirmish-completion)
+
+**잡몹전 시각 보완 검증** · 사용자 영상에서 지적한 버섯 배치·공격 정면·발밑 정보와 시체, 드롭 크기·빔, 포탈 판정 원과 이펙트를 보완했다. 전용 서버와 두 화면에서 공격 방향, 획득, 이탈과 공동 탈출 1점을 재확인했다. [보완 패키지 근거](Validation/ForestExpedition.md#expedition-skirmish-polish)
+
+**적 에셋 배치·동작 정리** · 버섯·블랙나이트 배치 BP와 이동·전투 애니메이션을 적용하고, 두 화면에서 잡몹전 완주와 방패전 경계를 재검증했다. 버섯 80cm는 비교용 잠정값이다. [분류와 이동표](Planning/ContentLayout.md) · [검증 기록](Validation/ForestExpedition.md#enemy-asset-layout)
+
+**포탈·드롭 표시 보완** · 바닥 문양과 공동 탈출 링을 가이드 원에 맞추고, 물약과 마법석의 이름을 명확히 구분했다. [전후 화면과 공동 탈출 회귀](Validation/ForestExpedition.md#portal-loot-visuals)
+
+**청록색 포탈 가이드** · 외곽 원과 바닥 문양을 같은 색으로 맞췄다. 두 명이 진입하면 19번 전송 연출을 켜고 이탈하면 초기화한다. [2인 재진입과 공동 탈출 검증](Validation/ForestExpedition.md#portal-teal-countdown)
+
+**2인 퍼즐 연결 · 로컬 패키지 통과.** 잡몹전 성공 뒤 두 참가자가 새 퍼즐로 이동했다. 개인 물약은 A 2→1, B 0→0을 확인했다. 새 라운드로 시작해 한 명이 먼저 서거나 두 명이 같은 발판에 서면 대기하고 서로 다른 발판에 한 명씩 서면 성공을 한 번 확정한다. [퍼즐 상태·화면·원본 로그](Validation/ForestExpedition.md#expedition-puzzle-transition)
+
+**원정 4구간 완주 · 로컬 패키지 통과.** 로비부터 BlackKnight 처치까지 같은 전용 서버와 클라이언트 A·B로 검증했다. 정면 차단과 양쪽 측면 타격, 최종 성공 1회와 양쪽 결과를 확인했다. 같은 패키지의 보스 재도전 회차는 28/28를 통과했다. 다음은 검증된 패키지와 사용자 직접 플레이·포트폴리오 근거를 정리하는 작업이다. [완주와 원본 로그](Validation/ForestExpedition.md#expedition-boss-completion)
+
+**퍼즐·보스 표시 보완 · 로컬 패키지 통과.** 퍼즐 발판은 체크무늬 없는 무광 회색·P1 노랑·P2 파랑 및 공동 점유를 구분한다. 보스전은 잡몹전과 같은 상자 외형을 쓰며 BlackKnight의 2배 메시·몸체 충돌·방향 링을 적용했다. 서버와 두 클라이언트에서 방패 경계, 반격 거리, 우회와 최종 결과를 확인했다. 사용자가 무광 발판을 적용한 최신 패키지로 직접 완주했다. 다음은 원정 4구간 변경을 정리하고 대표 검증 자료를 고르는 작업이다. [퍼즐과 보스 보완 검증](Validation/ForestExpedition.md#expedition-plate-boss-polish) · [수동 완주](Validation/ForestExpedition.md#puzzle-plate-manual-run)
+
+**잡몹전 네 마리 · 로컬 패키지 통과.** 기존 버섯 네 마리를 전투 구역 모서리 방향에 배치했다. 서버가 네 마리 처치를 집계하고 물약과 마법석은 각각 두 번째, 네 번째 처치에서 한 번 나온다. 로컬 A·B에서 전투·포탈·원정 최종 결과와 실패 후 `0/4` 초기화를 재검증했다. 사용자가 첫 실패 후 같은 맵으로 재진입해 네 마리 처치와 공동 탈출을 직접 확인했다. 다음은 원정 변경을 기능별로 정리하고 사용자 수동 회차를 대표 검증 근거에 연결하는 작업이다. [네 마리 배치와 패키지 검증](Validation/ForestExpedition.md#expedition-four-mushrooms) · [수동 회차와 원본 로그](Validation/ForestExpedition.md#expedition-four-mushrooms-manual)
 
 ## V01 재현 결과와 V02 첫 단타
 
