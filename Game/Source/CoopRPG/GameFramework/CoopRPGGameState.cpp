@@ -2,7 +2,9 @@
 
 #include "CoopRPGExtractionZone.h"
 #include "CoopRPGExpeditionMaps.h"
+#include "CoopRPGGameMode.h"
 #include "CoopRPGLootHUD.h"
+#include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
@@ -73,6 +75,7 @@ void ACoopRPGGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGGameState, EnemyPotion);
     DOREPLIFETIME(ACoopRPGGameState, EnemyLoot);
     DOREPLIFETIME(ACoopRPGGameState, TeamLootCount);
+    DOREPLIFETIME(ACoopRPGGameState, SkirmishDefeats);
 }
 
 void ACoopRPGGameState::InitializeLobby()
@@ -187,6 +190,35 @@ void ACoopRPGGameState::SetReadySlots(const FCoopRPGReadySlots& Slots)
         ReadySlots = Slots;
         ForceNetUpdate();
     }
+}
+
+int32 ACoopRPGGameState::RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated)
+{
+    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+    if (!HasAuthority() || !IsRoundPlaying() || !IsValid(Defeated) || !Defeated->IsDead()
+        || !Mode || !Mode->IsSkirmishEnemy(Defeated))
+    {
+        return 0;
+    }
+
+    bool bAlreadyCounted = false;
+    DefeatedSkirmishEnemies.Add(TWeakObjectPtr<ACoopRPGEnemy>(Defeated), &bAlreadyCounted);
+    if (bAlreadyCounted)
+    {
+        return 0;
+    }
+
+    SkirmishDefeats = DefeatedSkirmishEnemies.Num();
+    UE_LOG(LogCoopRPGRound, Log, TEXT("SkirmishDefeat Round=%s Enemy=%s Defeated=%d Total=%d"),
+        *RoundId.ToString(), *Defeated->GetName(), SkirmishDefeats, CoopRPG::Expedition::SkirmishEnemyCount);
+    ForceNetUpdate();
+    return SkirmishDefeats;
+}
+
+void ACoopRPGGameState::OnRep_SkirmishDefeats()
+{
+    UE_LOG(LogCoopRPGRound, Log, TEXT("SkirmishDefeatsReplicated Round=%s Defeated=%d Total=%d"),
+        *RoundId.ToString(), SkirmishDefeats, CoopRPG::Expedition::SkirmishEnemyCount);
 }
 
 bool ACoopRPGGameState::RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop)

@@ -34,11 +34,11 @@ namespace
 
     using CoopRPG::Debug::DescribePlayerRequestContext;
 
-    const TCHAR* SweepForEnemy(const AActor* Attacker, const AActor* Target, const FVector& Direction, uint32 Swing)
+    const TCHAR* SweepForEnemy(const AActor* Attacker, AActor*& Target, const FVector& Direction, uint32 Swing,
+        const ACoopRPGGameMode* Skirmish = nullptr)
     {
         const FVector Start = Attacker->GetActorLocation();
-        const FVector TargetDelta = Target->GetActorLocation() - Start;
-        if (FVector::DotProduct(Direction, TargetDelta) <= 0.0)
+        if (!Skirmish && FVector::DotProduct(Direction, Target->GetActorLocation() - Start) <= 0.0)
         {
             return TEXT("OutsideSwing");
         }
@@ -59,20 +59,46 @@ namespace
         // Resolve the earliest contact per actor and let world geometry win ties at an obstacle.
         int32 EnemyContacts = 0;
         float EnemyTime = TNumericLimits<float>::Max();
+        double EnemyDistance = TNumericLimits<double>::Max();
         float ObstacleTime = TNumericLimits<float>::Max();
+        AActor* ClosestEnemy = nullptr;
         for (const FHitResult& Contact : Contacts)
         {
-            if (Contact.GetActor() == Target)
+            AActor* HitActor = Contact.GetActor();
+            if (Skirmish)
+            {
+                const auto* Enemy = Cast<ACoopRPGEnemy>(HitActor);
+                if (Skirmish->IsSkirmishEnemy(Enemy) && !Enemy->IsDead()
+                    && FVector::DotProduct(Direction, Enemy->GetActorLocation() - Start) > 0.0)
+                {
+                    const double Distance = FVector::DistSquared2D(Start, Enemy->GetActorLocation());
+                    const bool bTied = Contact.Time == EnemyTime;
+                    if (Contact.Time < EnemyTime || (bTied && (Distance < EnemyDistance
+                        || (Distance == EnemyDistance && ClosestEnemy && HitActor->GetFName().LexicalLess(ClosestEnemy->GetFName())))))
+                    {
+                        EnemyTime = Contact.Time;
+                        EnemyDistance = Distance;
+                        ClosestEnemy = HitActor;
+                    }
+                }
+            }
+            else if (HitActor == Target)
             {
                 ++EnemyContacts;
                 EnemyTime = FMath::Min(EnemyTime, Contact.Time);
+                continue;
             }
-            else if (const UPrimitiveComponent* Component = Contact.GetComponent();
+
+            if (const UPrimitiveComponent* Component = Contact.GetComponent();
                 Component && Component->GetCollisionObjectType() != ECC_Pawn
                 && Component->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block)
             {
                 ObstacleTime = FMath::Min(ObstacleTime, Contact.Time);
             }
+        }
+        if (Skirmish)
+        {
+            Target = ClosestEnemy;
         }
 
         UE_CLOG(EnemyContacts > 1, LogCoopRPGMelee, Log,
@@ -188,7 +214,12 @@ void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     }
 
     auto* GameMode = Attacker->GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
-    AActor* Target = GameMode ? GameMode->GetMeleeTarget() : nullptr;
+    AActor* Target = nullptr;
+    if (GameMode)
+    {
+        Target = GameMode->IsSkirmishEncounter()
+            ? GameMode->FindClosestSkirmishEnemy(Attacker->GetActorLocation()) : GameMode->GetMeleeTarget();
+    }
     const UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target, false);
     const FGameplayAttribute HealthAttribute = UCoopRPGCombatAttributes::GetHealthAttribute();
     if (!IsValid(TargetASC) || TargetASC->GetNumericAttribute(HealthAttribute) <= 0.0f)
@@ -306,6 +337,15 @@ void UCoopRPGMeleeAbility::ResolveHit()
         || (PendingRound.IsValid() && (!State || !State->IsRoundPlaying() || State->GetRoundId() != PendingRound)))
     {
         MissReason = TEXT("NotPlaying");
+    }
+    else if (GameMode && GameMode->IsSkirmishEncounter())
+    {
+        MissReason = SweepForEnemy(Attacker, Target, AttackDirection, AttackSequence, GameMode);
+        if (!MissReason)
+        {
+            TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target, false);
+            Distance = FVector::Dist2D(Attacker->GetActorLocation(), Target->GetActorLocation());
+        }
     }
     else if (!IsValid(TargetASC) || !GameMode || GameMode->GetMeleeTarget() != Target
         || TargetASC->GetNumericAttribute(HealthAttribute) <= 0.0f)

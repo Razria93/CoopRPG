@@ -15,6 +15,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/PackageName.h"
@@ -76,7 +77,19 @@ AActor* ACoopRPGGameMode::GetMeleeTarget() const
         return AttackTarget.Get();
     }
     const auto* State = GetGameState<ACoopRPGGameState>();
-    return State && State->IsRoundPlaying() && IsValid(Enemy.Get()) && !Enemy->IsDead() ? Enemy.Get() : nullptr;
+    if (!State || !State->IsRoundPlaying())
+    {
+        return nullptr;
+    }
+    if (bExpeditionSkirmish)
+    {
+        const auto* FirstAlive = SkirmishEnemies.FindByPredicate([](const ACoopRPGEnemy* Candidate)
+        {
+            return IsValid(Candidate) && !Candidate->IsDead();
+        });
+        return FirstAlive ? FirstAlive->Get() : nullptr;
+    }
+    return IsValid(Enemy.Get()) && !Enemy->IsDead() ? Enemy.Get() : nullptr;
 }
 
 void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
@@ -158,6 +171,38 @@ void ACoopRPGGameMode::AcknowledgeRoundResult(ACoopRPGPlayerController* Player, 
     }
 }
 
+bool ACoopRPGGameMode::IsSkirmishEnemy(const ACoopRPGEnemy* Candidate) const
+{
+    return bExpeditionSkirmish && Candidate && SkirmishEnemies.ContainsByPredicate(
+        [Candidate](const ACoopRPGEnemy* Registered) { return Registered == Candidate; });
+}
+
+ACoopRPGEnemy* ACoopRPGGameMode::FindClosestSkirmishEnemy(const FVector& Origin) const
+{
+    const auto* State = GetGameState<ACoopRPGGameState>();
+    if (!State || !State->IsRoundPlaying())
+    {
+        return nullptr;
+    }
+
+    ACoopRPGEnemy* Closest = nullptr;
+    double BestDistance = TNumericLimits<double>::Max();
+    for (ACoopRPGEnemy* Candidate : SkirmishEnemies)
+    {
+        if (!IsValid(Candidate) || Candidate->IsDead())
+        {
+            continue;
+        }
+        const double Distance = FVector::DistSquared2D(Origin, Candidate->GetActorLocation());
+        if (Distance < BestDistance)
+        {
+            Closest = Candidate;
+            BestDistance = Distance;
+        }
+    }
+    return Closest;
+}
+
 void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
     Super::InitGame(MapName, Options, ErrorMessage);
@@ -165,6 +210,7 @@ void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, 
     bExpeditionLobby = CurrentMap == CoopRPG::Expedition::LobbyMap;
     bExpeditionPuzzle = CurrentMap == CoopRPG::Expedition::PuzzleMap;
     bExpeditionBoss = CurrentMap == CoopRPG::Expedition::BossMap;
+    bExpeditionSkirmish = CurrentMap == CoopRPG::Expedition::SkirmishMap;
     bEnemyCombat = !bExpeditionLobby && !bExpeditionPuzzle
         && (UGameplayStatics::HasOption(Options, TEXT("EnemyCombat")) || UsesPlacedRoundActors(CurrentMap));
 }
@@ -205,9 +251,32 @@ void ACoopRPGGameMode::BeginPlay()
     {
         auto* Chest = Cast<ACoopRPGSharedChest>(UGameplayStatics::GetActorOfClass(this, ACoopRPGSharedChest::StaticClass()));
         auto* Zone = Cast<ACoopRPGExtractionZone>(UGameplayStatics::GetActorOfClass(this, ACoopRPGExtractionZone::StaticClass()));
-        Enemy = Cast<ACoopRPGEnemy>(UGameplayStatics::GetActorOfClass(this, ACoopRPGEnemy::StaticClass()));
+        if (bExpeditionSkirmish)
+        {
+            for (TActorIterator<ACoopRPGEnemy> It(GetWorld()); It; ++It)
+            {
+                if (It->IsMushroom())
+                {
+                    SkirmishEnemies.Add(*It);
+                }
+            }
+            ensureMsgf(SkirmishEnemies.Num() == CoopRPG::Expedition::SkirmishEnemyCount,
+                TEXT("Skirmish requires %d placed mushrooms, found %d."),
+                CoopRPG::Expedition::SkirmishEnemyCount, SkirmishEnemies.Num());
+            for (const ACoopRPGEnemy* Mushroom : SkirmishEnemies)
+            {
+                UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("SkirmishEnemyPlaced Actor=%s Position=%s HP=%.0f"),
+                    *Mushroom->GetName(), *Mushroom->GetActorLocation().ToCompactString(), Mushroom->GetHealth());
+            }
+        }
+        else
+        {
+            Enemy = Cast<ACoopRPGEnemy>(UGameplayStatics::GetActorOfClass(this, ACoopRPGEnemy::StaticClass()));
+        }
         auto* State = GetGameState<ACoopRPGGameState>();
-        if (ensureMsgf(Chest && IsValid(Enemy.Get()) && State
+        const bool bHasEnemies = bExpeditionSkirmish
+            ? SkirmishEnemies.Num() == CoopRPG::Expedition::SkirmishEnemyCount : IsValid(Enemy.Get());
+        if (ensureMsgf(Chest && bHasEnemies && State
             && (bExpeditionBoss ? !Zone && Enemy->IsBlackKnight() : IsValid(Zone)),
             TEXT("Round map %s has missing or incompatible round actors."), *MapName))
         {
@@ -216,7 +285,8 @@ void ACoopRPGGameMode::BeginPlay()
             const TCHAR* Event = MapName == ForestMapName ? TEXT("ForestStageReady") : TEXT("RoundStageReady");
             const FString Extraction = Zone ? Zone->GetActorLocation().ToString() : FString(TEXT("None"));
             UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("%s Map=%s Chest=%s Enemy=%s Extraction=%s"),
-                Event, *MapName, *Chest->GetActorLocation().ToString(), *Enemy->GetActorLocation().ToString(), *Extraction);
+                Event, *MapName, *Chest->GetActorLocation().ToString(),
+                bExpeditionSkirmish ? TEXT("SkirmishGroup") : *Enemy->GetActorLocation().ToString(), *Extraction);
         }
         return;
     }

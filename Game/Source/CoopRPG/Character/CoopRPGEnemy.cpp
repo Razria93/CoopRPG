@@ -179,6 +179,12 @@ float ACoopRPGEnemy::GetHealth() const
     return CombatAttributes->GetHealth();
 }
 
+float ACoopRPGEnemy::GetMaxHealth() const
+{
+    return IsMushroom() && CoopRPG::Expedition::IsSkirmish(GetWorld())
+        ? CoopRPG::Expedition::SkirmishEnemyHealth : UCoopRPGCombatAttributes::MaxHealth;
+}
+
 void ACoopRPGEnemy::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
@@ -405,6 +411,10 @@ void ACoopRPGEnemy::BeginPlay()
     SetActorTickEnabled(!bDead && (HasAuthority() || Animation));
     if (HasAuthority())
     {
+        if (IsMushroom() && CoopRPG::Expedition::IsSkirmish(GetWorld()))
+        {
+            AbilitySystem->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetHealthAttribute(), GetMaxHealth());
+        }
         AbilitySystem->GetGameplayAttributeValueChangeDelegate(UCoopRPGCombatAttributes::GetHealthAttribute())
             .AddUObject(this, &ACoopRPGEnemy::HandleHealthChanged);
     }
@@ -556,12 +566,21 @@ void ACoopRPGEnemy::HandleHealthChanged(const FOnAttributeChangeData& Change)
     ApplyDeathPresentation();
     ForceNetUpdate();
 
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     const FGuid RoundId = State ? State->GetRoundId() : FGuid();
     UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyDeathConfirmed Actor=%s Round=%s HP=%.2f->%.2f PendingAttackDiscarded=%d %s"),
         *GetName(), *RoundId.ToString(), Change.OldValue, Change.NewValue, bDiscardedAttack ? 1 : 0,
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
-    if (!CoopRPG::Expedition::IsBoss(GetWorld()))
+    if (CoopRPG::Expedition::IsSkirmish(GetWorld()))
+    {
+        const int32 Defeats = State ? State->RegisterSkirmishDefeat(this) : 0;
+        if (Defeats == CoopRPG::Expedition::SkirmishPotionDefeats
+            || Defeats == CoopRPG::Expedition::SkirmishEnemyCount)
+        {
+            SpawnSkirmishLoot(RoundId, Defeats == CoopRPG::Expedition::SkirmishPotionDefeats);
+        }
+    }
+    else if (!CoopRPG::Expedition::IsBoss(GetWorld()))
     {
         SpawnDeathLoot(RoundId);
     }
@@ -571,7 +590,7 @@ void ACoopRPGEnemy::SpawnDeathLoot(const FGuid& RoundId)
 {
     if (bMushroomEncounter)
     {
-        SpawnSkirmishLoot(RoundId);
+        SpawnSkirmishLoot(RoundId, false, true);
         return;
     }
     const FVector Location = GetActorLocation() - FVector(0.0f, 0.0f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 20.0f);
@@ -596,7 +615,7 @@ void ACoopRPGEnemy::SpawnDeathLoot(const FGuid& RoundId)
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
-void ACoopRPGEnemy::SpawnSkirmishLoot(const FGuid& RoundId)
+void ACoopRPGEnemy::SpawnSkirmishLoot(const FGuid& RoundId, bool bPotion, bool bBoth)
 {
     auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     if (!State || !State->IsRoundPlaying())
@@ -608,6 +627,7 @@ void ACoopRPGEnemy::SpawnSkirmishLoot(const FGuid& RoundId)
     const FVector Origin = Feet + FVector(0.0, 0.0, 35.0);
     const FCollisionObjectQueryParams WorldGeometry(ECC_WorldStatic);
     const FCollisionQueryParams Query(SCENE_QUERY_STAT(SkirmishLootLanding), false, this);
+    const int32 DropCount = bBoth ? 2 : 1;
     TArray<FVector, TInlineAllocator<2>> Locations;
     constexpr double SearchAngles[] = {-90.0, 90.0, 0.0, 180.0, -45.0, 45.0, -135.0, 135.0};
     for (const double SearchRadius : {85.0, 135.0, 185.0})
@@ -630,12 +650,12 @@ void ACoopRPGEnemy::SpawnSkirmishLoot(const FGuid& RoundId)
                 continue;
             }
             Locations.Add(Landing);
-            if (Locations.Num() == 2)
+            if (Locations.Num() == DropCount)
             {
                 break;
             }
         }
-        if (Locations.Num() == 2)
+        if (Locations.Num() == DropCount)
         {
             break;
         }
@@ -647,7 +667,7 @@ void ACoopRPGEnemy::SpawnSkirmishLoot(const FGuid& RoundId)
         Locations.Add(Origin);
         UE_LOG(LogCoopRPGEnemy, Warning, TEXT("SkirmishLootLandingFallback Round=%s"), *RoundId.ToString());
     }
-    if (Locations.Num() == 1)
+    if (bBoth && Locations.Num() == 1)
     {
         const FVector Second = Locations[0] + FVector(0.0, 0.0, 78.0);
         Locations.Add(Second);
@@ -656,13 +676,13 @@ void ACoopRPGEnemy::SpawnSkirmishLoot(const FGuid& RoundId)
 
     for (int32 Index = 0; Index < Locations.Num(); ++Index)
     {
-        const bool bPotion = Index == 1;
+        const bool bDropIsPotion = bBoth ? Index == 1 : bPotion;
         const FTransform Transform(Locations[Index]);
         auto* Drop = GetWorld()->SpawnActorDeferred<ACoopRPGEnemyLoot>(ACoopRPGEnemyLoot::StaticClass(), Transform,
             nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
         if (Drop)
         {
-            Drop->ConfigureSkirmishDrop(bPotion, Origin);
+            Drop->ConfigureSkirmishDrop(bDropIsPotion, Origin);
             Drop->FinishSpawning(Transform);
         }
         if (!State->RegisterEnemyLoot(Drop))
@@ -672,13 +692,13 @@ void ACoopRPGEnemy::SpawnSkirmishLoot(const FGuid& RoundId)
                 Drop->Destroy();
             }
             UE_LOG(LogCoopRPGEnemy, Error, TEXT("EnemyLootSpawnFailed Actor=%s Round=%s Kind=%s"),
-                *GetName(), *RoundId.ToString(), bPotion ? TEXT("Potion") : TEXT("MagicStone"));
+                *GetName(), *RoundId.ToString(), bDropIsPotion ? TEXT("Potion") : TEXT("MagicStone"));
             continue;
         }
 
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyLootSpawned Actor=%s Enemy=%s Round=%s DropId=%s Kind=%s Landing=%s"),
             *GetNameSafe(Drop), *GetName(), *RoundId.ToString(), *Drop->GetDropId().ToString(),
-            bPotion ? TEXT("Potion") : TEXT("MagicStone"), *Locations[Index].ToCompactString());
+            bDropIsPotion ? TEXT("Potion") : TEXT("MagicStone"), *Locations[Index].ToCompactString());
     }
 }
 

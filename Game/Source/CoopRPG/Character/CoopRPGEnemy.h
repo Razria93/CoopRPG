@@ -67,6 +67,7 @@ public:
 
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
     float GetHealth() const;
+    float GetMaxHealth() const;
     virtual void Tick(float DeltaSeconds) override;
     virtual void OnRep_ReplicatedMovement() override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -75,6 +76,7 @@ public:
     void FlashPresentationHit();
     void EnableShieldEncounter();
     bool IsShieldEncounter() const { return bShieldEncounter; }
+    bool IsMushroom() const { return Kind == ECoopRPGEnemyKind::Mushroom; }
     bool IsBlackKnight() const { return Kind == ECoopRPGEnemyKind::BlackKnight; }
     float GetMeleeRangeBonus() const;
     bool IsShieldRaised() const;
@@ -98,7 +100,7 @@ private:
     void ResolveAttack(ACoopRPGCharacter* Player);
     void HandleHealthChanged(const FOnAttributeChangeData& Change);
     void SpawnDeathLoot(const FGuid& RoundId);
-    void SpawnSkirmishLoot(const FGuid& RoundId);
+    void SpawnSkirmishLoot(const FGuid& RoundId, bool bPotion, bool bBoth = false);
     bool ApplyModel();
     void StartAnimation();
     void UpdateAttackPose();

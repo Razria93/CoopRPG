@@ -20,6 +20,10 @@ public:
 
     ACoopRPGAttackTarget* GetAttackTarget() const;
     AActor* GetMeleeTarget() const;
+    bool IsSkirmishEncounter() const { return bExpeditionSkirmish; }
+    bool IsSkirmishEnemy(const ACoopRPGEnemy* Candidate) const;
+    ACoopRPGEnemy* FindClosestSkirmishEnemy(const FVector& Origin) const;
+    const TArray<TObjectPtr<ACoopRPGEnemy>>& GetSkirmishEnemies() const { return SkirmishEnemies; }
     void UpdateLootRoundPhase(const AController* Leaving = nullptr);
     void AcknowledgeRoundResult(ACoopRPGPlayerController* Player, FGuid RoundId);
 
@@ -48,6 +52,9 @@ private:
     UPROPERTY()
     TObjectPtr<ACoopRPGEnemy> Enemy;
 
+    UPROPERTY()
+    TArray<TObjectPtr<ACoopRPGEnemy>> SkirmishEnemies;
+
     TWeakObjectPtr<APlayerController> PlayerSlots[2];
     FString ValidationClientLabels[2];
     FString LastValidationParticipants;
@@ -60,4 +67,5 @@ private:
     bool bExpeditionLobby = false;
     bool bExpeditionPuzzle = false;
     bool bExpeditionBoss = false;
+    bool bExpeditionSkirmish = false;
 };

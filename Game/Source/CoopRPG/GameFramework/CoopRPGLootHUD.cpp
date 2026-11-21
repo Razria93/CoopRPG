@@ -253,9 +253,13 @@ void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
     }
     else
     {
-        const TCHAR* Objective = bBoss ? TEXT("Defeat the Black Knight") : TEXT("Defeat the mushroom");
+        const FString Objective = bBoss ? FString(TEXT("Defeat the Black Knight"))
+            : CoopRPG::Expedition::IsSkirmish(GetWorld())
+                ? FString::Printf(TEXT("Mushrooms defeated  %d/%d"), State.GetSkirmishDefeats(),
+                    CoopRPG::Expedition::SkirmishEnemyCount)
+                : FString(TEXT("Defeat the mushroom"));
         const TCHAR* Hint = bStoneOnGround ? TEXT("[T] Pick up magic stone")
-            : LocalHero && LocalHero->HasMeleeWeapon() ? Objective : TEXT("[E] Open the chest");
+            : LocalHero && LocalHero->HasMeleeWeapon() ? *Objective : TEXT("[E] Open the chest");
         DrawText(Hint, PanelAccent, PanelTextX, PanelPad + 33.0f);
     }
 
@@ -449,7 +453,7 @@ void ACoopRPGLootHUD::DrawGameplayFeedback()
             const double Height = bSkirmish ? -It->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 76.0;
             DrawHealthNameplate(It->GetActorLocation() + FVector(0.0, 0.0, Height),
                 bSkirmish ? TEXT("Mushroom") : TEXT("Enemy"), It->GetHealth(),
-                CoopRPG::Presentation::EnemyColor(), AttackTargetSlot, bSkirmish);
+                CoopRPG::Presentation::EnemyColor(), AttackTargetSlot, bSkirmish, FMath::RoundToInt(It->GetMaxHealth()));
         }
     }
 
@@ -541,7 +545,7 @@ void ACoopRPGLootHUD::DrawWorldLabel(const FVector& Location, const FString& Tex
 }
 
 void ACoopRPGLootHUD::DrawHealthNameplate(const FVector& Location, const FString& Name, float Health,
-    const FLinearColor& Color, int32 AttackTargetSlot, bool bBelowFeet)
+    const FLinearColor& Color, int32 AttackTargetSlot, bool bBelowFeet, int32 MaxHealth)
 {
     const FVector Screen = Project(Location);
     if (Screen.Z <= 0.0f || Screen.X < 0.0f || Screen.X >= Canvas->ClipX || Screen.Y < 0.0f || Screen.Y >= Canvas->ClipY)
@@ -550,8 +554,7 @@ void ACoopRPGLootHUD::DrawHealthNameplate(const FVector& Location, const FString
     }
 
     const FString NameLine = FString::Printf(TEXT("[%s]"), *Name);
-    const FString HealthLine = FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Health),
-        static_cast<int32>(UCoopRPGCombatAttributes::MaxHealth));
+    const FString HealthLine = FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Health), MaxHealth);
     float NameWidth, NameHeight, HealthWidth, HealthHeight;
     GetTextSize(NameLine, NameWidth, NameHeight);
     GetTextSize(HealthLine, HealthWidth, HealthHeight);

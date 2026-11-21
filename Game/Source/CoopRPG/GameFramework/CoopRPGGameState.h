@@ -5,6 +5,7 @@
 #include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGGameState.generated.h"
 
+class ACoopRPGEnemy;
 class ACoopRPGEnemyLoot;
 class ACoopRPGExtractionZone;
 class ACoopRPGSharedChest;
@@ -149,6 +150,7 @@ public:
     void MulticastMeleeSweepTrace(const FCoopRPGMeleeSweepTrace& Trace);
 
     void SetReadySlots(const FCoopRPGReadySlots& Slots);
+    int32 RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated);
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);
     static constexpr int32 RoundCapacity = 2;
@@ -171,6 +173,7 @@ public:
     ACoopRPGEnemyLoot* GetEnemyPotion() const { return EnemyPotion.Get(); }
     ACoopRPGEnemyLoot* GetEnemyLoot() const { return EnemyLoot.Get(); }
     int32 GetTeamLootCount() const { return TeamLootCount; }
+    int32 GetSkirmishDefeats() const { return SkirmishDefeats; }
     const FCoopRPGReadySlots& GetReadySlots() const { return ReadySlots; }
     const FCoopRPGPuzzleStatus& GetPuzzleStatus() const { return PuzzleStatus; }
 
@@ -186,6 +189,9 @@ private:
 
     UFUNCTION()
     void OnRep_TeamLootCount(int32 PreviousCount);
+
+    UFUNCTION()
+    void OnRep_SkirmishDefeats();
 
     UFUNCTION()
     void OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousStatus);
@@ -232,4 +238,9 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_TeamLootCount)
     int32 TeamLootCount = 0;
+
+    UPROPERTY(ReplicatedUsing = OnRep_SkirmishDefeats)
+    int32 SkirmishDefeats = 0;
+
+    TSet<TWeakObjectPtr<ACoopRPGEnemy>> DefeatedSkirmishEnemies;
 };

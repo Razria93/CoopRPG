@@ -40,7 +40,7 @@ private:
     void DrawWorldLabel(const FVector& Location, const FString& Text, const FLinearColor& Color,
         FVector2D Offset = FVector2D::ZeroVector, int32 ItemRow = INDEX_NONE);
     void DrawHealthNameplate(const FVector& Location, const FString& Name, float Health, const FLinearColor& Color,
-        int32 AttackTargetSlot = INDEX_NONE, bool bBelowFeet = false);
+        int32 AttackTargetSlot = INDEX_NONE, bool bBelowFeet = false, int32 MaxHealth = 100);
 
     void DrawRoundWaiting(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, int32 Stage);
     void DrawRoundResult(const ACoopRPGGameState& State, ACoopRPGPlayerController& Controller, int32 Stage);

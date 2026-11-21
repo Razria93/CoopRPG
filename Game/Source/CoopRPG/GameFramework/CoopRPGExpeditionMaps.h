@@ -6,6 +6,9 @@ namespace CoopRPG::Expedition
 {
     inline constexpr TCHAR LobbyMap[] = TEXT("L_ExpeditionLobby");
     inline constexpr TCHAR SkirmishMap[] = TEXT("L_ExpeditionSkirmish");
+    inline constexpr int32 SkirmishEnemyCount = 4;
+    inline constexpr int32 SkirmishPotionDefeats = 2;
+    inline constexpr float SkirmishEnemyHealth = 40.0f;
     inline constexpr TCHAR SkirmishPackage[] = TEXT("/Game/Maps/L_ExpeditionSkirmish");
 
     inline constexpr TCHAR PuzzleMap[] = TEXT("L_ExpeditionPuzzle");
