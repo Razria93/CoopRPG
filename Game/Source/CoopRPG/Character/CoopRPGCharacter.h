@@ -12,6 +12,7 @@ class UBlendSpace;
 class UCoopRPGCombatAttributes;
 class UInputAction;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class UStaticMeshComponent;
 enum class ECoopRPGHero : uint8;
 struct FInputActionValue;
@@ -123,6 +124,8 @@ private:
     UPROPERTY(ReplicatedUsing = OnRep_DisplaySlot)
     int32 DisplaySlot = 0;
 
+    // The constructor asset finder keeps the material referenced.
+    TObjectPtr<UMaterialInterface> HeroHitDarkenMaterial = nullptr;
     FTimerHandle HitFlashTimer;
     FTimerHandle MeleeFacingTimer;
 

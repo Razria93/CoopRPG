@@ -5,10 +5,12 @@
 #include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGGameState.generated.h"
 
+class ACoopRPGEnemy;
 class ACoopRPGEnemyLoot;
 class ACoopRPGExtractionZone;
 class ACoopRPGSharedChest;
 class UCoopRPGCombatProbeComponent;
+class UDynamicMeshComponent;
 
 UENUM()
 enum class ECoopRPGRoundPhase : uint8
@@ -25,7 +27,9 @@ enum class ECoopRPGRoundEndReason : uint8
     Disconnected,
     Death,
     Timeout,
-    Extracted
+    Extracted,
+    PuzzleSolved,
+    BossDefeated
 };
 
 USTRUCT()
@@ -43,10 +47,32 @@ struct FCoopRPGRoundStatus
     double RoundDeadline = 0.0;
 
     UPROPERTY()
+    int32 ExtractionPlayersInside = 0;
+
+    UPROPERTY()
     ECoopRPGRoundEndReason EndReason = ECoopRPGRoundEndReason::None;
 
     UPROPERTY()
     int32 TeamScore = 0;
+};
+
+USTRUCT()
+struct FCoopRPGPuzzleStatus
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FVector PlateA = FVector::ZeroVector;
+
+    UPROPERTY()
+    FVector PlateB = FVector::ZeroVector;
+
+    // Bit 0 represents P1 and bit 1 represents P2.
+    UPROPERTY()
+    uint8 OccupantsA = 0;
+
+    UPROPERTY()
+    uint8 OccupantsB = 0;
 };
 
 UENUM()
@@ -112,6 +138,8 @@ class COOPRPG_API ACoopRPGGameState : public AGameStateBase
 public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+    void InitializeLobby();
+    void InitializePuzzle(const FVector& PlateA, const FVector& PlateB);
     void InitializeLootRound(ACoopRPGSharedChest* Chest, ACoopRPGExtractionZone* Zone);
     void SetRoundPlaying(bool bPlaying);
 
@@ -122,9 +150,12 @@ public:
     void MulticastMeleeSweepTrace(const FCoopRPGMeleeSweepTrace& Trace);
 
     void SetReadySlots(const FCoopRPGReadySlots& Slots);
+    int32 RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated);
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);
-    void EvaluateRound(bool bDisconnected, bool bDeath, bool bBothInside);
+
+    void EvaluateRound(bool bDisconnected, bool bDeath, int32 PlayersInside, bool bBossDefeated = false);
+    void EvaluatePuzzle(bool bDisconnected, bool bDeath, uint8 OccupantsA, uint8 OccupantsB);
     double GetRoundRemainingSeconds() const;
     double GetExtractionRemainingSeconds() const;
     FString GetRoundTravelDestination() const;
@@ -134,26 +165,47 @@ public:
     bool IsRoundPlaying() const { return RoundStatus.Phase == ECoopRPGRoundPhase::Playing; }
     bool HasRoundResult() const { return RoundStatus.Phase == ECoopRPGRoundPhase::Result; }
     bool IsExtractionInProgress() const { return RoundStatus.ExtractionDeadline > 0.0; }
+    int32 GetExtractionPlayersInside() const { return RoundStatus.ExtractionPlayersInside; }
     ACoopRPGExtractionZone* GetExtractionZone() const { return ExtractionZone.Get(); }
     ECoopRPGRoundEndReason GetRoundEndReason() const { return RoundStatus.EndReason; }
     int32 GetTeamScore() const { return RoundStatus.TeamScore; }
+    ACoopRPGEnemyLoot* GetEnemyPotion() const { return EnemyPotion.Get(); }
     ACoopRPGEnemyLoot* GetEnemyLoot() const { return EnemyLoot.Get(); }
     int32 GetTeamLootCount() const { return TeamLootCount; }
+    int32 GetSkirmishDefeats() const { return SkirmishDefeats; }
     const FCoopRPGReadySlots& GetReadySlots() const { return ReadySlots; }
+    const FCoopRPGPuzzleStatus& GetPuzzleStatus() const { return PuzzleStatus; }
 
 private:
     friend class UCoopRPGCombatProbeComponent;
 
+    void FinishRound(ECoopRPGRoundEndReason Reason, double Now, bool bDisconnected, bool bDeath,
+        bool bTimeout, bool bExtractionReady);
     void UpdateExtraction(bool bEligible, double Now);
+
+    UFUNCTION()
+    void OnRep_ExtractionZone();
 
     UFUNCTION()
     void OnRep_TeamLootCount(int32 PreviousCount);
 
     UFUNCTION()
+    void OnRep_SkirmishDefeats();
+
+    UFUNCTION()
     void OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousStatus);
 
     UFUNCTION()
+    void OnRep_PuzzleStatus();
+    void UpdatePuzzlePlatePresentation();
+    void UpdatePuzzlePlate(UDynamicMeshComponent* Plate, uint8 Occupants) const;
+    UDynamicMeshComponent* CreatePuzzlePlate(FName PlateTag);
+
+    UFUNCTION()
     void OnRep_ReadySlots();
+
+public:
+    static constexpr int32 RoundCapacity = 2;
 
 private:
     UPROPERTY(Replicated)
@@ -168,12 +220,29 @@ private:
     UPROPERTY(ReplicatedUsing = OnRep_ReadySlots)
     FCoopRPGReadySlots ReadySlots;
 
-    UPROPERTY(Replicated)
+    UPROPERTY(ReplicatedUsing = OnRep_PuzzleStatus)
+    FCoopRPGPuzzleStatus PuzzleStatus;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UDynamicMeshComponent> PuzzlePlateA;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UDynamicMeshComponent> PuzzlePlateB;
+
+    UPROPERTY(ReplicatedUsing = OnRep_ExtractionZone)
     TObjectPtr<ACoopRPGExtractionZone> ExtractionZone;
 
     UPROPERTY(Replicated)
     TObjectPtr<ACoopRPGEnemyLoot> EnemyLoot;
 
+    UPROPERTY(Replicated)
+    TObjectPtr<ACoopRPGEnemyLoot> EnemyPotion;
+
     UPROPERTY(ReplicatedUsing = OnRep_TeamLootCount)
     int32 TeamLootCount = 0;
+
+    UPROPERTY(ReplicatedUsing = OnRep_SkirmishDefeats)
+    int32 SkirmishDefeats = 0;
+
+    TSet<TWeakObjectPtr<ACoopRPGEnemy>> DefeatedSkirmishEnemies;
 };

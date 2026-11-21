@@ -125,6 +125,24 @@ void ACoopRPGPlayerController::AcknowledgeRoundResult(FGuid RoundId)
     }
 }
 
+void ACoopRPGPlayerController::ResetLobbyReady()
+{
+    if (HasAuthority() && bRoundReady)
+    {
+        bRoundReady = false;
+        ForceNetUpdate();
+    }
+}
+
+void ACoopRPGPlayerController::RestoreTravelRecovery(int32 Count)
+{
+    if (HasAuthority())
+    {
+        RecoveryCount = FMath::Clamp(Count, 0, 1);
+        ForceNetUpdate();
+    }
+}
+
 void ACoopRPGPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
@@ -134,6 +152,7 @@ void ACoopRPGPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACoopRPGPlayerController::TakeRecoveryItem);
     InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ACoopRPGPlayerController::TakeMeleeWeapon);
     InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACoopRPGPlayerController::UseRecoveryItem);
+    InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ACoopRPGPlayerController::TakeEnemyPotion);
     InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ACoopRPGPlayerController::TakeEnemyLoot);
 }
 
@@ -292,6 +311,7 @@ void ACoopRPGPlayerController::ServerSetChestOpen_Implementation(ACoopRPGSharedC
     if (OpenedChest != Chest)
     {
         OpenedChest = Chest;
+        Chest->RecordFirstOpen();
         ForceNetUpdate();
         UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestOpened Chest=%s Round=%s Stock=%d WeaponStock=%d %s"),
             *GetNameSafe(Chest), *RoundId.ToString(), Chest->GetRecoveryStock(), Chest->GetWeaponStock(),
@@ -439,8 +459,18 @@ void ACoopRPGPlayerController::ClientGameplayFeedback_Implementation(const FCoop
 
 void ACoopRPGPlayerController::TakeEnemyLoot()
 {
+    RequestEnemyDrop(false);
+}
+
+void ACoopRPGPlayerController::TakeEnemyPotion()
+{
+    RequestEnemyDrop(true);
+}
+
+void ACoopRPGPlayerController::RequestEnemyDrop(bool bPotion)
+{
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    const ACoopRPGEnemyLoot* Drop = State ? State->GetEnemyLoot() : nullptr;
+    const ACoopRPGEnemyLoot* Drop = State ? (bPotion ? State->GetEnemyPotion() : State->GetEnemyLoot()) : nullptr;
     if (IsValid(Drop) && State->GetRoundId().IsValid() && Drop->GetDropId().IsValid())
     {
         UE_LOG(LogCoopRPGEnemyLootRequest, Log, TEXT("EnemyLootTakeRequested Round=%s DropId=%s %s"),
@@ -455,8 +485,20 @@ void ACoopRPGPlayerController::ServerTakeEnemyLoot_Implementation(FGuid RoundId,
     auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     const int32 Before = State ? State->GetTeamLootCount() : 0;
     const FString Context = CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__));
-    const TCHAR* Failure = GetEnemyLootRejection(RoundId, DropId);
-    if (!Failure && State->TryGrantEnemyLoot(State->GetEnemyLoot()))
+    auto* Potion = State ? State->GetEnemyPotion() : nullptr;
+    const bool bPotion = IsValid(Potion) && Potion->GetDropId() == DropId;
+    auto* Drop = bPotion ? Potion : (State ? State->GetEnemyLoot() : nullptr);
+    const TCHAR* Failure = GetEnemyLootRejection(RoundId, DropId, Drop);
+    if (!Failure && bPotion && Drop->TryClaim())
+    {
+        const int32 Previous = RecoveryCount++;
+        ForceNetUpdate();
+        ClientGameplayFeedback({ECoopRPGFeedbackKind::RecoveryAcquired, GetPawn()});
+        UE_LOG(LogCoopRPGEnemyLootRequest, Log, TEXT("EnemyPotionGranted Round=%s DropId=%s Recovery=%d->%d %s"),
+            *RoundId.ToString(), *DropId.ToString(), Previous, RecoveryCount, *Context);
+        return;
+    }
+    if (!Failure && !bPotion && State->TryGrantEnemyLoot(Drop))
     {
         State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::TeamLootAcquired, GetPawn()});
         UE_LOG(LogCoopRPGEnemyLootRequest, Log, TEXT("EnemyLootGranted Round=%s DropId=%s TeamLoot=%d->%d %s"),
@@ -468,7 +510,7 @@ void ACoopRPGPlayerController::ServerTakeEnemyLoot_Implementation(FGuid RoundId,
         *RoundId.ToString(), *DropId.ToString(), Failure ? Failure : TEXT("AlreadyClaimed"), Before, *Context);
 }
 
-const TCHAR* ACoopRPGPlayerController::GetEnemyLootRejection(FGuid RoundId, FGuid DropId) const
+const TCHAR* ACoopRPGPlayerController::GetEnemyLootRejection(FGuid RoundId, FGuid DropId, const ACoopRPGEnemyLoot* Drop) const
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId)
@@ -480,7 +522,6 @@ const TCHAR* ACoopRPGPlayerController::GetEnemyLootRejection(FGuid RoundId, FGui
         return TEXT("NotPlaying");
     }
 
-    const ACoopRPGEnemyLoot* Drop = State->GetEnemyLoot();
     if (!IsValid(Drop) || !DropId.IsValid() || Drop->GetDropId() != DropId)
     {
         return TEXT("InvalidDrop");

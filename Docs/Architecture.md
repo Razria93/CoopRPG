@@ -94,6 +94,8 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 클라이언트는 방패 적의 발밑에 이중 링을 그린다. 뒤쪽 90°는 비우고 앞에 화살표를 붙인다. 비조명 재질의 기본색은 짙은 차콜이다. 방패를 들면 서버가 복제한 예고 방향과 종료 시각을 사용해 바깥선과 안쪽 선의 앞쪽 90°, 그리고 화살표의 색을 같은 노란색으로 바꾼다. 평상시 링은 적의 방향을 따르며, 적이 사망하면 링을 숨긴다. 링은 바닥의 렌더링 구성요소로만 동작한다. 방패 적 이름표는 적의 화면상 중심에 이름·HP·대상 세 줄을 가운데 정렬한다. 배경과 각 줄 좌표는 예고 상태와 무관하게 고정하며 대상 줄은 예고 중 `Target P1` 또는 `Target P2`, 평상시 `Target —`를 표시한다.
 
+`L_Round_01`의 클라이언트는 비공개 BlackKnight 에셋이 있으면 기존 적 액터에 스켈레탈 메시와 원본 도끼·방패를 표시한다. 대기·추적 이동은 속도에 따라, 방어와 공격은 복제된 예고의 방향과 종료 시각에 따라 재생한다. `Attack01` 클립의 0.400초 포즈를 서버 타격 시각에 맞춘다. 서버는 현재 캡슐과 범위 검사로 피해를 한 번 결정하고 표시 에셋을 로드하지 않는다. 에셋을 제공하지 않은 실행은 기존 도형 표시를 사용한다. [BlackKnight 적용과 확인](Validation/ForestExpedition.md#black-knight-presentation)
+
 [공통 각도와 이름표 검증](Validation/ForestExpedition.md#shield-angle-target-nameplate) · [초기 링 검증](Validation/ForestExpedition.md#shield-ground-ring-verification) · [서버 예고와 대상 선정](../Game/Source/CoopRPG/Character/CoopRPGEnemy.cpp) · [기본 공격 판정](../Game/Source/CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.cpp)
 
 <a id="상자-상호작용-설계-예시"></a>
@@ -105,6 +107,8 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 두 명이 준비하면 서버 `GameMode`가 `GameState`의 라운드 상태를 Playing으로 바꾼다. 클라이언트는 복제된 현재 상자와 라운드 ID를 사용하고, 자기 소유의 `PlayerController`에서 열람·획득 RPC를 요청한다. 서버는 Playing, 요청 라운드, 지정 상자, 생존, 거리 220 cm와 열람 여부를 확인한다. 각 컨트롤러는 자신의 열람 포인터와 회복약 소지량을 받으므로 같은 상자를 열어도 상대의 열람·소지량을 가져오지 않는다.
 
 `ACoopRPGSharedChest`는 공용 회복약 재고를 두 클라이언트에 복제한다. 서버는 첫 유효 요청에서 재고 1→0과 수령자의 보유량 증가를 같은 RPC 처리 안에서 확정한다. 두 번째 유효 조건의 요청은 소진으로 거절되고, 무효 요청은 재고를 차감하지 않는다. Canvas HUD는 공용 잔량과 자신의 수량을 읽어 표시한다.
+
+숲 `L_Round_01`에서는 처음 승인된 열람 요청의 서버 시각을 상자 액터가 복제한다. 표시 컴포넌트는 서버 시계와의 차이에 맞춰 뚜껑 애니메이션을 한 번 재생하고, 몸체와 Lock이 같은 포즈를 사용한다. 개인 열람창은 각 컨트롤러의 복제 상태를 사용해 열고 닫는다. 새 라운드에서는 새 상자 액터의 기본 시각으로 닫힌 상태가 표시된다.
 
 **근거** · [상자 재고](../Game/Source/CoopRPG/Loot/CoopRPGSharedChest.cpp) · [입력·서버 판정·소유자 복제](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [2인 패키지 시험](Validation/Index.md#v05-shared-chest-first)
 
@@ -154,6 +158,31 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 
 **근거** · [서버의 표시 확인과 전환](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [표시 확인 RPC와 상자 요청 검사](../Game/Source/CoopRPG/GameFramework/CoopRPGPlayerController.cpp) · [V06 패키지 시험](Validation/Index.md#v06-round-travel) · [숲 재도전 검증](Validation/ForestExpedition.md#forest-round-retry) · [Epic 멀티플레이 맵 이동](https://dev.epicgames.com/documentation/unreal-engine/travelling-in-multiplayer-in-unreal-engine?lang=en-US)
 
+원정 로비는 상자 없는 `Waiting` 상태와 자체 `RoundId`를 만든다. 서버는 각 컨트롤러의 소유 Pawn과 준비 상태를 확인하고 서로 다른 두 슬롯이 모두 준비 상태일 때 출발을 예약한다. 출발 직전까지 다시 검사하며 한 명이 이탈하면 예약 시각을 취소한다. 목적지 패키지가 없거나 좌석 예약·이동 요청을 승인하지 못하면 로비의 준비 표시를 초기화해 다시 입력할 수 있게 한다. `L_ExpeditionSkirmish`는 기존 비심리스 이동과 좌석 예약을 사용하며 새 라운드를 `Waiting`으로 시작한다. [로비 전환 검증](Validation/ForestExpedition.md#expedition-first-transition)
+
+잡몹전에서 탈출에 성공하면 `L_ExpeditionPuzzle`이 목적지가 된다. 전용 서버의 좌석 예약에 기존 연결 ID와 각자의 물약을 최대 1개까지 함께 저장하고, 일치한 좌석에 들어온 새 컨트롤러에 한 번 복원한다. 새 맵은 HP·SP, 장비, 마법석, 준비와 결과를 초기 상태로 시작한다.
+
+퍼즐은 맵의 A·B 발판 중심을 사용한다. 서버의 `GameMode`가 생존 참가자의 발 위치를 두 반경과 대조하고, `GameState`가 발판별 점유 슬롯을 복제한다. 서로 다른 슬롯이 각 발판에 하나씩 있을 때 결과를 한 번 확정한다. 클라이언트는 복제된 점유 마스크로 발판과 HUD를 그린다. 두 슬롯이 같은 발판에 서면 원판을 두 색으로 나눈다. [퍼즐 전환 검증](Validation/ForestExpedition.md#expedition-puzzle-transition)
+
+퍼즐 성공 뒤에는 `L_ExpeditionBoss`를 연다. 이 전환도 기존 좌석과 개인 물약 최대 1개를 넘긴다. 보스 구간은 양쪽 준비 뒤 300초 시계를 시작하며, `GameMode`가 서버의 BlackKnight 사망 상태와 참가자의 생존을 같은 판정 회차에서 읽는다. `GameState`는 이탈·사망·시간 초과를 먼저 판정한 뒤 최종 성공을 확정한다. 보스 성공은 최종 결과에 머무르고, 사망이나 시간 초과는 기존 결과 확인 경로를 통해 같은 보스 맵을 연다. [양쪽 결과와 재도전 검증](Validation/ForestExpedition.md#expedition-boss-completion)
+
+보스 맵의 BlackKnight는 모델만 2배로 표시한다. 서버와 클라이언트가 같은 몸체 캡슐을 쓰고, 클라이언트가 그 바닥에 방향 링을 표시한다. 서버는 반격 거리를 두 캐릭터 캡슐 표면 사이에서 재며, 플레이어 기본 공격은 기존 스윕으로 접촉을 검사한다. 보스전 상자는 잡몹전과 같은 외형 컴포넌트와 복제된 첫 열림 시각을 사용한다. [발판과 보스 보완 검증](Validation/ForestExpedition.md#expedition-plate-boss-polish)
+
+<a id="forest-extraction-guidance-design"></a>
+### 숲 포탈의 서버 판정과 화면 안내
+
+`GameMode`가 팀 전리품을 확보한 라운드의 생존 참가자 중 탈출 영역 안에 있는 인원을 센다. `GameState`는 인원·종료 시각을 같은 라운드 상태로 복제한다. 두 명이 들어오면 서버 시계로 3초를 시작하고, 한 명이 이탈하면 해당 시각을 지운다. 성공 후 점수와 결과도 기존 서버 상태에서 한 번 확정한다.
+
+`LootHUD`는 복제된 인원과 종료 시각을 한 줄에 표시한다. 포탈 방향 안내는 각 화면이 탈출 지점을 투영해서 그린다. 영역에 들어간 본인에게는 방향 안내를 숨긴다. 화면 투영과 로컬 Pawn 위치는 안내 배치에만 사용한다.
+
+**근거** · [서버 참가자 집계](../Game/Source/CoopRPG/GameFramework/CoopRPGGameMode.cpp) · [타이머와 상태 복제](../Game/Source/CoopRPG/GameFramework/CoopRPGGameState.cpp) · [포탈 HUD 시험](Validation/ForestExpedition.md#forest-portal-guidance)
+
+### 잡몹전의 드롭과 포탈 상태
+
+잡몹전은 맵에 배치한 버섯 네 마리를 서버 게임 모드에 등록한다. 평타의 기존 구체 스윕에 닿은 적 중 살아 있는 첫 대상을 서버가 고르고, 벽이 그보다 먼저 닿으면 피해를 막는다. 적별 공격 시각은 복제되어 양쪽 화면의 모션에 쓰인다. 게임 상태는 등록된 적의 사망을 적별로 한 번 집계하고 진행 수를 복제한다. 두 번째 처치에서 물약, 네 번째 처치에서 마법석을 기존 드롭 슬롯에 등록한다. 클라이언트가 보낸 회차와 드롭 ID를 현재 월드의 ID에 대조하고 생존·거리·획득 여부를 검사한다. 물약 보유량은 획득자에게만 복제하고, 마법석 획득 상태는 팀에 복제한다.
+
+서버 탈출 판정과 흰색 원은 같은 반경 140cm를 사용한다. 마법석을 얻으면 기존 바위 충돌을 해제하고 포탈 표면은 초록색, 바닥 판정 원은 흰색에서 하늘색으로 바뀐다. 두 사람이 진입해 복제된 마감 시각이 유효한 동안에만 클라이언트가 `NS_MagicCircle_19`의 링과 파티클을 표시한다. 드롭 위치는 서버가 결정하고 튀어나오기와 부유는 로컬 메시만 움직인다.
+
 <a id="round-admission-design"></a>
 ### 전용 서버 입장 판정과 맵 이동 중 두 자리
 
@@ -174,6 +203,12 @@ CoopRPG는 사용자 결정에 따라 `ACoopRPGCharacter`에 ASC를 둔다. 현�
 CoopRPG는 현재 하나의 게임 모듈을 공유한다. 필요할 때 빌드 조건이나 서버 전용 모듈을 사용해 배포물에 들어가는 코드를 제한할 수 있다. 기본 `WITH_SERVER_CODE` 값은 Game·Server에서 1, Client에서 0이므로 Game 타깃에도 서버 지원 코드가 포함될 수 있다. 조건부 컴파일의 적용 여부는 타깃과 산출물에서 확인하고, 실행 중 권한과 요청 검증은 기능 시험에서 확인한다.
 
 **근거** · [타깃별 네트워크 컴파일 조건](https://dev.epicgames.com/documentation/en-us/unreal-engine/networking-overview-for-unreal-engine) · [CoopRPG 빌드 구조](Learning/UnrealBuildPipeline.md)
+
+### 배치형 적과 애니메이션
+
+잡몹전은 `BP_Enemy_Mushroom`, 숲 라운드는 `BP_Enemy_BlackKnight`를 배치한다. 두 BP가 메시, 높이, 정면 보정, 장비와 애니메이션 자산을 지정한다. 공용 AnimInstance는 평면 속도로 이동 Blend Space를 평가한다. 공격·피격·사망은 슬롯에서 몽타주로 재생하며 방패 대기는 지속 자세로 표현한다. 서버의 추적·방패 각도·타격 시각·피해·드롭은 적 부모에 남는다.
+
+**근거** · [폴더 규칙과 패키지 이동표](Planning/ContentLayout.md) · [적 부모 클래스](../Game/Source/CoopRPG/Character/CoopRPGEnemy.h) · [공용 이동 그래프](../Game/Source/CoopRPG/Character/CoopRPGLocomotionAnimInstance.cpp)
 
 ## 근거 및 더 읽기
 

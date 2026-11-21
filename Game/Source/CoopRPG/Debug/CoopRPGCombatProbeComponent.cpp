@@ -17,6 +17,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "CoreGlobals.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -407,17 +408,31 @@ void UCoopRPGCombatProbeComponent::ServerConfirmTwice_Implementation()
 
 void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName Layout)
 {
+    if (!IsProbeEnabled(GetWorld()))
+    {
+        return;
+    }
     const FString LayoutName = Layout.ToString();
+    if (LayoutName.StartsWith(TEXT("wave")))
+    {
+        auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+        auto* Character = Cast<ACoopRPGCharacter>(GetOwner());
+        if (Mode && Mode->IsSkirmishEncounter() && Character)
+        {
+            PrepareSkirmishLayout(Layout, *Mode, *Character);
+        }
+        return;
+    }
     const bool bShieldLayout = LayoutName.StartsWith(TEXT("shield"));
     const bool bCounterLayout = LayoutName.StartsWith(TEXT("counter"));
     int32 Angle = 0;
-    const bool bAngleLayout = (bShieldLayout || bCounterLayout)
+    const bool bCounterBoundary = Layout == TEXT("counterInside") || Layout == TEXT("counterOutside");
+    const bool bAngleLayout = bCounterBoundary || ((bShieldLayout || bCounterLayout)
         && LexTryParseString(Angle, *LayoutName.Mid(bCounterLayout ? 7 : 6))
-        && Angle >= -180 && Angle <= 180;
+        && Angle >= -180 && Angle <= 180);
     const bool bEnemyCounter = bAngleLayout && bCounterLayout;
-    if (!IsProbeEnabled(GetWorld())
-        || (Layout != TEXT("front") && Layout != TEXT("away") && Layout != TEXT("wall")
-            && Layout != TEXT("far") && Layout != TEXT("multi") && !bAngleLayout && Layout != TEXT("shieldDown")))
+    if (Layout != TEXT("front") && Layout != TEXT("away") && Layout != TEXT("wall")
+        && Layout != TEXT("far") && Layout != TEXT("multi") && !bAngleLayout && Layout != TEXT("shieldDown"))
     {
         return;
     }
@@ -437,20 +452,28 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
     Enemy->SetActorTickEnabled(false);
     Enemy->GetCharacterMovement()->StopMovementImmediately();
     Character->GetCharacterMovement()->StopMovementImmediately();
-    const FVector EnemyPosition(850.0, 0.0, 90.15);
+    const FVector EnemyPosition(850.0, 0.0, Enemy->GetActorLocation().Z);
     FVector PlayerPosition(Layout == TEXT("far") ? 565.0 : 720.0,
         Character->GetDisplaySlot() == 1 ? -50.0 : 50.0, 90.15);
     if (bAngleLayout || Layout == TEXT("shieldDown"))
     {
         const int32 PositionAngle = bAngleLayout ? Angle : 0;
-        PlayerPosition = EnemyPosition + FRotator(0.0, PositionAngle, 0.0).Vector() * 120.0;
+        double Distance = 120.0;
+        if (Enemy->bLargeExpeditionBoss)
+        {
+            Distance = Enemy->GetCapsuleComponent()->GetScaledCapsuleRadius()
+                + Character->GetCapsuleComponent()->GetScaledCapsuleRadius()
+                + (bCounterBoundary ? Enemy->GetAttackRange() + (Layout == TEXT("counterInside") ? -1.0 : 1.0) : 20.0);
+        }
+        PlayerPosition = EnemyPosition + FRotator(0.0, PositionAngle, 0.0).Vector() * Distance;
+        PlayerPosition.Z = 90.15;
         const bool bRaiseShield = bAngleLayout;
         Enemy->bAttackPending = bRaiseShield;
         Enemy->NextActionTime = GetWorld()->GetTimeSeconds() + (bEnemyCounter ? 1.25 : 4.0);
         Enemy->SetShieldWarning(bRaiseShield ? Character->GetDisplaySlot() : 0, 0.0f,
             bRaiseShield ? Enemy->NextActionTime : 0.0);
     }
-    FRotator Facing = (EnemyPosition - PlayerPosition).Rotation();
+    FRotator Facing(0.0, (EnemyPosition - PlayerPosition).Rotation().Yaw, 0.0);
     Facing.Yaw += Layout == TEXT("away") ? 180.0f : 0.0f;
     Enemy->TeleportTo(EnemyPosition, FRotator::ZeroRotator, false, true);
     Character->TeleportTo(PlayerPosition, Facing, false, true);
@@ -473,23 +496,88 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
     }
     if (Layout == TEXT("wall"))
     {
-        AActor* Obstacle = GetWorld()->SpawnActor<AActor>();
-        auto* Wall = NewObject<UBoxComponent>(Obstacle);
-        Obstacle->AddInstanceComponent(Wall);
-        Obstacle->SetRootComponent(Wall);
-        Wall->SetBoxExtent(FVector(4.0, 90.0, 95.0));
-        Wall->SetCollisionObjectType(ECC_WorldStatic);
-        Wall->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-        Wall->SetCollisionResponseToAllChannels(ECR_Block);
-        Wall->RegisterComponent();
-        Obstacle->SetActorLocation(FVector(785.0, 0.0, 90.15));
-        MeleeTestObstacle = Obstacle;
+        PlaceMeleeTestWall(FVector(785.0, 0.0, 90.15));
     }
 
     Character->ForceNetUpdate();
     Enemy->ForceNetUpdate();
     UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
         *Layout.ToString(), Character->GetDisplaySlot(), Facing.Yaw);
+}
+
+void UCoopRPGCombatProbeComponent::PrepareSkirmishLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character)
+{
+    const bool bLine = Layout == TEXT("waveLine") || Layout == TEXT("waveWall") || Layout == TEXT("waveReverse");
+    const bool bReverse = Layout == TEXT("waveReverse");
+    int32 Slot = 0;
+    if (!bLine && (!LexTryParseString(Slot, *Layout.ToString().Mid(4)) || Slot < 1 || Slot > 4))
+    {
+        return;
+    }
+    if (AActor* Previous = MeleeTestObstacle.Get())
+    {
+        Previous->Destroy();
+    }
+
+    FVector Position;
+    bool bPlaced = false;
+    for (ACoopRPGEnemy* Enemy : Mode.GetSkirmishEnemies())
+    {
+        if (!IsValid(Enemy) || Enemy->IsDead())
+        {
+            continue;
+        }
+        Enemy->StopCombat();
+        Enemy->SetActorTickEnabled(false);
+        Enemy->GetCharacterMovement()->StopMovementImmediately();
+        const bool bFirst = Enemy->ActorHasTag(TEXT("SkirmishMushroom1"));
+        const bool bSecond = Enemy->ActorHasTag(TEXT("SkirmishMushroom2"));
+        if (bLine && (bFirst || bSecond))
+        {
+            const FVector EnemyPosition(bFirst ? 1050.0 : 1106.0, 0.0, Enemy->GetActorLocation().Z);
+            Enemy->TeleportTo(EnemyPosition, FRotator(0.0, 180.0, 0.0), false, true);
+            Enemy->ForceNetUpdate();
+        }
+        if (!bLine && Enemy->ActorHasTag(FName(*FString::Printf(TEXT("SkirmishMushroom%d"), Slot))))
+        {
+            Position = Enemy->GetActorLocation() - FVector(110.0, 0.0, 0.0);
+            bPlaced = true;
+        }
+    }
+    if (bLine)
+    {
+        Position = FVector(bReverse ? 1220.0 : 939.0, 0.0, 90.15);
+        bPlaced = true;
+    }
+    if (!bPlaced)
+    {
+        return;
+    }
+    Position.Z = 90.15;
+    Character.GetCharacterMovement()->StopMovementImmediately();
+    Character.TeleportTo(Position, FRotator(0.0, bReverse ? 180.0 : 0.0, 0.0), false, true);
+    Character.ForceNetUpdate();
+    if (Layout == TEXT("waveWall"))
+    {
+        PlaceMeleeTestWall(FVector(995.0, 0.0, 90.15));
+    }
+    UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
+        *Layout.ToString(), Character.GetDisplaySlot(), Character.GetActorRotation().Yaw);
+}
+
+void UCoopRPGCombatProbeComponent::PlaceMeleeTestWall(const FVector& Location)
+{
+    AActor* Obstacle = GetWorld()->SpawnActor<AActor>();
+    auto* Wall = NewObject<UBoxComponent>(Obstacle);
+    Obstacle->AddInstanceComponent(Wall);
+    Obstacle->SetRootComponent(Wall);
+    Wall->SetBoxExtent(FVector(4.0, 90.0, 95.0));
+    Wall->SetCollisionObjectType(ECC_WorldStatic);
+    Wall->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    Wall->SetCollisionResponseToAllChannels(ECR_Block);
+    Wall->RegisterComponent();
+    Obstacle->SetActorLocation(Location);
+    MeleeTestObstacle = Obstacle;
 }
 
 void UCoopRPGCombatProbeComponent::ServerPositionForEnemyLoot_Implementation(bool bNear)

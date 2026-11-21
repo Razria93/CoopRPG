@@ -22,17 +22,23 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGMelee, Log, All);
 namespace
 {
     constexpr float MeleeRangeCm = 250.0f;
+
+    float GetMeleeRange(const AActor* Target)
+    {
+        const auto* Enemy = Cast<ACoopRPGEnemy>(Target);
+        return MeleeRangeCm + (Enemy ? Enemy->GetMeleeRangeBonus() : 0.0f);
+    }
     constexpr float ProbeWindupSeconds = 0.65f;
     constexpr float SweepLengthCm = 145.0f;
     constexpr float SweepRadiusCm = 37.0f;
 
     using CoopRPG::Debug::DescribePlayerRequestContext;
 
-    const TCHAR* SweepForEnemy(const AActor* Attacker, const AActor* Target, const FVector& Direction, uint32 Swing)
+    const TCHAR* SweepForEnemy(const AActor* Attacker, AActor*& Target, const FVector& Direction, uint32 Swing,
+        const ACoopRPGGameMode* Skirmish = nullptr)
     {
         const FVector Start = Attacker->GetActorLocation();
-        const FVector TargetDelta = Target->GetActorLocation() - Start;
-        if (FVector::DotProduct(Direction, TargetDelta) <= 0.0)
+        if (!Skirmish && FVector::DotProduct(Direction, Target->GetActorLocation() - Start) <= 0.0)
         {
             return TEXT("OutsideSwing");
         }
@@ -53,20 +59,46 @@ namespace
         // Resolve the earliest contact per actor and let world geometry win ties at an obstacle.
         int32 EnemyContacts = 0;
         float EnemyTime = TNumericLimits<float>::Max();
+        double EnemyDistance = TNumericLimits<double>::Max();
         float ObstacleTime = TNumericLimits<float>::Max();
+        AActor* ClosestEnemy = nullptr;
         for (const FHitResult& Contact : Contacts)
         {
-            if (Contact.GetActor() == Target)
+            AActor* HitActor = Contact.GetActor();
+            if (Skirmish)
+            {
+                const auto* Enemy = Cast<ACoopRPGEnemy>(HitActor);
+                if (Skirmish->IsSkirmishEnemy(Enemy) && !Enemy->IsDead()
+                    && FVector::DotProduct(Direction, Enemy->GetActorLocation() - Start) > 0.0)
+                {
+                    const double Distance = FVector::DistSquared2D(Start, Enemy->GetActorLocation());
+                    const bool bTied = Contact.Time == EnemyTime;
+                    if (Contact.Time < EnemyTime || (bTied && (Distance < EnemyDistance
+                        || (Distance == EnemyDistance && ClosestEnemy && HitActor->GetFName().LexicalLess(ClosestEnemy->GetFName())))))
+                    {
+                        EnemyTime = Contact.Time;
+                        EnemyDistance = Distance;
+                        ClosestEnemy = HitActor;
+                    }
+                }
+            }
+            else if (HitActor == Target)
             {
                 ++EnemyContacts;
                 EnemyTime = FMath::Min(EnemyTime, Contact.Time);
+                continue;
             }
-            else if (const UPrimitiveComponent* Component = Contact.GetComponent();
+
+            if (const UPrimitiveComponent* Component = Contact.GetComponent();
                 Component && Component->GetCollisionObjectType() != ECC_Pawn
                 && Component->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block)
             {
                 ObstacleTime = FMath::Min(ObstacleTime, Contact.Time);
             }
+        }
+        if (Skirmish)
+        {
+            Target = ClosestEnemy;
         }
 
         UE_CLOG(EnemyContacts > 1, LogCoopRPGMelee, Log,
@@ -182,7 +214,12 @@ void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     }
 
     auto* GameMode = Attacker->GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
-    AActor* Target = GameMode ? GameMode->GetMeleeTarget() : nullptr;
+    AActor* Target = nullptr;
+    if (GameMode)
+    {
+        Target = GameMode->IsSkirmishEncounter()
+            ? GameMode->FindClosestSkirmishEnemy(Attacker->GetActorLocation()) : GameMode->GetMeleeTarget();
+    }
     const UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target, false);
     const FGameplayAttribute HealthAttribute = UCoopRPGCombatAttributes::GetHealthAttribute();
     if (!IsValid(TargetASC) || TargetASC->GetNumericAttribute(HealthAttribute) <= 0.0f)
@@ -196,11 +233,12 @@ void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     const float Distance = FVector::Dist2D(Attacker->GetActorLocation(), Target->GetActorLocation());
     const float HealthBefore = TargetASC->GetNumericAttribute(HealthAttribute);
     const float StaminaBefore = Source->GetNumericAttribute(UCoopRPGCombatAttributes::GetStaminaAttribute());
-    if (Distance > MeleeRangeCm)
+    const float Range = GetMeleeRange(Target);
+    if (Distance > Range)
     {
         UE_LOG(LogCoopRPGMelee, Log,
             TEXT("AttackRejected Attacker=%s Target=%s Reason=OutOfRange Distance=%.2f Range=%.2f HP=%.2f Stamina=%.2f %s"),
-            *GetNameSafe(Attacker), *GetNameSafe(Target), Distance, MeleeRangeCm, HealthBefore, StaminaBefore,
+            *GetNameSafe(Attacker), *GetNameSafe(Target), Distance, Range, HealthBefore, StaminaBefore,
             *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)));
         EndAbility(Handle, ActorInfo, ActivationInfo, false, true);
         return;
@@ -300,6 +338,15 @@ void UCoopRPGMeleeAbility::ResolveHit()
     {
         MissReason = TEXT("NotPlaying");
     }
+    else if (GameMode && GameMode->IsSkirmishEncounter())
+    {
+        MissReason = SweepForEnemy(Attacker, Target, AttackDirection, AttackSequence, GameMode);
+        if (!MissReason)
+        {
+            TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target, false);
+            Distance = FVector::Dist2D(Attacker->GetActorLocation(), Target->GetActorLocation());
+        }
+    }
     else if (!IsValid(TargetASC) || !GameMode || GameMode->GetMeleeTarget() != Target
         || TargetASC->GetNumericAttribute(HealthAttribute) <= 0.0f)
     {
@@ -308,7 +355,7 @@ void UCoopRPGMeleeAbility::ResolveHit()
     else
     {
         Distance = FVector::Dist2D(Attacker->GetActorLocation(), Target->GetActorLocation());
-        if (Distance > MeleeRangeCm)
+        if (Distance > GetMeleeRange(Target))
         {
             MissReason = TEXT("OutOfRange");
         }
@@ -374,7 +421,7 @@ void UCoopRPGMeleeAbility::ResolveHit()
     }
     UE_LOG(LogCoopRPGMelee, Log,
         TEXT("AttackApproved Attacker=%s Target=%s Distance=%.2f Range=%.2f HP=%.2f->%.2f %s Swing=%u"),
-        *GetNameSafe(Attacker), *GetNameSafe(Target), Distance, MeleeRangeCm, HealthBefore, TargetASC->GetNumericAttribute(HealthAttribute),
+        *GetNameSafe(Attacker), *GetNameSafe(Target), Distance, GetMeleeRange(Target), HealthBefore, TargetASC->GetNumericAttribute(HealthAttribute),
         *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)), AttackSequence);
     EndAbility(Handle, ActorInfo, ActivationInfo, false, false);
 }

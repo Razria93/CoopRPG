@@ -4,23 +4,31 @@
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
+#include "CoopRPG/Character/CoopRPGLocomotionAnimInstance.h"
+#include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/BlendSpace.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/DynamicMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DynamicMesh/DynamicMesh3.h"
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "DynamicMesh/MeshNormals.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TimerManager.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -34,10 +42,18 @@ namespace
     constexpr float ShieldWindupSeconds = 1.5f;
     constexpr float ShieldRecoverySeconds = 0.8f;
     constexpr float MovementObservationCm = 40.0f;
-
+    constexpr float BlackKnightStrikeClipTime = 0.4f;
+    constexpr float DefaultCapsuleRadius = 34.0f;
+    constexpr float ExpeditionBossCapsuleRadius = 96.0f;
+    constexpr float ExpeditionBossCapsuleHalfHeight = 152.0f;
+    constexpr float ExpeditionBossModelScale = 2.0f;
+    constexpr float PlayerCapsuleRadiusForLegacyReach = 34.0f;
+    constexpr float MushroomCapsuleRadius = 25.0f;
+    constexpr float MushroomCapsuleHalfHeight = 44.0f;
     constexpr double GroundRingEndAngle = 135.0;
     constexpr double GroundRingOutline = 1.25;
     constexpr double GroundRingRadius = 82.0;
+    constexpr double ExpeditionBossRingRadius = 114.0;
     constexpr double OuterRingWidth = 7.0;
     constexpr double InnerRingWidth = 2.5;
     constexpr double RingPadding = 5.0;
@@ -98,7 +114,7 @@ ACoopRPGEnemy::ACoopRPGEnemy()
     bReplicates = true;
     SetReplicateMovement(true);
     AutoPossessAI = EAutoPossessAI::Disabled;
-    GetCapsuleComponent()->InitCapsuleSize(34.0f, 88.0f);
+    GetCapsuleComponent()->InitCapsuleSize(DefaultCapsuleRadius, 88.0f);
 
     UCharacterMovementComponent* Movement = GetCharacterMovement();
     Movement->bRunPhysicsWithNoController = true;
@@ -137,6 +153,16 @@ ACoopRPGEnemy::ACoopRPGEnemy()
         TEXT("/Game/Presentation/Materials/M_EnemyGroundRing.M_EnemyGroundRing"));
     GroundRingMaterial = RingMaterial.Object;
 
+    Axe = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Axe"));
+    Shield = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Shield"));
+    for (UStaticMeshComponent* Part : {Axe.Get(), Shield.Get()})
+    {
+        Part->SetupAttachment(GetMesh());
+        Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        Part->SetGenerateOverlapEvents(false);
+        Part->SetCanEverAffectNavigation(false);
+    }
+
     AbilitySystem = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystem"));
     AbilitySystem->SetIsReplicated(true);
     AbilitySystem->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
@@ -153,9 +179,16 @@ float ACoopRPGEnemy::GetHealth() const
     return CombatAttributes->GetHealth();
 }
 
+float ACoopRPGEnemy::GetMaxHealth() const
+{
+    return IsMushroom() && CoopRPG::Expedition::IsSkirmish(GetWorld())
+        ? CoopRPG::Expedition::SkirmishEnemyHealth : UCoopRPGCombatAttributes::MaxHealth;
+}
+
 void ACoopRPGEnemy::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    UpdateAttackPose();
 
     if (!HasAuthority() || bDead)
     {
@@ -191,7 +224,7 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
     }
     if (bShieldEncounter)
     {
-        if (ACoopRPGCharacter* InRange = FindTarget(AttackRangeCm))
+        if (ACoopRPGCharacter* InRange = FindTarget(GetAttackRange(), true))
         {
             Player = InRange;
             Target = InRange;
@@ -218,8 +251,8 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
     }
 
     const FVector Offset = Player->GetActorLocation() - GetActorLocation();
-    const float Distance = Offset.Size2D();
-    if (Distance > AttackRangeCm)
+    const double Distance = GetAttackDistance(*Player);
+    if (Distance > GetAttackRange())
     {
         if (!bChasing)
         {
@@ -244,8 +277,17 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
             SetActorRotation(FRotator(0.0, FacingYaw, 0.0));
             SetShieldWarning(Player->GetDisplaySlot(), FacingYaw, NextActionTime);
         }
+        if (bMushroomEncounter)
+        {
+            const float FacingYaw = Offset.Rotation().Yaw;
+            SetActorRotation(FRotator(0.0, FacingYaw, 0.0));
+            MushroomStrike = {NextActionTime, FacingYaw};
+            ForceNetUpdate();
+            UE_LOG(LogCoopRPGEnemy, Log, TEXT("MushroomStrikeAuthoritative Target=%d FacingYaw=%.2f StrikeAt=%.3f"),
+                GetTargetPlayerId(Player), FacingYaw, NextActionTime);
+        }
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackStarted Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f Windup=%.2f %s"),
-            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm, WindupSeconds,
+            *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, GetAttackRange(), WindupSeconds,
             *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }
@@ -272,11 +314,16 @@ void ACoopRPGEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGEnemy, bDead);
     DOREPLIFETIME(ACoopRPGEnemy, bShieldEncounter);
+    DOREPLIFETIME(ACoopRPGEnemy, MushroomStrike);
     DOREPLIFETIME(ACoopRPGEnemy, ShieldWarning);
 }
 
 void ACoopRPGEnemy::FlashPresentationHit()
 {
+    if (!bDead && Animation && HitMontage)
+    {
+        PendingHitUntil = GetWorld()->GetTimeSeconds() + HitMontage->GetPlayLength();
+    }
     SetPresentationTint(true);
     GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestorePresentationTint, 0.22f);
 }
@@ -287,6 +334,11 @@ void ACoopRPGEnemy::EnableShieldEncounter()
     bShieldEncounter = true;
     ForceNetUpdate();
     OnRep_ShieldEncounter();
+}
+
+float ACoopRPGEnemy::GetMeleeRangeBonus() const
+{
+    return bLargeExpeditionBoss ? GetCapsuleComponent()->GetScaledCapsuleRadius() - DefaultCapsuleRadius : 0.0f;
 }
 
 bool ACoopRPGEnemy::IsShieldRaised() const
@@ -304,10 +356,43 @@ double ACoopRPGEnemy::GetShieldAngle(const FVector& Position) const
     return FMath::RadiansToDegrees(FMath::Acos(Dot));
 }
 
+void ACoopRPGEnemy::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+    if (!GetWorld()->IsGameWorld())
+    {
+        ApplyModel();
+    }
+}
+
 void ACoopRPGEnemy::BeginPlay()
 {
     Super::BeginPlay();
-    FacingMarker->SetVisibility(bShowFacingMarker);
+    bMushroomEncounter = Kind == ECoopRPGEnemyKind::Mushroom;
+    bLargeExpeditionBoss = IsBlackKnight() && CoopRPG::Expedition::IsBoss(GetWorld());
+    FacingMarker->SetVisibility(bShowFacingMarker && !bMushroomEncounter);
+    if (bMushroomEncounter || bLargeExpeditionBoss)
+    {
+        const float PreviousHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+        GetCapsuleComponent()->SetCapsuleSize(bLargeExpeditionBoss ? ExpeditionBossCapsuleRadius : MushroomCapsuleRadius,
+            bLargeExpeditionBoss ? ExpeditionBossCapsuleHalfHeight : MushroomCapsuleHalfHeight);
+        if (HasAuthority())
+        {
+            const float NewHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+            AddActorWorldOffset(FVector(0.0, 0.0, NewHalfHeight - PreviousHalfHeight), false, nullptr, ETeleportType::TeleportPhysics);
+        }
+    }
+    if (bLargeExpeditionBoss)
+    {
+        UE_LOG(LogCoopRPGEnemy, Log,
+            TEXT("ExpeditionBossGeometry Actor=%s Height=%.1f CapsuleRadius=%.1f CapsuleHalfHeight=%.1f RingOuter=%.1f CounterSurfaceRange=%.1f"),
+            *GetName(), ModelHeight * ExpeditionBossModelScale, GetCapsuleComponent()->GetScaledCapsuleRadius(),
+            GetCapsuleComponent()->GetScaledCapsuleHalfHeight(), ExpeditionBossRingRadius, GetAttackRange());
+    }
+    if (HasAuthority() && IsBlackKnight())
+    {
+        EnableShieldEncounter();
+    }
     if (GetNetMode() != NM_DedicatedServer)
     {
         if (auto* Material = ShieldVisual->CreateDynamicMaterialInstance(0))
@@ -320,9 +405,21 @@ void ACoopRPGEnemy::BeginPlay()
     RestorePresentationTint();
     AbilitySystem->InitAbilityActorInfo(this, this);
     ObservationOrigin = GetActorLocation();
-    SetActorTickEnabled(HasAuthority());
+    if (GetNetMode() != NM_DedicatedServer && ApplyModel())
+    {
+        StartAnimation();
+    }
+    if (bDead)
+    {
+        HideCorpse();
+    }
+    SetActorTickEnabled(!bDead && (HasAuthority() || Animation));
     if (HasAuthority())
     {
+        if (IsMushroom() && CoopRPG::Expedition::IsSkirmish(GetWorld()))
+        {
+            AbilitySystem->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetHealthAttribute(), GetMaxHealth());
+        }
         AbilitySystem->GetGameplayAttributeValueChangeDelegate(UCoopRPGCombatAttributes::GetHealthAttribute())
             .AddUObject(this, &ACoopRPGEnemy::HandleHealthChanged);
     }
@@ -337,7 +434,7 @@ void ACoopRPGEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
-ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range) const
+ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range, bool bMeasureAttackDistance) const
 {
     ACoopRPGCharacter* Nearest = nullptr;
     double NearestDistanceSquared = FMath::Square(static_cast<double>(Range));
@@ -347,7 +444,8 @@ ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range) const
         auto* Player = PlayerController ? Cast<ACoopRPGCharacter>(PlayerController->GetPawn()) : nullptr;
         if (IsLivePlayer(Player))
         {
-            const double DistanceSquared = FVector::DistSquared2D(GetActorLocation(), Player->GetActorLocation());
+            const double DistanceSquared = bMeasureAttackDistance ? FMath::Square(GetAttackDistance(*Player))
+                : FVector::DistSquared2D(GetActorLocation(), Player->GetActorLocation());
             if (DistanceSquared > FMath::Square(static_cast<double>(Range)))
             {
                 continue;
@@ -362,6 +460,20 @@ ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range) const
         }
     }
     return Nearest;
+}
+
+double ACoopRPGEnemy::GetAttackDistance(const ACoopRPGCharacter& Player) const
+{
+    const double CenterDistance = FVector::Dist2D(GetActorLocation(), Player.GetActorLocation());
+    return bLargeExpeditionBoss ? FMath::Max(0.0, CenterDistance - GetCapsuleComponent()->GetScaledCapsuleRadius()
+        - Player.GetCapsuleComponent()->GetScaledCapsuleRadius()) : CenterDistance;
+}
+
+float ACoopRPGEnemy::GetAttackRange() const
+{
+    // Preserve the old counter's reach outside both bodies as the boss capsule grows.
+    return bLargeExpeditionBoss ? AttackRangeCm - DefaultCapsuleRadius - PlayerCapsuleRadiusForLegacyReach
+        : AttackRangeCm;
 }
 
 void ACoopRPGEnemy::SetShieldWarning(int32 TargetSlot, float FacingYaw, double EndsAt)
@@ -401,6 +513,7 @@ void ACoopRPGEnemy::StopCombat()
     StopChasing();
     Target.Reset();
     SetShieldWarning(0, ShieldWarning.FacingYaw, 0.0);
+    MushroomStrike = {};
     NextActionTime = 0.0;
     bAttackPending = false;
 }
@@ -408,16 +521,16 @@ void ACoopRPGEnemy::StopCombat()
 void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
 {
     const bool bLivePlayer = IsLivePlayer(Player);
-    const double Distance = bLivePlayer ? FVector::Dist2D(GetActorLocation(), Player->GetActorLocation()) : 0.0;
+    const double Distance = bLivePlayer ? GetAttackDistance(*Player) : 0.0;
     const bool bOutsideFacing = bShieldEncounter && bLivePlayer
         && GetShieldAngle(Player->GetActorLocation()) > ShieldHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
-    if (!bLivePlayer || Distance > AttackRangeCm || bOutsideFacing)
+    if (!bLivePlayer || Distance > GetAttackRange() || bOutsideFacing)
     {
         const TCHAR* Reason = !bLivePlayer ? TEXT("InvalidTarget")
-            : Distance > AttackRangeCm ? TEXT("OutOfRange") : TEXT("OutsideFacing");
+            : Distance > GetAttackRange() ? TEXT("OutOfRange") : TEXT("OutsideFacing");
         UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackMissed Actor=%s Target=%s TargetPlayerId=%d Reason=%s Distance=%.2f Range=%.2f %s"),
             *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Reason,
-            Distance, AttackRangeCm, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+            Distance, GetAttackRange(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
         return;
     }
 
@@ -434,7 +547,7 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
         }
     }
     UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackHit Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f HP=%.2f->%.2f %s"),
-        *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, AttackRangeCm,
+        *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, GetAttackRange(),
         HealthBefore, Player->GetHealth(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
@@ -453,16 +566,33 @@ void ACoopRPGEnemy::HandleHealthChanged(const FOnAttributeChangeData& Change)
     ApplyDeathPresentation();
     ForceNetUpdate();
 
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     const FGuid RoundId = State ? State->GetRoundId() : FGuid();
     UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyDeathConfirmed Actor=%s Round=%s HP=%.2f->%.2f PendingAttackDiscarded=%d %s"),
         *GetName(), *RoundId.ToString(), Change.OldValue, Change.NewValue, bDiscardedAttack ? 1 : 0,
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
-    SpawnDeathLoot(RoundId);
+    if (CoopRPG::Expedition::IsSkirmish(GetWorld()))
+    {
+        const int32 Defeats = State ? State->RegisterSkirmishDefeat(this) : 0;
+        if (Defeats == CoopRPG::Expedition::SkirmishPotionDefeats
+            || Defeats == CoopRPG::Expedition::SkirmishEnemyCount)
+        {
+            SpawnSkirmishLoot(RoundId, Defeats == CoopRPG::Expedition::SkirmishPotionDefeats);
+        }
+    }
+    else if (!CoopRPG::Expedition::IsBoss(GetWorld()))
+    {
+        SpawnDeathLoot(RoundId);
+    }
 }
 
 void ACoopRPGEnemy::SpawnDeathLoot(const FGuid& RoundId)
 {
+    if (bMushroomEncounter)
+    {
+        SpawnSkirmishLoot(RoundId, false, true);
+        return;
+    }
     const FVector Location = GetActorLocation() - FVector(0.0f, 0.0f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 20.0f);
     const FTransform Transform(FRotator(0.0f, 45.0f, 0.0f), Location, FVector(0.35f));
     FActorSpawnParameters SpawnParameters;
@@ -485,6 +615,301 @@ void ACoopRPGEnemy::SpawnDeathLoot(const FGuid& RoundId)
         *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
+void ACoopRPGEnemy::SpawnSkirmishLoot(const FGuid& RoundId, bool bPotion, bool bBoth)
+{
+    auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State || !State->IsRoundPlaying())
+    {
+        return;
+    }
+
+    const FVector Feet = GetActorLocation() - GetActorUpVector() * GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+    const FVector Origin = Feet + FVector(0.0, 0.0, 35.0);
+    const FCollisionObjectQueryParams WorldGeometry(ECC_WorldStatic);
+    const FCollisionQueryParams Query(SCENE_QUERY_STAT(SkirmishLootLanding), false, this);
+    const int32 DropCount = bBoth ? 2 : 1;
+    TArray<FVector, TInlineAllocator<2>> Locations;
+    constexpr double SearchAngles[] = {-90.0, 90.0, 0.0, 180.0, -45.0, 45.0, -135.0, 135.0};
+    for (const double SearchRadius : {85.0, 135.0, 185.0})
+    {
+        for (const double Angle : SearchAngles)
+        {
+            const FVector Point = Feet + FRotator(0.0, GetActorRotation().Yaw + Angle, 0.0).Vector() * SearchRadius;
+            FHitResult Ground;
+            if (!GetWorld()->LineTraceSingleByObjectType(Ground, Point + FVector(0.0, 0.0, 55.0),
+                Point - FVector(0.0, 0.0, 70.0), WorldGeometry, Query) || Ground.ImpactNormal.Z < 0.7)
+            {
+                continue;
+            }
+            const FVector Landing = Ground.ImpactPoint + FVector(0.0, 0.0, ACoopRPGEnemyLoot::GroundToAnchorCm);
+            if (GetWorld()->OverlapAnyTestByObjectType(Landing, FQuat::Identity, WorldGeometry,
+                FCollisionShape::MakeSphere(28.0f), Query)
+                || Locations.ContainsByPredicate([&Landing](const FVector& Other)
+                    { return FVector::DistSquared2D(Landing, Other) < FMath::Square(85.0); }))
+            {
+                continue;
+            }
+            Locations.Add(Landing);
+            if (Locations.Num() == DropCount)
+            {
+                break;
+            }
+        }
+        if (Locations.Num() == DropCount)
+        {
+            break;
+        }
+    }
+
+    // Keep the portal item obtainable even if the enemy dies against unusual level geometry.
+    if (Locations.IsEmpty())
+    {
+        Locations.Add(Origin);
+        UE_LOG(LogCoopRPGEnemy, Warning, TEXT("SkirmishLootLandingFallback Round=%s"), *RoundId.ToString());
+    }
+    if (bBoth && Locations.Num() == 1)
+    {
+        const FVector Second = Locations[0] + FVector(0.0, 0.0, 78.0);
+        Locations.Add(Second);
+        UE_LOG(LogCoopRPGEnemy, Warning, TEXT("SkirmishLootLandingFallback Round=%s SecondDropElevated=1"), *RoundId.ToString());
+    }
+
+    for (int32 Index = 0; Index < Locations.Num(); ++Index)
+    {
+        const bool bDropIsPotion = bBoth ? Index == 1 : bPotion;
+        const FTransform Transform(Locations[Index]);
+        auto* Drop = GetWorld()->SpawnActorDeferred<ACoopRPGEnemyLoot>(ACoopRPGEnemyLoot::StaticClass(), Transform,
+            nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+        if (Drop)
+        {
+            Drop->ConfigureSkirmishDrop(bDropIsPotion, Origin);
+            Drop->FinishSpawning(Transform);
+        }
+        if (!State->RegisterEnemyLoot(Drop))
+        {
+            if (IsValid(Drop))
+            {
+                Drop->Destroy();
+            }
+            UE_LOG(LogCoopRPGEnemy, Error, TEXT("EnemyLootSpawnFailed Actor=%s Round=%s Kind=%s"),
+                *GetName(), *RoundId.ToString(), bDropIsPotion ? TEXT("Potion") : TEXT("MagicStone"));
+            continue;
+        }
+
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyLootSpawned Actor=%s Enemy=%s Round=%s DropId=%s Kind=%s Landing=%s"),
+            *GetNameSafe(Drop), *GetName(), *RoundId.ToString(), *Drop->GetDropId().ToString(),
+            bDropIsPotion ? TEXT("Potion") : TEXT("MagicStone"), *Locations[Index].ToCompactString());
+    }
+}
+
+bool ACoopRPGEnemy::ApplyModel()
+{
+    if (Kind == ECoopRPGEnemyKind::Training)
+    {
+        return false;
+    }
+    USkeletalMesh* Asset = BodyMesh.LoadSynchronous();
+    if (!Asset)
+    {
+        UE_LOG(LogCoopRPGEnemy, Warning, TEXT("Missing enemy mesh on %s"), *GetName());
+        return false;
+    }
+    const FBoxSphereBounds Bounds = Asset->GetBounds();
+    const bool bLargeModel = bLargeExpeditionBoss || (IsBlackKnight() && CoopRPG::Expedition::IsBoss(GetWorld()));
+    const double Height = bLargeModel ? ModelHeight * ExpeditionBossModelScale : ModelHeight;
+    const double Scale = Height / FMath::Max(Bounds.BoxExtent.Z * 2.0, 1.0);
+    const FVector Offset(0.0, 0.0, -GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight()
+        - (Bounds.Origin.Z - Bounds.BoxExtent.Z) * Scale);
+    const FRotator Facing(0.0, ModelYaw, 0.0);
+    auto* Body = GetMesh();
+    Body->SetSkeletalMeshAsset(Asset);
+    Body->SetRelativeScale3D(FVector(Scale));
+    Body->SetRelativeLocationAndRotation(Offset, Facing);
+    CacheInitialMeshOffset(Offset, Facing);
+    Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    EnemyVisual->SetVisibility(false);
+    FacingMarker->SetVisibility(false);
+    ShieldVisual->SetVisibility(false);
+    if (Kind == ECoopRPGEnemyKind::BlackKnight)
+    {
+        auto Attach = [Body](UStaticMeshComponent* Part, const TSoftObjectPtr<UStaticMesh>& Source, FName Socket)
+        {
+            if (!Body->DoesSocketExist(Socket))
+            {
+                UE_LOG(LogCoopRPGEnemy, Warning, TEXT("Missing equipment socket %s"), *Socket.ToString());
+                return;
+            }
+            Part->AttachToComponent(Body, FAttachmentTransformRules::SnapToTargetIncludingScale, Socket);
+            Part->SetRelativeScale3D(FVector::OneVector);
+            Part->SetStaticMesh(Source.LoadSynchronous());
+        };
+        Attach(Axe, AxeMesh, AxeSocket);
+        Attach(Shield, ShieldMesh, ShieldSocket);
+        Shield->SetRelativeLocationAndRotation(FVector(0.0, 4.7875, 0.0), FRotator(0.0, 1.5791, 0.0));
+    }
+    return true;
+}
+
+void ACoopRPGEnemy::StartAnimation()
+{
+    if (!Locomotion || !AttackMontage || !HitMontage || !DeathMontage)
+    {
+        UE_LOG(LogCoopRPGEnemy, Warning, TEXT("Enemy animation set incomplete on %s"), *GetName());
+        return;
+    }
+    GetMesh()->SetAnimInstanceClass(UCoopRPGLocomotionAnimInstance::StaticClass());
+    Animation = Cast<UCoopRPGLocomotionAnimInstance>(GetMesh()->GetAnimInstance());
+    if (!Animation)
+    {
+        return;
+    }
+    Animation->ConfigureLocomotion(Locomotion);
+    const auto* Asset = GetMesh()->GetSkeletalMeshAsset();
+    if (bMushroomEncounter)
+    {
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("MushroomPresentationReady Mesh=%s AttackLength=%.3f Height=%.1f MeshBottom=%.2f MeshYawCorrection=%.2f MarkerVisible=%d"),
+            *GetNameSafe(Asset), AttackMontage->GetPlayLength(), ModelHeight, Asset->GetBounds().Origin.Z - Asset->GetBounds().BoxExtent.Z, ModelYaw, FacingMarker->IsVisible());
+    }
+    else
+    {
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("BlackKnightPresentationReady Mesh=%s AxeSocket=%s ShieldSocket=%s"),
+            *GetNameSafe(Asset), *AxeSocket.ToString(), *ShieldSocket.ToString());
+    }
+}
+
+void ACoopRPGEnemy::UpdateAttackPose()
+{
+    if (!Animation || bDead)
+    {
+        return;
+    }
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State)
+    {
+        return;
+    }
+    const double Now = State->GetServerWorldTimeSeconds();
+    if (!State->IsRoundPlaying())
+    {
+        KnightStrikeAt = 0.0;
+    }
+    else if (ShieldWarning.EndsAt > 0.0)
+    {
+        KnightStrikeAt = ShieldWarning.EndsAt;
+        KnightFacingYaw = ShieldWarning.FacingYaw;
+        KnightSequence = ShieldWarning.Sequence;
+    }
+    else if (KnightStrikeAt > Now + 0.12)
+    {
+        // An early clear cancels the windup. Normal impact clears can arrive slightly before local server time.
+        KnightStrikeAt = 0.0;
+    }
+    const double StrikeAt = bMushroomEncounter ? MushroomStrike.At : KnightStrikeAt;
+    const double Elapsed = Now - StrikeAt;
+    const double Length = AttackMontage->GetPlayLength();
+    // Map the server impact instant onto the pose that makes contact in each clip.
+    constexpr double MushroomRecoveryPose = 0.28;
+    constexpr double MushroomContact = 0.64;
+    const double Position = bMushroomEncounter
+        ? Length * (Elapsed <= 0.0 ? MushroomContact * (1.0 + Elapsed / EnemyWindupSeconds)
+            : MushroomContact + (1.0 - MushroomContact) * Elapsed / MushroomRecoveryPose)
+        : Elapsed + BlackKnightStrikeClipTime;
+    const bool bAttack = State->IsRoundPlaying() && StrikeAt > 0.0 && Position >= 0.0 && Position < Length;
+    const bool bGuard = !bAttack && IsShieldRaised() && GuardPose;
+    const float Yaw = bAttack || bGuard ? (bMushroomEncounter ? MushroomStrike.FacingYaw : KnightFacingYaw) : GetActorRotation().Yaw;
+    GetMesh()->SetWorldRotation(FRotator(0.0, Yaw + ModelYaw, 0.0));
+    if (bAttack)
+    {
+        if (PresentedStrike != StrikeAt)
+        {
+            Animation->Montage_Play(AttackMontage);
+            Animation->Montage_SetPlayRate(AttackMontage, 0.0f);
+            PresentedStrike = StrikeAt;
+            UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackMontage Asset=%s StrikeAt=%.3f PresentedFacing=%.2f Pattern=%u"),
+                *GetNameSafe(AttackMontage), StrikeAt, Yaw, KnightSequence);
+        }
+        Animation->Montage_SetPosition(AttackMontage, Position);
+        if (!bMushroomEncounter && Now >= StrikeAt && KnightSequence != LastKnightImpact)
+        {
+            LastKnightImpact = KnightSequence;
+            UE_LOG(LogCoopRPGEnemy, Log, TEXT("BlackKnightStrikeFrame Pattern=%u ServerTime=%.3f StrikeAt=%.3f ClipTime=%.3f"),
+                KnightSequence, Now, StrikeAt, Position);
+        }
+    }
+    else if (PresentedStrike > 0.0)
+    {
+        Animation->Montage_Stop(0.04f, AttackMontage);
+        PresentedStrike = 0.0;
+    }
+    if (!bAttack && PendingHitUntil > 0.0)
+    {
+        const double Remaining = PendingHitUntil - GetWorld()->GetTimeSeconds();
+        PendingHitUntil = 0.0;
+        if (Remaining > 0.0)
+        {
+            Animation->Montage_Play(HitMontage, 1.0f, EMontagePlayReturnType::MontageLength,
+                FMath::Max(0.0, HitMontage->GetPlayLength() - Remaining));
+            UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyHitMontage Asset=%s"), *GetNameSafe(HitMontage));
+        }
+    }
+    const bool bHoldGuardPose = bGuard && !Animation->Montage_IsPlaying(HitMontage);
+    if (bHoldGuardPose && !GuardLoop)
+    {
+        GuardLoop = Animation->PlaySlotAnimationAsDynamicMontage(GuardPose,
+            UCoopRPGLocomotionAnimInstance::MeleeSlot, 0.06f, 0.04f, 1.0f, MAX_int32);
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyGuardPose Asset=%s Pattern=%u"), *GetNameSafe(GuardPose), KnightSequence);
+    }
+    else if (!bHoldGuardPose && GuardLoop)
+    {
+        Animation->Montage_Stop(0.04f, GuardLoop);
+        GuardLoop = nullptr;
+    }
+    // Preserve the original clip observations. For locomotion, report the dominant blend sample.
+    float Speed = 0.0f;
+    float SampleTime = 0.0f;
+    Animation->ReadLocomotion(Speed, SampleTime);
+    const auto& Samples = Locomotion->GetBlendSamples();
+    const UAnimSequenceBase* Observed = bAttack ? AttackMontage->GetFirstAnimReference() : nullptr;
+    if (!Observed && Animation->Montage_IsPlaying(HitMontage))
+    {
+        Observed = HitMontage->GetFirstAnimReference();
+    }
+    if (!Observed && bGuard)
+    {
+        Observed = GuardPose;
+    }
+    if (!Observed && Samples.Num() == 2)
+    {
+        const float Middle = (Samples[0].SampleValue.X + Samples[1].SampleValue.X) * 0.5f;
+        Observed = Samples[Speed >= Middle ? 1 : 0].Animation;
+    }
+    if (Observed && Observed != LastObservedClip)
+    {
+        LastObservedClip = Observed;
+        if (bMushroomEncounter)
+        {
+            UE_LOG(LogCoopRPGEnemy, Log, TEXT("MushroomClip Name=%s StrikeAt=%.3f ServerTime=%.3f PresentedFacing=%.2f Speed=%.2f"),
+                *GetNameSafe(Observed), StrikeAt, Now, Yaw, Speed);
+        }
+        else
+        {
+            UE_LOG(LogCoopRPGEnemy, Log, TEXT("BlackKnightClip Name=%s Pattern=%u ServerTime=%.3f StrikeAt=%.3f FacingYaw=%.2f Speed=%.2f"),
+                *GetNameSafe(Observed), KnightSequence, Now, StrikeAt, Yaw, Speed);
+        }
+    }
+}
+
+void ACoopRPGEnemy::HideCorpse()
+{
+    GetMesh()->SetVisibility(false, true);
+    SetActorTickEnabled(false);
+    UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyCorpseHidden Actor=%s"), *GetName());
+    if (bMushroomEncounter)
+    {
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("MushroomCorpseHidden Actor=%s"), *GetName());
+    }
+}
+
 void ACoopRPGEnemy::ApplyDeathPresentation()
 {
     GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -492,6 +917,20 @@ void ACoopRPGEnemy::ApplyDeathPresentation()
     FacingMarker->SetVisibility(false);
     UpdateShieldPresentation(false);
     GetWorldTimerManager().ClearTimer(ShieldPresentationTimer);
+    if (Animation && DeathMontage && !GetWorldTimerManager().IsTimerActive(CorpseTimer))
+    {
+        Animation->Montage_Play(DeathMontage);
+        if (bMushroomEncounter)
+        {
+            UE_LOG(LogCoopRPGEnemy, Log, TEXT("MushroomClip Name=%s"), *GetNameSafe(DeathMontage->GetFirstAnimReference()));
+        }
+        GetWorldTimerManager().SetTimer(CorpseTimer, this, &ThisClass::HideCorpse, DeathMontage->GetPlayLength());
+        UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyDeathMontage Asset=%s"), *GetNameSafe(DeathMontage));
+    }
+    else if (!Animation)
+    {
+        GetMesh()->SetVisibility(false, true);
+    }
 }
 
 void ACoopRPGEnemy::SetPresentationTint(bool bDarkened)
@@ -547,14 +986,15 @@ void ACoopRPGEnemy::CreateGroundRing()
         AddRingArc(RingMesh, Inner, Outer, -ShieldHalfAngleDegrees, ShieldHalfAngleDegrees, 0.15, RingFrontMaterial);
         AddRingArc(RingMesh, Inner, Outer, ShieldHalfAngleDegrees, GroundRingEndAngle, 0.15, RingSideMaterial);
     };
-    const double OuterInnerEdge = GroundRingRadius - OuterRingWidth;
+    const double Radius = bLargeExpeditionBoss ? ExpeditionBossRingRadius : GroundRingRadius;
+    const double OuterInnerEdge = Radius - OuterRingWidth;
     const double InnerOuterEdge = OuterInnerEdge - RingPadding;
-    AddStroke(OuterInnerEdge, GroundRingRadius);
+    AddStroke(OuterInnerEdge, Radius);
     AddStroke(InnerOuterEdge - InnerRingWidth, InnerOuterEdge);
 
     // Start the arrow inside the outer stroke so they read as one continuous shape.
-    AddRingArrow(RingMesh, GroundRingRadius - 3.0, 8.5, GroundRingRadius + 15.0, 0.05, RingOutlineMaterial);
-    AddRingArrow(RingMesh, GroundRingRadius - 2.0, 6.5, GroundRingRadius + 12.5, 0.25, RingFrontMaterial);
+    AddRingArrow(RingMesh, Radius - 3.0, 8.5, Radius + 15.0, 0.05, RingOutlineMaterial);
+    AddRingArrow(RingMesh, Radius - 2.0, 6.5, Radius + 12.5, 0.25, RingFrontMaterial);
     FMeshNormals::InitializeOverlayToPerVertexNormals(RingMesh.Attributes()->PrimaryNormals());
 
     GroundRing = NewObject<UDynamicMeshComponent>(this);
@@ -581,7 +1021,7 @@ void ACoopRPGEnemy::CreateGroundRing()
 
 void ACoopRPGEnemy::UpdateShieldPresentation(bool bRaised)
 {
-    ShieldVisual->SetVisibility(bRaised);
+    ShieldVisual->SetVisibility(bRaised && !GetMesh()->GetSkeletalMeshAsset());
     if (!GroundRing)
     {
         return;

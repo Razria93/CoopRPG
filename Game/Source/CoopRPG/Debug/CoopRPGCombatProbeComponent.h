@@ -4,6 +4,9 @@
 #include "GameplayTagContainer.h"
 #include "CoopRPGCombatProbeComponent.generated.h"
 
+class ACoopRPGGameMode;
+class ACoopRPGCharacter;
+
 class AController;
 class AGameModeBase;
 
@@ -64,6 +67,8 @@ private:
     void OnPeerLogout(AGameModeBase* Mode, AController* Exiting);
 #endif
 
+    void PrepareSkirmishLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character);
+    void PlaceMeleeTestWall(const FVector& Location);
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);
     void WriteSnapshot(const FString& Label) const;
     void WriteRoundSnapshot(FName Label) const;

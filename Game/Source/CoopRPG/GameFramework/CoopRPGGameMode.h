@@ -20,6 +20,10 @@ public:
 
     ACoopRPGAttackTarget* GetAttackTarget() const;
     AActor* GetMeleeTarget() const;
+    bool IsSkirmishEncounter() const { return bExpeditionSkirmish; }
+    bool IsSkirmishEnemy(const ACoopRPGEnemy* Candidate) const;
+    ACoopRPGEnemy* FindClosestSkirmishEnemy(const FVector& Origin) const;
+    const TArray<TObjectPtr<ACoopRPGEnemy>>& GetSkirmishEnemies() const { return SkirmishEnemies; }
     void UpdateLootRoundPhase(const AController* Leaving = nullptr);
     void AcknowledgeRoundResult(ACoopRPGPlayerController* Player, FGuid RoundId);
 
@@ -39,7 +43,7 @@ private:
     FString GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId);
     bool ReserveRoundTravelSeats(const FString& Destination) const;
     bool IsRoundParticipant(const AController* Controller) const;
-    void AdvanceRoundIfReady(const ACoopRPGGameState& State);
+    void AdvanceRoundIfReady(ACoopRPGGameState& State, const FString& Destination);
 
 private:
     UPROPERTY()
@@ -47,6 +51,9 @@ private:
 
     UPROPERTY()
     TObjectPtr<ACoopRPGEnemy> Enemy;
+
+    UPROPERTY()
+    TArray<TObjectPtr<ACoopRPGEnemy>> SkirmishEnemies;
 
     TWeakObjectPtr<APlayerController> PlayerSlots[2];
     FString ValidationClientLabels[2];
@@ -57,4 +64,8 @@ private:
     bool bTravelAttempted = false;
     bool bParticipantDisconnected = false;
     bool bEnemyCombat = false;
+    bool bExpeditionLobby = false;
+    bool bExpeditionPuzzle = false;
+    bool bExpeditionBoss = false;
+    bool bExpeditionSkirmish = false;
 };
