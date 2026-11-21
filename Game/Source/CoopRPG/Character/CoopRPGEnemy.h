@@ -1,12 +1,15 @@
 #pragma once
 
 #include "AbilitySystemInterface.h"
-#include "Animation/AnimSequence.h"
 #include "GameFramework/Character.h"
-#include "UObject/StrongObjectPtr.h"
 #include "CoopRPGEnemy.generated.h"
 
 class ACoopRPGCharacter;
+class UAnimMontage;
+class UAnimSequence;
+class UAnimSequenceBase;
+class UBlendSpace;
+class UCoopRPGLocomotionAnimInstance;
 class UAbilitySystemComponent;
 class UCoopRPGCombatAttributes;
 class UCoopRPGCombatProbeComponent;
@@ -15,6 +18,14 @@ class UStaticMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 struct FOnAttributeChangeData;
+
+UENUM(BlueprintType)
+enum class ECoopRPGEnemyKind : uint8
+{
+    Training,
+    Mushroom,
+    BlackKnight
+};
 
 USTRUCT()
 struct FCoopRPGShieldWarning
@@ -32,6 +43,18 @@ struct FCoopRPGShieldWarning
 
     UPROPERTY()
     uint32 Sequence = 0;
+};
+
+USTRUCT()
+struct FCoopRPGMushroomStrike
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    double At = 0.0;
+
+    UPROPERTY()
+    float FacingYaw = 0.0f;
 };
 
 UCLASS()
@@ -57,6 +80,7 @@ public:
     const FCoopRPGShieldWarning& GetShieldWarning() const { return ShieldWarning; }
 
 protected:
+    virtual void OnConstruction(const FTransform& Transform) override;
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -70,6 +94,10 @@ private:
     void ResolveAttack(ACoopRPGCharacter* Player);
     void HandleHealthChanged(const FOnAttributeChangeData& Change);
     void SpawnDeathLoot(const FGuid& RoundId);
+    bool ApplyModel();
+    void StartAnimation();
+    void UpdateAttackPose();
+    void HideCorpse();
     void ApplyDeathPresentation();
     void SetPresentationTint(bool bDarkened);
     void RestorePresentationTint();
@@ -77,8 +105,6 @@ private:
     UFUNCTION()
     void OnRep_Dead();
 
-    void ConfigureBlackKnightPresentation();
-    void UpdateBlackKnightAnimation();
     void CreateGroundRing();
     void UpdateShieldPresentation(bool bRaised);
 
@@ -140,17 +166,69 @@ private:
 
     FTimerHandle ShieldPresentationTimer;
 
-    TStrongObjectPtr<UAnimSequence> BlackKnightIdle;
-    TStrongObjectPtr<UAnimSequence> BlackKnightWalk;
-    TStrongObjectPtr<UAnimSequence> BlackKnightGuard;
-    TStrongObjectPtr<UAnimSequence> BlackKnightAttack;
-    UAnimSequence* BlackKnightCurrentClip = nullptr;
+    UPROPERTY(EditDefaultsOnly, Category = "Enemy")
+    ECoopRPGEnemyKind Kind = ECoopRPGEnemyKind::Training;
 
-    double BlackKnightStrikeAt = 0.0;
-    float BlackKnightFacingYaw = 0.0f;
-    uint32 BlackKnightAttackSequence = 0;
-    uint32 LastBlackKnightStrikeFrame = 0;
-    bool bBlackKnightPresentationAttempted = false;
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation")
+    TSoftObjectPtr<USkeletalMesh> BodyMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Presentation", meta = (ClampMin = "1", Units = "cm"))
+    float ModelHeight = 80.0f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation", meta = (Units = "deg"))
+    float ModelYaw = -90.0f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation|Equipment")
+    TSoftObjectPtr<UStaticMesh> AxeMesh;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation|Equipment")
+    TSoftObjectPtr<UStaticMesh> ShieldMesh;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation|Equipment")
+    FName AxeSocket = TEXT("AxeSocket");
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation|Equipment")
+    FName ShieldSocket = TEXT("ShieldSocket");
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation|Animation")
+    TObjectPtr<UBlendSpace> Locomotion;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation|Animation")
+    TObjectPtr<UAnimSequence> GuardPose;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation|Animation")
+    TObjectPtr<UAnimMontage> AttackMontage;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation|Animation")
+    TObjectPtr<UAnimMontage> HitMontage;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Presentation|Animation")
+    TObjectPtr<UAnimMontage> DeathMontage;
+
+    UPROPERTY(VisibleAnywhere, Category = "Presentation|Equipment")
+    TObjectPtr<UStaticMeshComponent> Axe;
+
+    UPROPERTY(VisibleAnywhere, Category = "Presentation|Equipment")
+    TObjectPtr<UStaticMeshComponent> Shield;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UCoopRPGLocomotionAnimInstance> Animation;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UAnimMontage> GuardLoop;
+
+    UPROPERTY(Replicated)
+    FCoopRPGMushroomStrike MushroomStrike;
+
+    FTimerHandle CorpseTimer;
+    double KnightStrikeAt = 0.0;
+    float KnightFacingYaw = 0.0f;
+    uint32 KnightSequence = 0;
+    uint32 LastKnightImpact = 0;
+    const UAnimSequenceBase* LastObservedClip = nullptr;
+    double PendingHitUntil = 0.0;
+    double PresentedStrike = 0.0;
+    bool bMushroomEncounter = false;
 
     FVector ObservationOrigin = FVector::ZeroVector;
     bool bObservedMovement = false;

@@ -450,6 +450,24 @@ void ACoopRPGLootHUD::DrawExtractionStatus(const ACoopRPGGameState& State, float
         return;
     }
 
+    if (Zone->IsPortalOpen())
+    {
+        const int32 Count = State.GetExtractionPlayersInside();
+        const int32 Capacity = ACoopRPGGameState::RoundCapacity;
+        if (State.IsExtractionInProgress())
+        {
+            const double Seconds = FMath::CeilToDouble(State.GetExtractionRemainingSeconds() * 10.0) / 10.0;
+            DrawText(FString::Printf(TEXT("공동 탈출 · %.1f초"), Seconds), ProgressColor, PanelTextX, HintY);
+        }
+        else
+        {
+            const TCHAR* Label = Count == 0 ? TEXT("포탈로 이동") : TEXT("동료 대기");
+            DrawText(FString::Printf(TEXT("%s · %d/%d"), Label, Count, Capacity), AvailableColor, PanelTextX, HintY);
+            DrawPortalGuide(*Zone);
+        }
+        return;
+    }
+
     FString Label(TEXT("Extraction locked"));
     FLinearColor Color = LockedColor;
     if (State.IsExtractionInProgress())
@@ -469,4 +487,58 @@ void ACoopRPGLootHUD::DrawExtractionStatus(const ACoopRPGGameState& State, float
     Zone->SetPresentationColor(Color);
     DrawWorldLabel(Zone->GetActorLocation() + FVector(0.0f, 0.0f, 12.0f), Label,
         Color == LockedColor ? FLinearColor(0.75f, 0.79f, 0.86f) : Color, FVector2D(0.0, -8.0));
+}
+
+
+void ACoopRPGLootHUD::DrawPortalGuide(const ACoopRPGExtractionZone& Zone)
+{
+    const APlayerController* Controller = GetOwningPlayerController();
+    const APawn* Pawn = Controller ? Controller->GetPawn() : nullptr;
+    if (!Pawn || Zone.ContainsPawn(*Pawn))
+    {
+        return;
+    }
+
+    constexpr double Margin = 34.0;
+    const FVector2D Center(Canvas->ClipX * 0.5, Canvas->ClipY * 0.5);
+    const FVector2D Extent = Center - FVector2D(Margin, Margin);
+    if (Extent.X <= 0.0 || Extent.Y <= 0.0)
+    {
+        return;
+    }
+
+    const FVector Screen = Project(Zone.GetActorLocation() + FVector(0.0, 0.0, 14.0));
+    FVector2D Direction(Screen.X - Center.X, Screen.Y - Center.Y);
+    if (Screen.Z <= 0.0)
+    {
+        FVector EyeLocation;
+        FRotator EyeRotation;
+        Controller->GetPlayerViewPoint(EyeLocation, EyeRotation);
+        const FVector ToPortal = EyeRotation.UnrotateVector(Zone.GetActorLocation() - EyeLocation);
+        Direction = FVector2D(ToPortal.Y, -ToPortal.Z);
+        if (Direction.IsNearlyZero())
+        {
+            Direction = FVector2D(0.0, 1.0);
+        }
+    }
+
+    FVector2D Aim(0.0, 1.0);
+    FVector2D Position(Screen.X, Screen.Y);
+    const double EdgeScale = FMath::Max(FMath::Abs(Direction.X) / Extent.X, FMath::Abs(Direction.Y) / Extent.Y);
+    if (Screen.Z <= 0.0 || EdgeScale > 1.0)
+    {
+        Aim = Direction.GetSafeNormal();
+        Position = Center + Direction / EdgeScale;
+    }
+
+    const FVector2D Side(-Aim.Y, Aim.X);
+    const FVector2D Tail = Position - Aim * 12.0;
+    const FVector2D Left = Tail + Side * 7.0;
+    const FVector2D Right = Tail - Side * 7.0;
+    const FLinearColor Outline(0.03f, 0.05f, 0.07f);
+    const FLinearColor Highlight(0.45f, 1.0f, 0.78f);
+    DrawLine(Left.X, Left.Y, Position.X, Position.Y, Outline, 6.0f);
+    DrawLine(Right.X, Right.Y, Position.X, Position.Y, Outline, 6.0f);
+    DrawLine(Left.X, Left.Y, Position.X, Position.Y, Highlight, 2.5f);
+    DrawLine(Right.X, Right.Y, Position.X, Position.Y, Highlight, 2.5f);
 }

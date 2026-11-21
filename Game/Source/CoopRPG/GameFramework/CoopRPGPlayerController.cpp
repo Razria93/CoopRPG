@@ -292,6 +292,7 @@ void ACoopRPGPlayerController::ServerSetChestOpen_Implementation(ACoopRPGSharedC
     if (OpenedChest != Chest)
     {
         OpenedChest = Chest;
+        Chest->RecordFirstOpen();
         ForceNetUpdate();
         UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestOpened Chest=%s Round=%s Stock=%d WeaponStock=%d %s"),
             *GetNameSafe(Chest), *RoundId.ToString(), Chest->GetRecoveryStock(), Chest->GetWeaponStock(),

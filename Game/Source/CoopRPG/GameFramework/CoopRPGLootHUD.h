@@ -6,6 +6,7 @@
 #include "CoopRPGLootHUD.generated.h"
 
 class ACoopRPGEnemy;
+class ACoopRPGExtractionZone;
 class ACoopRPGGameState;
 class ACoopRPGPlayerController;
 
@@ -40,6 +41,7 @@ private:
     void DrawRoundWaiting(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, int32 Stage);
     void DrawRoundResult(const ACoopRPGGameState& State, ACoopRPGPlayerController& Controller, int32 Stage);
     void DrawExtractionStatus(const ACoopRPGGameState& State, float HintY);
+    void DrawPortalGuide(const ACoopRPGExtractionZone& Zone);
 
 private:
     TArray<FFeedbackEntry> FeedbackEntries;

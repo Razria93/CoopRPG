@@ -43,6 +43,9 @@ struct FCoopRPGRoundStatus
     double RoundDeadline = 0.0;
 
     UPROPERTY()
+    int32 ExtractionPlayersInside = 0;
+
+    UPROPERTY()
     ECoopRPGRoundEndReason EndReason = ECoopRPGRoundEndReason::None;
 
     UPROPERTY()
@@ -124,7 +127,9 @@ public:
     void SetReadySlots(const FCoopRPGReadySlots& Slots);
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);
-    void EvaluateRound(bool bDisconnected, bool bDeath, bool bBothInside);
+    static constexpr int32 RoundCapacity = 2;
+
+    void EvaluateRound(bool bDisconnected, bool bDeath, int32 PlayersInside);
     double GetRoundRemainingSeconds() const;
     double GetExtractionRemainingSeconds() const;
     FString GetRoundTravelDestination() const;
@@ -134,6 +139,7 @@ public:
     bool IsRoundPlaying() const { return RoundStatus.Phase == ECoopRPGRoundPhase::Playing; }
     bool HasRoundResult() const { return RoundStatus.Phase == ECoopRPGRoundPhase::Result; }
     bool IsExtractionInProgress() const { return RoundStatus.ExtractionDeadline > 0.0; }
+    int32 GetExtractionPlayersInside() const { return RoundStatus.ExtractionPlayersInside; }
     ACoopRPGExtractionZone* GetExtractionZone() const { return ExtractionZone.Get(); }
     ECoopRPGRoundEndReason GetRoundEndReason() const { return RoundStatus.EndReason; }
     int32 GetTeamScore() const { return RoundStatus.TeamScore; }
@@ -145,6 +151,9 @@ private:
     friend class UCoopRPGCombatProbeComponent;
 
     void UpdateExtraction(bool bEligible, double Now);
+
+    UFUNCTION()
+    void OnRep_ExtractionZone();
 
     UFUNCTION()
     void OnRep_TeamLootCount(int32 PreviousCount);
@@ -168,7 +177,7 @@ private:
     UPROPERTY(ReplicatedUsing = OnRep_ReadySlots)
     FCoopRPGReadySlots ReadySlots;
 
-    UPROPERTY(Replicated)
+    UPROPERTY(ReplicatedUsing = OnRep_ExtractionZone)
     TObjectPtr<ACoopRPGExtractionZone> ExtractionZone;
 
     UPROPERTY(Replicated)

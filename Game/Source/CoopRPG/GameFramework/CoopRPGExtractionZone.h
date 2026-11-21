@@ -16,7 +16,9 @@ public:
     ACoopRPGExtractionZone();
 
     bool ContainsPawn(const APawn& Pawn) const;
+    bool IsPortalOpen() const { return bPortalOpened; }
     void SetPresentationColor(const FLinearColor& Color);
+    void OpenPortal();
 
 private:
     UPROPERTY()
@@ -26,4 +28,5 @@ private:
     TObjectPtr<UMaterialInstanceDynamic> PresentationMaterial;
 
     FLinearColor PresentationColor = FLinearColor::Transparent;
+    bool bPortalOpened = false;
 };

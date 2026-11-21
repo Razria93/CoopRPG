@@ -26,7 +26,7 @@ namespace
     constexpr TCHAR ForestMapName[] = TEXT("L_ForestExpedition");
     constexpr TCHAR RoundOneMapName[] = TEXT("L_Round_01");
     constexpr double ResultDisplaySeconds = 3.0;
-    constexpr int32 RoundCapacity = 2;
+    constexpr int32 RoundCapacity = ACoopRPGGameState::RoundCapacity;
 
     bool UsesPlacedRoundActors(const FString& MapName)
     {
@@ -217,13 +217,14 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
         }
 
         const auto* Pawn = Cast<ACoopRPGCharacter>(Player->GetPawn());
-        bDeath |= !Pawn || Pawn->GetHealth() <= 0.0f;
-        if (bCanUseZone && Pawn && Zone->ContainsPawn(*Pawn))
+        const bool bAlive = Pawn && Pawn->GetHealth() > 0.0f;
+        bDeath |= !bAlive;
+        if (bCanUseZone && bAlive && Zone->ContainsPawn(*Pawn))
         {
             ++PlayersInside;
         }
     }
-    State->EvaluateRound(bParticipantDisconnected, bDeath, PlayersInside == RoundCapacity);
+    State->EvaluateRound(bParticipantDisconnected, bDeath, PlayersInside);
 }
 
 void ACoopRPGGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId,

@@ -67,6 +67,7 @@ void ACoopRPGGameState::SetRoundPlaying(bool bPlaying)
         const double Now = GetServerWorldTimeSeconds();
         if (!bPlaying)
         {
+            RoundStatus.ExtractionPlayersInside = 0;
             UpdateExtraction(false, Now);
         }
         RoundStatus.RoundDeadline = bPlaying && IsValid(ExtractionZone) ? Now + RoundDurationSeconds : 0.0;
@@ -153,11 +154,12 @@ bool ACoopRPGGameState::TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop)
     }
 
     ++TeamLootCount;
+    OnRep_ExtractionZone();
     ForceNetUpdate();
     return true;
 }
 
-void ACoopRPGGameState::EvaluateRound(bool bDisconnected, bool bDeath, bool bBothInside)
+void ACoopRPGGameState::EvaluateRound(bool bDisconnected, bool bDeath, int32 PlayersInside)
 {
     if (!HasAuthority() || !IsRoundPlaying())
     {
@@ -166,6 +168,7 @@ void ACoopRPGGameState::EvaluateRound(bool bDisconnected, bool bDeath, bool bBot
 
     const double Now = GetServerWorldTimeSeconds();
     const bool bTimeout = RoundStatus.RoundDeadline > 0.0 && Now >= RoundStatus.RoundDeadline;
+    const bool bBothInside = PlayersInside == RoundCapacity;
     const bool bExtractionReady = bBothInside && IsExtractionInProgress() && Now >= RoundStatus.ExtractionDeadline;
     ECoopRPGRoundEndReason Reason = ECoopRPGRoundEndReason::None;
     if (bDisconnected)
@@ -186,6 +189,14 @@ void ACoopRPGGameState::EvaluateRound(bool bDisconnected, bool bDeath, bool bBot
     }
     else
     {
+        const int32 PreviousPlayersInside = RoundStatus.ExtractionPlayersInside;
+        RoundStatus.ExtractionPlayersInside = PlayersInside;
+        if (PreviousPlayersInside != PlayersInside)
+        {
+            UE_LOG(LogCoopRPGRound, Log, TEXT("ExtractionOccupancy Round=%s Before=%d Inside=%d"),
+                *RoundId.ToString(), PreviousPlayersInside, PlayersInside);
+            ForceNetUpdate();
+        }
         UpdateExtraction(bBothInside, Now);
         return;
     }
@@ -197,6 +208,7 @@ void ACoopRPGGameState::EvaluateRound(bool bDisconnected, bool bDeath, bool bBot
     RoundStatus.EndReason = Reason;
     RoundStatus.TeamScore = bSuccess ? 1 : 0;
     RoundStatus.ExtractionDeadline = 0.0;
+    RoundStatus.ExtractionPlayersInside = 0;
     RoundStatus.RoundDeadline = 0.0;
     const FString ReasonName = StaticEnum<ECoopRPGRoundEndReason>()->GetNameStringByValue(static_cast<int64>(Reason));
     UE_LOG(LogCoopRPGRound, Log,
@@ -264,8 +276,17 @@ void ACoopRPGGameState::UpdateExtraction(bool bEligible, double Now)
     }
 }
 
+void ACoopRPGGameState::OnRep_ExtractionZone()
+{
+    if (TeamLootCount > 0 && IsValid(ExtractionZone))
+    {
+        ExtractionZone->OpenPortal();
+    }
+}
+
 void ACoopRPGGameState::OnRep_TeamLootCount(int32 PreviousCount)
 {
+    OnRep_ExtractionZone();
     UE_LOG(LogCoopRPGRound, Log, TEXT("TeamLootCountReplicated Before=%d After=%d %s"),
         PreviousCount, TeamLootCount, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
@@ -282,7 +303,12 @@ void ACoopRPGGameState::OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousSta
             bSuccess ? TEXT("ExtractionResultReplicated") : TEXT("RoundResultReplicated"),
             *RoundId.ToString(), GetRoundOutcome(Reason), GetTeamScore(), *ReasonName, *Context);
     }
-    else if (PreviousStatus.ExtractionDeadline != RoundStatus.ExtractionDeadline)
+    else if (PreviousStatus.ExtractionPlayersInside != RoundStatus.ExtractionPlayersInside)
+    {
+        UE_LOG(LogCoopRPGRound, Log, TEXT("ExtractionOccupancyReplicated Round=%s Before=%d Inside=%d %s"),
+            *RoundId.ToString(), PreviousStatus.ExtractionPlayersInside, RoundStatus.ExtractionPlayersInside, *Context);
+    }
+    if (!HasRoundResult() && PreviousStatus.ExtractionDeadline != RoundStatus.ExtractionDeadline)
     {
         UE_LOG(LogCoopRPGRound, Log, TEXT("ExtractionProgressReplicated Round=%s Phase=%s Deadline=%.3f %s"),
             *RoundId.ToString(), IsExtractionInProgress() ? TEXT("Started") : TEXT("Reset"),
