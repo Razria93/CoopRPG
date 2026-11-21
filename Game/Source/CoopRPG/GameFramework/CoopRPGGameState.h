@@ -153,7 +153,6 @@ public:
     int32 RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated);
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);
-    static constexpr int32 RoundCapacity = 2;
 
     void EvaluateRound(bool bDisconnected, bool bDeath, int32 PlayersInside, bool bBossDefeated = false);
     void EvaluatePuzzle(bool bDisconnected, bool bDeath, uint8 OccupantsA, uint8 OccupantsB);
@@ -204,6 +203,9 @@ private:
 
     UFUNCTION()
     void OnRep_ReadySlots();
+
+public:
+    static constexpr int32 RoundCapacity = 2;
 
 private:
     UPROPERTY(Replicated)

@@ -1,14 +1,13 @@
 #include "CoopRPGEnemyLoot.h"
 
-#include "NiagaraComponent.h"
-#include "NiagaraSystem.h"
-#include "Engine/World.h"
-
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraComponent.h"
+#include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEnemyLoot, Log, All);

@@ -336,6 +336,11 @@ void ACoopRPGEnemy::EnableShieldEncounter()
     OnRep_ShieldEncounter();
 }
 
+float ACoopRPGEnemy::GetMeleeRangeBonus() const
+{
+    return bLargeExpeditionBoss ? GetCapsuleComponent()->GetScaledCapsuleRadius() - DefaultCapsuleRadius : 0.0f;
+}
+
 bool ACoopRPGEnemy::IsShieldRaised() const
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -429,25 +434,6 @@ void ACoopRPGEnemy::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
-float ACoopRPGEnemy::GetMeleeRangeBonus() const
-{
-    return bLargeExpeditionBoss ? GetCapsuleComponent()->GetScaledCapsuleRadius() - DefaultCapsuleRadius : 0.0f;
-}
-
-float ACoopRPGEnemy::GetAttackRange() const
-{
-    // Preserve the old counter's reach outside both bodies as the boss capsule grows.
-    return bLargeExpeditionBoss ? AttackRangeCm - DefaultCapsuleRadius - PlayerCapsuleRadiusForLegacyReach
-        : AttackRangeCm;
-}
-
-double ACoopRPGEnemy::GetAttackDistance(const ACoopRPGCharacter& Player) const
-{
-    const double CenterDistance = FVector::Dist2D(GetActorLocation(), Player.GetActorLocation());
-    return bLargeExpeditionBoss ? FMath::Max(0.0, CenterDistance - GetCapsuleComponent()->GetScaledCapsuleRadius()
-        - Player.GetCapsuleComponent()->GetScaledCapsuleRadius()) : CenterDistance;
-}
-
 ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range, bool bMeasureAttackDistance) const
 {
     ACoopRPGCharacter* Nearest = nullptr;
@@ -474,6 +460,20 @@ ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range, bool bMeasureAttackDis
         }
     }
     return Nearest;
+}
+
+double ACoopRPGEnemy::GetAttackDistance(const ACoopRPGCharacter& Player) const
+{
+    const double CenterDistance = FVector::Dist2D(GetActorLocation(), Player.GetActorLocation());
+    return bLargeExpeditionBoss ? FMath::Max(0.0, CenterDistance - GetCapsuleComponent()->GetScaledCapsuleRadius()
+        - Player.GetCapsuleComponent()->GetScaledCapsuleRadius()) : CenterDistance;
+}
+
+float ACoopRPGEnemy::GetAttackRange() const
+{
+    // Preserve the old counter's reach outside both bodies as the boss capsule grows.
+    return bLargeExpeditionBoss ? AttackRangeCm - DefaultCapsuleRadius - PlayerCapsuleRadiusForLegacyReach
+        : AttackRangeCm;
 }
 
 void ACoopRPGEnemy::SetShieldWarning(int32 TargetSlot, float FacingYaw, double EndsAt)
