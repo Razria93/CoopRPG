@@ -394,7 +394,7 @@ void FCoopRPGExpeditionDashboard::DrawAttackIcon(AHUD& HUD, FVector2D Position, 
 }
 
 void FCoopRPGExpeditionDashboard::DrawBasicAttackGlyph(AHUD& HUD, UCanvas& Canvas, const FBox2D& Slot,
-    const CoopRPG::ExpeditionUI::FAttackHudStatus& Attack) const
+    const CoopRPG::ExpeditionUI::FAttackHudStatus& Attack, bool bSlash) const
 {
     using namespace CoopRPG::ExpeditionUI;
     if (!Skin.IsValid())
@@ -404,6 +404,12 @@ void FCoopRPGExpeditionDashboard::DrawBasicAttackGlyph(AHUD& HUD, UCanvas& Canva
 
     const double Side = Slot.GetSize().X;
     const double IconSide = FMath::RoundToDouble(Side * 0.60);
+    if (bSlash)
+    {
+        const double Inset = FMath::RoundToDouble(Side * 0.14);
+        HUD.DrawRect(FLinearColor(FColor(49, 72, 93)), Slot.Min.X + Inset, Slot.Min.Y + Inset,
+            Side - Inset * 2.0, Side - Inset * 2.0);
+    }
     const bool bCooling = Attack.State == EAttackHudState::Cooling;
     DrawAttackIcon(HUD, Slot.GetCenter() - FVector2D(IconSide * 0.5), IconSide,
         Attack.State != EAttackHudState::Ready && !bCooling);

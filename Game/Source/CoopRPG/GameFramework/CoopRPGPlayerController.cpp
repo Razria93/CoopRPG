@@ -73,6 +73,10 @@ void ACoopRPGPlayerController::FlushPressedKeys()
 {
     const bool bHeldW = bManualInput && IsInputKeyDown(EKeys::W);
     Super::FlushPressedKeys();
+    if (auto* Hero = Cast<ACoopRPGCharacter>(GetPawn()))
+    {
+        Hero->ReleaseGuardInput();
+    }
     if (auto* HUD = GetHUD<ACoopRPGLootHUD>())
     {
         HUD->ReleaseHudPointer();
@@ -141,6 +145,8 @@ void ACoopRPGPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProper
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, StageRecoveryUsesRemaining, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, StageRecoverySupplies, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, SwordOwnership, COND_OwnerOnly);
+    DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, StatProgress, COND_OwnerOnly);
+    DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, SlashProgress, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, bRoundReady, COND_OwnerOnly);
 }
 
@@ -164,7 +170,8 @@ void ACoopRPGPlayerController::ResetLobbyReady()
     }
 }
 
-void ACoopRPGPlayerController::RestoreTravelInventory(const FCoopRPGRecoverySnapshot& Recovery, const FCoopRPGSwordSnapshot& Sword)
+void ACoopRPGPlayerController::RestoreTravelInventory(const FCoopRPGRecoverySnapshot& Recovery, const FCoopRPGSwordSnapshot& Sword,
+    const FCoopRPGStatProgress& Stats, bool bShieldEquipped, const FCoopRPGSlashProgress& Slash)
 {
     if (HasAuthority())
     {
@@ -173,6 +180,9 @@ void ACoopRPGPlayerController::RestoreTravelInventory(const FCoopRPGRecoverySnap
         RecoveryRegistration = Recovery.Registration;
         SwordOwnership = Sword.Ownership;
         EntrySword = Sword;
+        bEntryShieldEquipped = bShieldEquipped;
+        StatProgress = Stats;
+        SlashProgress = Slash;
     }
 }
 
@@ -186,9 +196,21 @@ void ACoopRPGPlayerController::InitializeStageInventory(FGuid RoundId)
 
     StageInventoryRound = RoundId;
     EntryRecovery = GetTravelRecovery(false);
+    EntryStats = StatProgress;
+    EntrySlash = SlashProgress;
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("SlashStageEntered Round=%s Capsule=%d Registered=%d %s"),
+        *RoundId.ToString(), HasSlashCapsule(), HasSlashRegistered(),
+        *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
     StageRecoverySupplies = FIntPoint(1, 1);
     StageRecoveryUsesRemaining = FIntPoint(1, 1);
     Hero->SetMeleeWeaponEquipped(EntrySword.bEquipped);
+    Hero->SetShieldEquipped(bEntryShieldEquipped);
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("MartialPowerStageEntered Round=%s MartialPower=%d Scrolls=%d %s"),
+        *RoundId.ToString(), GetMartialPower(), StatProgress.MartialPower.ScrollCount,
+        *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ProtectionStageEntered Round=%s Protection=%d Scrolls=%d %s"),
+        *RoundId.ToString(), GetProtection(), StatProgress.Protection.ScrollCount,
+        *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("SwordStageEntered Round=%s Owned=%d Bound=%d Equipped=%d %s"),
         *RoundId.ToString(), SwordOwnership != ECoopRPGSwordOwnership::None, SwordOwnership == ECoopRPGSwordOwnership::Bound,
         Hero->HasMeleeWeapon(), *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
@@ -197,16 +219,6 @@ void ACoopRPGPlayerController::InitializeStageInventory(FGuid RoundId)
         *RoundId.ToString(), RecoveryCount, StageRecoverySupplies.X, StageRecoverySupplies.Y, StaminaRecoveryCount,
         RecoveryRegistration.bHealth, RecoveryRegistration.bStamina, StageRecoveryUsesRemaining.X, StageRecoveryUsesRemaining.Y,
         *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
-}
-
-FCoopRPGRecoverySnapshot ACoopRPGPlayerController::GetTravelRecovery(bool bRetry) const
-{
-    return bRetry ? EntryRecovery : FCoopRPGRecoverySnapshot{FIntPoint(RecoveryCount, StaminaRecoveryCount), RecoveryRegistration};
-}
-
-bool ACoopRPGPlayerController::IsRecoveryRegistered(bool bStamina) const
-{
-    return bStamina ? RecoveryRegistration.bStamina : RecoveryRegistration.bHealth;
 }
 
 FCoopRPGSwordSnapshot ACoopRPGPlayerController::GetTravelSword(bool bRetry) const
@@ -233,6 +245,101 @@ void ACoopRPGPlayerController::RequestSwordEquipped(bool bEquipped)
     {
         ServerSetSwordEquipped(State->GetRoundId(), bEquipped);
     }
+}
+
+bool ACoopRPGPlayerController::CanChangeShield() const
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const auto* Hero = Cast<ACoopRPGCharacter>(GetPawn());
+    return State && State->GetRoundId().IsValid() && !State->HasRoundResult() && Hero && Hero->GetHealth() > 0.0f
+        && CoopRPG::Expedition::IsExpedition(GetWorld()) && !CoopRPG::Expedition::IsLobby(GetWorld());
+}
+
+bool ACoopRPGPlayerController::GetTravelShieldEquipped(bool bRetry) const
+{
+    const auto* Hero = Cast<ACoopRPGCharacter>(GetPawn());
+    return bRetry ? bEntryShieldEquipped : Hero && Hero->HasShieldEquipped();
+}
+
+void ACoopRPGPlayerController::RequestShieldEquipped(bool bEquipped)
+{
+    if (IsLocalController() && CanChangeShield())
+    {
+        ServerSetShieldEquipped(GetWorld()->GetGameState<ACoopRPGGameState>()->GetRoundId(), bEquipped);
+    }
+}
+
+FCoopRPGRecoverySnapshot ACoopRPGPlayerController::GetTravelRecovery(bool bRetry) const
+{
+    return bRetry ? EntryRecovery : FCoopRPGRecoverySnapshot{FIntPoint(RecoveryCount, StaminaRecoveryCount), RecoveryRegistration};
+}
+
+bool ACoopRPGPlayerController::IsRecoveryRegistered(bool bStamina) const
+{
+    return bStamina ? RecoveryRegistration.bStamina : RecoveryRegistration.bHealth;
+}
+
+int32 ACoopRPGPlayerController::GetStatScrollCount(ECoopRPGScrollStat Stat) const
+{
+    return Stat == ECoopRPGScrollStat::Protection ? StatProgress.Protection.ScrollCount : StatProgress.MartialPower.ScrollCount;
+}
+
+const FCoopRPGStatProgress& ACoopRPGPlayerController::GetTravelStats(bool bRetry) const
+{
+    return bRetry ? EntryStats : StatProgress;
+}
+
+void ACoopRPGPlayerController::RequestRecoveryRegistration(bool bStamina, bool bRegistered)
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (IsLocalController() && State && State->GetRoundId().IsValid())
+    {
+        ServerSetRecoveryRegistration(State->GetRoundId(), bStamina, bRegistered);
+    }
+}
+
+void ACoopRPGPlayerController::TakeStatScroll(ECoopRPGScrollStat Stat)
+{
+    RequestChestItem(Stat == ECoopRPGScrollStat::Protection ? ECoopRPGChestItem::ProtectionScroll : ECoopRPGChestItem::MartialPowerScroll);
+}
+
+void ACoopRPGPlayerController::TakeSlashCapsule()
+{
+    RequestChestItem(ECoopRPGChestItem::SlashCapsule);
+}
+
+void ACoopRPGPlayerController::RequestUseSlashCapsule()
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (IsLocalController() && State && State->GetRoundId().IsValid() && HasSlashCapsule())
+    {
+        ServerUseSlashCapsule(State->GetRoundId());
+    }
+}
+
+void ACoopRPGPlayerController::RequestUseStatScroll(ECoopRPGScrollStat Stat)
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const int32 Count = GetStatScrollCount(Stat);
+    if (IsLocalController() && State && State->GetRoundId().IsValid() && Count > 0)
+    {
+        ServerUseStatScroll(State->GetRoundId(), Stat, Count);
+    }
+}
+
+void ACoopRPGPlayerController::TakeRecoveryItem()
+{
+    RequestChestItem(ECoopRPGChestItem::Recovery);
+}
+
+void ACoopRPGPlayerController::TakeStaminaRecoveryItem()
+{
+    RequestChestItem(ECoopRPGChestItem::StaminaRecovery);
+}
+
+void ACoopRPGPlayerController::TakeMeleeWeapon()
+{
+    RequestChestItem(ECoopRPGChestItem::MeleeWeapon);
 }
 
 void ACoopRPGPlayerController::SetupInputComponent()
@@ -318,21 +425,6 @@ void ACoopRPGPlayerController::CloseOpenedChest(FGuid RoundId, const TCHAR* Reas
         *RoundId.ToString(), Reason, *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
-void ACoopRPGPlayerController::TakeRecoveryItem()
-{
-    RequestChestItem(ECoopRPGChestItem::Recovery);
-}
-
-void ACoopRPGPlayerController::TakeStaminaRecoveryItem()
-{
-    RequestChestItem(ECoopRPGChestItem::StaminaRecovery);
-}
-
-void ACoopRPGPlayerController::TakeMeleeWeapon()
-{
-    RequestChestItem(ECoopRPGChestItem::MeleeWeapon);
-}
-
 void ACoopRPGPlayerController::UseRecoveryItem()
 {
     RequestRecoveryUse(false);
@@ -358,15 +450,6 @@ void ACoopRPGPlayerController::RequestRecoveryUse(bool bStamina)
     }
 }
 
-void ACoopRPGPlayerController::RequestRecoveryRegistration(bool bStamina, bool bRegistered)
-{
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    if (IsLocalController() && State && State->GetRoundId().IsValid())
-    {
-        ServerSetRecoveryRegistration(State->GetRoundId(), bStamina, bRegistered);
-    }
-}
-
 void ACoopRPGPlayerController::RequestChestItem(ECoopRPGChestItem Item)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -374,7 +457,10 @@ void ACoopRPGPlayerController::RequestChestItem(ECoopRPGChestItem Item)
     {
         ++NextPickupRequest;
         const TCHAR* Event = Item == ECoopRPGChestItem::MeleeWeapon ? TEXT("ChestWeaponRequested")
-            : Item == ECoopRPGChestItem::StaminaRecovery ? TEXT("ChestStaminaRequested") : TEXT("ChestTakeRequested");
+            : Item == ECoopRPGChestItem::StaminaRecovery ? TEXT("ChestStaminaRequested")
+            : Item == ECoopRPGChestItem::MartialPowerScroll ? TEXT("ChestMartialPowerScrollRequested")
+            : Item == ECoopRPGChestItem::ProtectionScroll ? TEXT("ChestProtectionScrollRequested")
+            : Item == ECoopRPGChestItem::SlashCapsule ? TEXT("ChestSlashCapsuleRequested") : TEXT("ChestTakeRequested");
         UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Chest=%s Round=%s Request=%u %s"),
             Event, *GetNameSafe(OpenedChest), *State->GetRoundId().ToString(), NextPickupRequest,
             *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
@@ -446,8 +532,13 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
 {
     const bool bTakingWeapon = Item == ECoopRPGChestItem::MeleeWeapon;
     const bool bTakingStamina = Item == ECoopRPGChestItem::StaminaRecovery;
-    const TCHAR* Action = bTakingWeapon ? TEXT("TakeWeapon") : bTakingStamina ? TEXT("TakeStamina") : TEXT("Take");
-    if (!bTakingWeapon && Item != ECoopRPGChestItem::Recovery && !bTakingStamina)
+    const bool bTakingCapsule = Item == ECoopRPGChestItem::SlashCapsule;
+    const bool bTakingProtection = Item == ECoopRPGChestItem::ProtectionScroll;
+    const bool bTakingScroll = Item == ECoopRPGChestItem::MartialPowerScroll || bTakingProtection;
+    const TCHAR* Action = bTakingWeapon ? TEXT("TakeWeapon") : bTakingStamina ? TEXT("TakeStamina")
+        : bTakingProtection ? TEXT("TakeProtectionScroll") : bTakingScroll ? TEXT("TakeMartialPowerScroll")
+        : bTakingCapsule ? TEXT("TakeSlashCapsule") : TEXT("Take");
+    if (!bTakingWeapon && Item != ECoopRPGChestItem::Recovery && !bTakingStamina && !bTakingScroll && !bTakingCapsule)
     {
         LogChestRejection(Action, TEXT("InvalidItem"), Chest, RoundId, Request);
         return;
@@ -508,6 +599,57 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
         return;
     }
 
+    if (bTakingCapsule)
+    {
+        if (StageInventoryRound != RoundId || !CoopRPG::Expedition::IsSkirmish(GetWorld()))
+        {
+            LogChestRejection(Action, TEXT("CapsuleUnavailable"), Chest, RoundId, Request);
+            return;
+        }
+        if (HasSlashCapsule() || HasSlashRegistered())
+        {
+            LogChestRejection(Action, TEXT("AlreadyOwned"), Chest, RoundId, Request);
+            return;
+        }
+        const int32 StockBefore = Chest->GetSlashCapsuleStock();
+        if (!Chest->TryTakeSlashCapsule())
+        {
+            LogChestRejection(Action, TEXT("Depleted"), Chest, RoundId, Request);
+            return;
+        }
+        SlashProgress.bHasCapsule = true;
+        ForceNetUpdate();
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestSlashCapsuleGranted Round=%s Stock=%d->%d %s"),
+            *RoundId.ToString(), StockBefore, Chest->GetSlashCapsuleStock(),
+            *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        return;
+    }
+
+    if (bTakingScroll)
+    {
+        if (StageInventoryRound != RoundId || !CoopRPG::Expedition::IsSkirmish(GetWorld()))
+        {
+            LogChestRejection(Action, TEXT("ScrollUnavailable"), Chest, RoundId, Request);
+            return;
+        }
+        const auto Stat = bTakingProtection ? ECoopRPGScrollStat::Protection : ECoopRPGScrollStat::MartialPower;
+        const int32 StockBefore = Chest->GetStatScrollStock(Stat);
+        if (!Chest->TryTakeStatScroll(Stat))
+        {
+            LogChestRejection(Action, TEXT("Depleted"), Chest, RoundId, Request);
+            return;
+        }
+
+        auto& Progress = bTakingProtection ? StatProgress.Protection : StatProgress.MartialPower;
+        ++Progress.ScrollCount;
+        ForceNetUpdate();
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Round=%s Request=%u Stock=%d->%d Scrolls=%d %s"),
+            bTakingProtection ? TEXT("ChestProtectionScrollGranted") : TEXT("ChestMartialPowerScrollGranted"),
+            *RoundId.ToString(), Request, StockBefore, Chest->GetStatScrollStock(Stat), Progress.ScrollCount,
+            *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        return;
+    }
+
     if (bTakingStamina && StageInventoryRound != RoundId)
     {
         LogChestRejection(Action, TEXT("SupplyUnavailable"), Chest, RoundId, Request);
@@ -559,6 +701,15 @@ void ACoopRPGPlayerController::ServerSetSwordEquipped_Implementation(FGuid Round
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("SwordEquipmentChanged Round=%s Equipped=%d Bound=%d NewBinding=%d %s"),
         *RoundId.ToString(), bEquipped, SwordOwnership == ECoopRPGSwordOwnership::Bound, bNewBinding,
         *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::ServerSetShieldEquipped_Implementation(FGuid RoundId, bool bEquipped)
+{
+    if (RoundId.IsValid() && StageInventoryRound == RoundId && CanChangeShield()
+        && GetWorld()->GetGameState<ACoopRPGGameState>()->GetRoundId() == RoundId)
+    {
+        CastChecked<ACoopRPGCharacter>(GetPawn())->SetShieldEquipped(bEquipped);
+    }
 }
 
 void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId, bool bStamina)
@@ -683,6 +834,53 @@ void ACoopRPGPlayerController::ServerSetRecoveryRegistration_Implementation(FGui
         bStamina ? StageRecoverySupplies.Y : StageRecoverySupplies.X,
         bStamina ? StageRecoveryUsesRemaining.Y : StageRecoveryUsesRemaining.X,
         *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::ServerUseStatScroll_Implementation(
+    FGuid RoundId, ECoopRPGScrollStat Stat, int32 ExpectedScrollCount)
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const auto* Hero = Cast<ACoopRPGCharacter>(GetPawn());
+    auto* Progress = StatProgress.Find(Stat);
+    if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId || StageInventoryRound != RoundId
+        || !State->IsRoundPlaying() || !Hero || Hero->GetHealth() <= 0.0f || !Progress || Progress->ScrollCount <= 0
+        || Progress->ScrollCount != ExpectedScrollCount)
+    {
+        return;
+    }
+
+    const bool bProtection = Stat == ECoopRPGScrollStat::Protection;
+    const int32 Before = Progress->Level;
+    --Progress->ScrollCount;
+    Progress->Level += FCoopRPGStatProgress::PointsPerScroll;
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Round=%s %s=%d->%d Scrolls=%d->%d %s"),
+        bProtection ? TEXT("ProtectionScrollUsed") : TEXT("MartialPowerScrollUsed"), *RoundId.ToString(),
+        bProtection ? TEXT("Protection") : TEXT("MartialPower"), Before, Progress->Level, ExpectedScrollCount, Progress->ScrollCount,
+        *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::ServerUseSlashCapsule_Implementation(FGuid RoundId)
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const auto* Hero = Cast<ACoopRPGCharacter>(GetPawn());
+    if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId || StageInventoryRound != RoundId
+        || !State->IsRoundPlaying() || !Hero || Hero->GetHealth() <= 0.0f)
+    {
+        return;
+    }
+    if (!HasSlashCapsule() || HasSlashRegistered())
+    {
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("SlashCapsuleRejected Round=%s Capsule=%d Registered=%d %s"),
+            *RoundId.ToString(), HasSlashCapsule(), HasSlashRegistered(),
+            *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
+        return;
+    }
+    SlashProgress.bHasCapsule = false;
+    SlashProgress.bRegistered = true;
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("SlashCapsuleUsed Round=%s Capsule=1->0 Registered=0->1 Slot=2 %s"),
+        *RoundId.ToString(), *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGPlayerController::ClientGameplayFeedback_Implementation(const FCoopRPGGameplayFeedback& Feedback)

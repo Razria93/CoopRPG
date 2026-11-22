@@ -92,6 +92,38 @@ AActor* ACoopRPGGameMode::GetMeleeTarget() const
     return IsValid(Enemy.Get()) && !Enemy->IsDead() ? Enemy.Get() : nullptr;
 }
 
+bool ACoopRPGGameMode::IsSkirmishEnemy(const ACoopRPGEnemy* Candidate) const
+{
+    return bExpeditionSkirmish && Candidate && SkirmishEnemies.ContainsByPredicate(
+        [Candidate](const ACoopRPGEnemy* Registered) { return Registered == Candidate; });
+}
+
+ACoopRPGEnemy* ACoopRPGGameMode::FindClosestSkirmishEnemy(const FVector& Origin) const
+{
+    const auto* State = GetGameState<ACoopRPGGameState>();
+    if (!State || !State->IsRoundPlaying())
+    {
+        return nullptr;
+    }
+
+    ACoopRPGEnemy* Closest = nullptr;
+    double BestDistance = TNumericLimits<double>::Max();
+    for (ACoopRPGEnemy* Candidate : SkirmishEnemies)
+    {
+        if (!IsValid(Candidate) || Candidate->IsDead())
+        {
+            continue;
+        }
+        const double Distance = FVector::DistSquared2D(Origin, Candidate->GetActorLocation());
+        if (Distance < BestDistance)
+        {
+            Closest = Candidate;
+            BestDistance = Distance;
+        }
+    }
+    return Closest;
+}
+
 void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
 {
     auto* State = GetGameState<ACoopRPGGameState>();
@@ -171,38 +203,6 @@ void ACoopRPGGameMode::AcknowledgeRoundResult(ACoopRPGPlayerController* Player, 
     {
         NextTravelTime = State->GetServerWorldTimeSeconds() + ResultDisplaySeconds;
     }
-}
-
-bool ACoopRPGGameMode::IsSkirmishEnemy(const ACoopRPGEnemy* Candidate) const
-{
-    return bExpeditionSkirmish && Candidate && SkirmishEnemies.ContainsByPredicate(
-        [Candidate](const ACoopRPGEnemy* Registered) { return Registered == Candidate; });
-}
-
-ACoopRPGEnemy* ACoopRPGGameMode::FindClosestSkirmishEnemy(const FVector& Origin) const
-{
-    const auto* State = GetGameState<ACoopRPGGameState>();
-    if (!State || !State->IsRoundPlaying())
-    {
-        return nullptr;
-    }
-
-    ACoopRPGEnemy* Closest = nullptr;
-    double BestDistance = TNumericLimits<double>::Max();
-    for (ACoopRPGEnemy* Candidate : SkirmishEnemies)
-    {
-        if (!IsValid(Candidate) || Candidate->IsDead())
-        {
-            continue;
-        }
-        const double Distance = FVector::DistSquared2D(Origin, Candidate->GetActorLocation());
-        if (Distance < BestDistance)
-        {
-            Closest = Candidate;
-            BestDistance = Distance;
-        }
-    }
-    return Closest;
 }
 
 void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
@@ -455,7 +455,7 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
         {
             if (auto* CoopPlayer = Cast<ACoopRPGPlayerController>(Player))
             {
-                CoopPlayer->RestoreTravelInventory(Arrival.Recovery, Arrival.Sword);
+                CoopPlayer->RestoreTravelInventory(Arrival.Recovery, Arrival.Sword, Arrival.Stats, Arrival.bShieldEquipped, Arrival.Slash);
                 const TCHAR* Stage = bExpeditionBoss ? TEXT("Boss") : bExpeditionPuzzle ? TEXT("Puzzle") : TEXT("Skirmish");
                 UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("%sRecoveryRestored Slot=%d Count=%d"),
                     Stage, SlotIndex + 1, CoopPlayer->GetRecoveryCount());
@@ -631,7 +631,11 @@ bool ACoopRPGGameMode::ReserveRoundTravelSeats(const ACoopRPGGameState& State, c
             : FCoopRPGRecoverySnapshot{};
         const FCoopRPGSwordSnapshot Sword = bCarryInventory ? Player->GetTravelSword(bRetryStage)
             : FCoopRPGSwordSnapshot{};
-        Participants.Add({ConnectionId, Carried, Sword});
+        const FCoopRPGStatProgress Stats = bCarryInventory ? Player->GetTravelStats(bRetryStage)
+            : FCoopRPGStatProgress{};
+        const bool bShieldEquipped = bCarryInventory && Player->GetTravelShieldEquipped(bRetryStage);
+        const FCoopRPGSlashProgress Slash = bCarryInventory ? Player->GetTravelSlash(bRetryStage) : FCoopRPGSlashProgress{};
+        Participants.Add({ConnectionId, Carried, Sword, Stats, bShieldEquipped, Slash});
         if (bRetryStage || bAdvanceStage)
         {
             const FIntPoint Supplies = Player->GetStageRecoverySupplies();

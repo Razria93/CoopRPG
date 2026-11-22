@@ -274,8 +274,16 @@ void ACoopRPGGameState::MulticastGameplayFeedback_Implementation(const FCoopRPGG
 }
 
 
+void ACoopRPGGameState::MulticastSlashFeedback_Implementation(const TArray<FCoopRPGGameplayFeedback>& Events)
+{
+    for (const FCoopRPGGameplayFeedback& Feedback : Events)
+    {
+        PresentGameplayFeedback(Feedback);
+    }
+}
+
 void ACoopRPGGameState::PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVector& Location,
-    float Yaw, int32 Slot, uint32 Swing)
+    float Yaw, int32 Slot, uint32 Swing, float ScaleMultiplier)
 {
     if (Effect == ECoopRPGMeleeEffect::None || GetNetMode() == NM_DedicatedServer)
     {
@@ -301,7 +309,7 @@ void ACoopRPGGameState::PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVecto
     }
     if (Visual)
     {
-        Visual->SetVariableFloat(TEXT("User.Scale"), Assets.Scale);
+        Visual->SetVariableFloat(TEXT("User.Scale"), Assets.Scale * ScaleMultiplier);
         if (Effect == ECoopRPGMeleeEffect::MushroomHit)
         {
             Visual->SetVariableLinearColor(TEXT("User.PrimaryColor"), FLinearColor(1.65f, 0.86f, 0.30f));
@@ -655,6 +663,14 @@ void ACoopRPGGameState::FinishRound(ECoopRPGRoundEndReason Reason, double Now, b
     const double HeldSeconds = IsExtractionInProgress()
         ? Now - (RoundStatus.ExtractionDeadline - ExtractionHoldSeconds) : 0.0;
     RoundStatus.Phase = ECoopRPGRoundPhase::Result;
+    for (auto It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        const APlayerController* Player = It->Get();
+        if (auto* Hero = Player ? Cast<ACoopRPGCharacter>(Player->GetPawn()) : nullptr)
+        {
+            Hero->ClearGuard();
+        }
+    }
     RoundStatus.EndReason = Reason;
     RoundStatus.TeamScore = IsSuccessful(Reason) ? 1 : 0;
     RoundStatus.ExtractionDeadline = 0.0;

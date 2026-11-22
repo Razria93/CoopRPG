@@ -4,6 +4,8 @@
 #include "GameFramework/OnlineReplStructs.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "CoopRPGRecoveryInventory.h"
+#include "CoopRPGStatProgress.h"
+#include "CoopRPGSlashProgress.h"
 #include "CoopRPGSwordInventory.h"
 #include "CoopRPGRoundTravelSeats.generated.h"
 
@@ -12,6 +14,9 @@ struct FCoopRPGRoundTravelParticipant
     FUniqueNetIdRepl ConnectionId;
     FCoopRPGRecoverySnapshot Recovery;
     FCoopRPGSwordSnapshot Sword;
+    FCoopRPGStatProgress Stats;
+    bool bShieldEquipped = false;
+    FCoopRPGSlashProgress Slash;
 };
 
 UCLASS()

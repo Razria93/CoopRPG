@@ -38,7 +38,7 @@ private:
         bool bAtContact = false;
     };
 
-    enum class EChestControl : uint8 { None, Potion, Sword, Take, StaminaPotion };
+    enum class EChestControl : uint8 { None, Potion, Sword, Take, StaminaPotion, MartialPowerScroll, ProtectionScroll, SlashCapsule };
 
     bool HandleChestPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     void DrawChestPanel(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller);
@@ -69,6 +69,9 @@ private:
     FBox2D ChestPotionBounds{ForceInit};
     FBox2D ChestSwordBounds{ForceInit};
     FBox2D ChestStaminaBounds{ForceInit};
+    FBox2D ChestScrollBounds{ForceInit};
+    FBox2D ChestProtectionBounds{ForceInit};
+    FBox2D ChestSlashBounds{ForceInit};
     FBox2D ChestTakeBounds{ForceInit};
     FString LastChestPanelDisplay;
     EChestControl SelectedChestItem = EChestControl::None;
@@ -89,6 +92,7 @@ private:
     FGuid LastLocalCombatRound;
     // Log sampled visual changes for comparison with authoritative attack and cooldown events.
     FIntVector4 LastLocalCombatSample{-1, -1, -1, -1};
+    FIntPoint LastLocalSlashSample{-1, -1};
     TArray<FFeedbackEntry> FeedbackEntries;
     struct FNameplatePlayerName
     {

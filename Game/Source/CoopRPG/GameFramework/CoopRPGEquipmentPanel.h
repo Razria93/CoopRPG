@@ -11,6 +11,7 @@ class AHUD;
 class UCanvas;
 class UTexture2D;
 struct FInputKeyEventArgs;
+enum class ECoopRPGScrollStat : uint8;
 
 class FCoopRPGEquipmentPanel
 {
@@ -28,10 +29,12 @@ public:
     void ReleasePointer();
 
 private:
-    enum class EInventoryItem : uint8 { None, Potion, StaminaPotion, Sword };
+    enum class EInventoryItem : uint8 { None, Potion, StaminaPotion, Sword, MartialPowerScroll, ProtectionScroll, SlashCapsule };
+    using FInventoryItems = TArray<EInventoryItem, TInlineAllocator<6>>;
 
-    static EInventoryItem GetInventoryItem(int32 Slot, const FIntVector& ItemSlots);
-    void UpdateInventorySelection(const FIntVector& ItemSlots);
+    static bool IsStatScroll(EInventoryItem Item);
+    static ECoopRPGScrollStat ToScrollStat(EInventoryItem Item);
+    void UpdateInventorySelection(const FInventoryItems& Items);
 
     FBox2D GetTabBounds(int32 Index) const;
     FBox2D GetPanelBounds() const;
@@ -53,6 +56,8 @@ private:
     FBox2D GetSkillListBounds() const;
     void ResetSkillsView();
     FBox2D GetEquipmentListBounds() const;
+    FBox2D GetEquipmentActionBounds(double RowY) const;
+    bool IsShieldActionAt(const FVector2D& Pointer) const;
     bool IsScrollableTab() const;
     FIntPoint GetScrollRowCounts() const;
     int32 GetFirstScrollRow() const;
@@ -93,4 +98,7 @@ private:
     bool bVisible = false;
     bool bOwnsPrimaryButton = false;
     TOptional<bool> LastDisplayedWeaponState;
+    TOptional<bool> PressedShieldAction;
+    bool bLastDisplayedShield = false;
+    bool bLastDisplayedGuard = false;
 };

@@ -37,6 +37,9 @@ struct FCoopRPGMeleePresentation
 
     UPROPERTY()
     bool bCancelled = false;
+
+    UPROPERTY()
+    bool bSlash = false;
 };
 
 UCLASS()
@@ -55,12 +58,21 @@ public:
     int32 GetPartyStamina() const { return PartyStamina; }
     bool HasMeleeWeapon() const { return bHasMeleeWeapon; }
     void SetMeleeWeaponEquipped(bool bEquipped);
+    bool HasShieldEquipped() const { return bShieldEquipped; }
+    bool IsGuarding() const;
+    void SetShieldEquipped(bool bEquipped);
+    void ReleaseGuardInput();
+    void ClearGuard();
+    double GetGuardAngle(const FVector& SourcePosition) const;
+    static constexpr double GuardHalfAngleDegrees = 45.0;
+    static constexpr float GuardDamageMultiplier = 0.5f;
     int32 GetDisplaySlot() const { return DisplaySlot; }
     void SetDisplaySlot(int32 Slot);
     void FlashPresentationHit();
     void RefreshHeroAppearance();
     float GetMeleeWindup() const;
-    uint32 StartMeleePresentation(float FacingYaw, float Windup);
+    bool IsMeleeWindupActive() const { return bMeleeFacingLocked; }
+    uint32 StartMeleePresentation(float FacingYaw, float Windup, bool bSlash = false);
     void FinishMeleeWindup(bool bInterrupted);
     void RequestMeleeHitStop(uint32 Swing);
 
@@ -75,6 +87,15 @@ private:
     void Move(const FInputActionValue& Value);
     void Attack();
     void CancelAttack();
+    void UseSlash();
+    void PressGuardInput();
+    void SetGuarding(bool bGuarding);
+
+    UFUNCTION(Server, Reliable)
+    void ServerSetGuarding(FGuid RoundId, bool bRequested);
+
+    UFUNCTION()
+    void OnRep_ShieldState();
 
     UFUNCTION(Server, Reliable)
     void ServerCancelAttack();
@@ -96,6 +117,7 @@ private:
     void ReleaseMeleeFacing();
     void ConfigureHeroWeapon(ECoopRPGHero Hero);
     void RefreshWeaponVisibility();
+    void ConfigureHeroShield(ECoopRPGHero Hero);
     void SetPresentationTint(bool bDarkened);
     void RestorePresentationTint();
 
@@ -117,6 +139,9 @@ private:
 
     UPROPERTY()
     TObjectPtr<UStaticMeshComponent> HeroWeaponMesh;
+
+    UPROPERTY()
+    TObjectPtr<UStaticMeshComponent> HeroShieldMesh;
 
     UPROPERTY()
     TObjectPtr<UStaticMeshComponent> BodyMesh;
@@ -158,4 +183,12 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_MeleeWeapon)
     bool bHasMeleeWeapon = false;
+
+    UPROPERTY(ReplicatedUsing = OnRep_ShieldState)
+    bool bShieldEquipped = false;
+
+    UPROPERTY(ReplicatedUsing = OnRep_ShieldState)
+    bool bGuarding = false;
+
+    bool bGuardKeyHeld = false;
 };

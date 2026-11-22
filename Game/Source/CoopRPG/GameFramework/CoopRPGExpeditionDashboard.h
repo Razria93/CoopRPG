@@ -40,7 +40,7 @@ public:
     void DrawSkillSlot(AHUD& HUD, FVector2D Position, float Size) const;
     void DrawAttackIcon(AHUD& HUD, FVector2D Position, float Size, bool bDisabled) const;
     void DrawBasicAttackGlyph(AHUD& HUD, UCanvas& Canvas, const FBox2D& Slot,
-        const CoopRPG::ExpeditionUI::FAttackHudStatus& Attack) const;
+        const CoopRPG::ExpeditionUI::FAttackHudStatus& Attack, bool bSlash = false) const;
     void DrawPartyCardAccent(AHUD& HUD, FVector2D Position, FVector2D Size, ECoopRPGPartyCardAccent Accent) const;
     const FBox2D& GetPanelBounds() const { return StatusBounds; }
     const FBox2D& GetNoticeBounds() const { return NoticeBounds; }

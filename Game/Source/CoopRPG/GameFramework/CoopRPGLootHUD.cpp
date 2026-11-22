@@ -41,17 +41,22 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGChestHUD, Log, All);
 
 namespace CoopRPG::ExpeditionUI
 {
-    FAttackHudStatus ReadAttackHud(const ACoopRPGGameState& State, const ACoopRPGCharacter& Hero, bool bCombatStage)
+    FAttackHudStatus ReadAttackHud(const ACoopRPGGameState& State, const ACoopRPGCharacter& Hero, bool bCombatStage, bool bSlash)
     {
         const auto* Source = Hero.GetAbilitySystemComponent();
         if (!Source)
         {
             return {};
         }
-        const FGameplayTag CooldownTag = UCoopRPGMeleeCooldown::GetCooldownTag();
+        const auto* Player = Hero.GetController<ACoopRPGPlayerController>();
+        const FGameplayTag CooldownTag = bSlash ? UCoopRPGSlashCooldown::GetCooldownTag() : UCoopRPGMeleeCooldown::GetCooldownTag();
         FAttackHudStatus Result;
         Result.State = EAttackHudState::Ready;
-        if (!bCombatStage || !State.IsRoundPlaying())
+        if (bSlash && (!Player || !Player->HasSlashRegistered()))
+        {
+            Result.State = EAttackHudState::Unassigned;
+        }
+        else if (!bCombatStage || !State.IsRoundPlaying())
         {
             Result.State = EAttackHudState::Waiting;
         }
@@ -67,7 +72,11 @@ namespace CoopRPG::ExpeditionUI
         {
             Result.State = EAttackHudState::Cooling;
         }
-        else if (!UCoopRPGMeleeAbility::CanPayPresentationCost(*Source))
+        else if (bSlash && Hero.IsGuarding())
+        {
+            Result.State = EAttackHudState::Down;
+        }
+        else if (bSlash ? Hero.GetStamina() < UCoopRPGSlashCost::Stamina : !UCoopRPGMeleeAbility::CanPayPresentationCost(*Source))
         {
             Result.State = EAttackHudState::LowStamina;
         }
@@ -95,6 +104,7 @@ namespace CoopRPG::ExpeditionUI
         case EAttackHudState::Unarmed: return TEXT("미장착");
         case EAttackHudState::Down: return TEXT("행동 불가");
         case EAttackHudState::LowStamina: return TEXT("SP부족");
+        case EAttackHudState::Unassigned: return TEXT("미배정");
         default: return TEXT("");
         }
     }
@@ -107,6 +117,7 @@ namespace CoopRPG::ExpeditionUI
         case EAttackHudState::Unarmed: return TEXT("Unarmed");
         case EAttackHudState::Down: return TEXT("Down");
         case EAttackHudState::LowStamina: return TEXT("LowStamina");
+        case EAttackHudState::Unassigned: return TEXT("Unassigned");
         case EAttackHudState::Cooling: return TEXT("Cooling");
         default: return TEXT("Ready");
         }
@@ -588,6 +599,18 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
         {
             return EChestControl::StaminaPotion;
         }
+        if (ChestScrollBounds.bIsValid && ChestScrollBounds.IsInsideOrOn(Pointer))
+        {
+            return EChestControl::MartialPowerScroll;
+        }
+        if (ChestProtectionBounds.bIsValid && ChestProtectionBounds.IsInsideOrOn(Pointer))
+        {
+            return EChestControl::ProtectionScroll;
+        }
+        if (ChestSlashBounds.bIsValid && ChestSlashBounds.IsInsideOrOn(Pointer))
+        {
+            return EChestControl::SlashCapsule;
+        }
         return ChestTakeBounds.IsInsideOrOn(Pointer) ? EChestControl::Take : EChestControl::None;
     };
     if (bOwnsChestPointer)
@@ -596,7 +619,8 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
         {
             const EChestControl Released = ControlAt();
             if (Released == PressedChestControl && (Released == EChestControl::Potion || Released == EChestControl::Sword
-                || Released == EChestControl::StaminaPotion))
+                || Released == EChestControl::StaminaPotion || Released == EChestControl::MartialPowerScroll
+                || Released == EChestControl::ProtectionScroll || Released == EChestControl::SlashCapsule))
             {
                 SelectedChestItem = Released;
             }
@@ -609,6 +633,15 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
                 else if (SelectedChestItem == EChestControl::StaminaPotion)
                 {
                     Controller.TakeStaminaRecoveryItem();
+                }
+                else if (SelectedChestItem == EChestControl::MartialPowerScroll || SelectedChestItem == EChestControl::ProtectionScroll)
+                {
+                    Controller.TakeStatScroll(SelectedChestItem == EChestControl::ProtectionScroll
+                        ? ECoopRPGScrollStat::Protection : ECoopRPGScrollStat::MartialPower);
+                }
+                else if (SelectedChestItem == EChestControl::SlashCapsule)
+                {
+                    Controller.TakeSlashCapsule();
                 }
                 else
                 {
@@ -634,6 +667,10 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
             const bool bAvailable = SelectedChestItem == EChestControl::Sword
                 ? Chest->GetWeaponStock() > 0 && Controller.GetSwordOwnership() == ECoopRPGSwordOwnership::None
                 : SelectedChestItem == EChestControl::StaminaPotion ? Chest->GetStaminaRecoveryStock() > 0
+                : SelectedChestItem == EChestControl::MartialPowerScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::MartialPower) > 0
+                : SelectedChestItem == EChestControl::ProtectionScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::Protection) > 0
+                : SelectedChestItem == EChestControl::SlashCapsule ? Chest->GetSlashCapsuleStock() > 0
+                    && !Controller.HasSlashCapsule() && !Controller.HasSlashRegistered()
                 : SelectedChestItem == EChestControl::Potion && Chest->GetRecoveryStock() > 0;
             if (!bAvailable)
             {
@@ -653,21 +690,42 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     const int32 BagCount = Controller.GetRecoveryCount();
     const int32 StaminaStock = Chest->GetStaminaRecoveryStock();
     const int32 BagStamina = Controller.GetStaminaRecoveryCount();
+    const bool bShowsScroll = CoopRPG::Expedition::IsSkirmish(Controller.GetWorld());
+    const int32 ScrollStock = bShowsScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::MartialPower) : 0;
+    const int32 ProtectionStock = bShowsScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::Protection) : 0;
+    const int32 SlashStock = bShowsScroll ? Chest->GetSlashCapsuleStock() : 0;
+    const bool bOwnsSlash = Controller.HasSlashCapsule() || Controller.HasSlashRegistered();
     const bool bOwnsSword = Controller.GetSwordOwnership() != ECoopRPGSwordOwnership::None;
     const bool bSwordSelected = SelectedChestItem == EChestControl::Sword;
     const bool bPotionSelected = SelectedChestItem == EChestControl::Potion;
     const bool bStaminaSelected = SelectedChestItem == EChestControl::StaminaPotion;
+    const bool bScrollSelected = bShowsScroll && SelectedChestItem == EChestControl::MartialPowerScroll;
+    const bool bProtectionSelected = bShowsScroll && SelectedChestItem == EChestControl::ProtectionScroll;
+    const bool bSlashSelected = bShowsScroll && SelectedChestItem == EChestControl::SlashCapsule;
     const FBox2D& Status = ExpeditionDashboard.GetPanelBounds();
     const double Left = Status.bIsValid ? Status.Min.X : PanelPad;
     const double Top = Status.bIsValid ? Status.Max.Y + 8.0 : 136.0;
-    constexpr double Height = 190.0;
+    const double FooterOffset = bShowsScroll ? 24.0 : 0.0;
+    const double Height = 190.0 + FooterOffset;
     constexpr double Width = 252.0;
     // Keep the chest above the party cards in the compact viewport.
     ChestPanelBounds = FBox2D(FVector2D(Left, Top), FVector2D(Left + Width, Top + Height));
-    ChestPotionBounds = FBox2D(FVector2D(Left + 13.0, Top + 33.0), FVector2D(Left + Width - 13.0, Top + 56.0));
-    ChestStaminaBounds = FBox2D(FVector2D(Left + 13.0, Top + 59.0), FVector2D(Left + Width - 13.0, Top + 82.0));
-    ChestSwordBounds = FBox2D(FVector2D(Left + 13.0, Top + 85.0), FVector2D(Left + Width - 13.0, Top + 108.0));
-    ChestTakeBounds = FBox2D(FVector2D(Left + Width - 105.0, Top + 130.0), FVector2D(Left + Width - 13.0, Top + 155.0));
+    const double RowPitch = bShowsScroll ? 18.0 : 26.0;
+    const double RowHeight = bShowsScroll ? 17.0 : 23.0;
+    const auto RowBounds = [&](int32 Row)
+    {
+        const double RowTop = Top + 33.0 + Row * RowPitch;
+        return FBox2D(FVector2D(Left + 13.0, RowTop), FVector2D(Left + Width - 13.0, RowTop + RowHeight));
+    };
+    ChestPotionBounds = RowBounds(0);
+    ChestStaminaBounds = RowBounds(1);
+    ChestSwordBounds = RowBounds(2);
+    ChestScrollBounds = bShowsScroll ? RowBounds(3) : FBox2D(ForceInit);
+    ChestProtectionBounds = bShowsScroll ? RowBounds(4) : FBox2D(ForceInit);
+    ChestSlashBounds = bShowsScroll ? RowBounds(5) : FBox2D(ForceInit);
+    const double TakeTop = Top + (bShowsScroll ? 158.0 : 130.0);
+    ChestTakeBounds = FBox2D(FVector2D(Left + Width - 105.0, TakeTop),
+        FVector2D(Left + Width - 13.0, TakeTop + 25.0));
 
     const FLinearColor Ink(FColor(64, 43, 25));
     const FLinearColor Muted(FColor(112, 84, 54));
@@ -687,35 +745,52 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     const auto DrawChestRow = [&](const FBox2D& Bounds, const TCHAR* Name, int32 Remaining, bool bSelected)
     {
         Fill(Bounds, bSelected ? FColor(221, 207, 160) : FColor(236, 221, 181));
-        Text(*Canvas, Name, Bounds.Min + FVector2D(9.0, 5.0), Emphasis, Ink);
+        const double LabelInset = bShowsScroll ? 1.5 : 5.0;
+        Text(*Canvas, Name, Bounds.Min + FVector2D(9.0, LabelInset), Emphasis, Ink);
         const FString StockLabel = FString::Printf(TEXT("남은 수량 %d"), Remaining);
         Text(*Canvas, StockLabel, FVector2D(Bounds.Max.X - 9.0 - Measure(*Canvas, StockLabel, Body).X,
-            Bounds.Min.Y + 5.0), Body, Ink);
+            Bounds.Min.Y + LabelInset), Body, Ink);
     };
     DrawChestRow(ChestPotionBounds, TEXT("HP 회복 물약"), Stock, bPotionSelected);
     DrawChestRow(ChestStaminaBounds, TEXT("SP 회복 물약"), StaminaStock, bStaminaSelected);
     DrawChestRow(ChestSwordBounds, TEXT("한손검"), WeaponStock, bSwordSelected);
+    if (bShowsScroll)
+    {
+        DrawChestRow(ChestScrollBounds, TEXT("무력 스크롤"), ScrollStock, bScrollSelected);
+        DrawChestRow(ChestProtectionBounds, TEXT("수호 스크롤"), ProtectionStock, bProtectionSelected);
+        DrawChestRow(ChestSlashBounds, TEXT("슬래시 캡슐"), SlashStock, bSlashSelected);
+    }
     const FString Detail = bSwordSelected ? FString(TEXT("가방에서 장착 · 최초 장착 시 귀속"))
         : bPotionSelected ? FString::Printf(TEXT("HP %d 회복"), FMath::RoundToInt(UCoopRPGRecoveryEffect::HealthRestored))
         : bStaminaSelected ? FString::Printf(TEXT("SP %d 회복"), FMath::RoundToInt(UCoopRPGStaminaRecoveryEffect::StaminaRestored))
+        : bScrollSelected || bProtectionSelected ? FString::Printf(TEXT("가방에서 사용 · %s +%d"),
+            bProtectionSelected ? TEXT("수호") : TEXT("무력"), FCoopRPGStatProgress::PointsPerScroll)
+        : bSlashSelected ? FString(TEXT("사용하면 2번 슬롯에 등록"))
         : FString(TEXT("아이템을 선택해 주세요."));
-    Text(*Canvas, Detail, FVector2D(Left + 15.0, Top + 112.0), Body, Muted);
-    const int32 OwnedCount = bSwordSelected ? (bOwnsSword ? 1 : 0) : bStaminaSelected ? BagStamina : BagCount;
-    Text(*Canvas, FString::Printf(TEXT("내 가방 ×%d"), OwnedCount), FVector2D(Left + 15.0, Top + 136.0), Emphasis, Ink);
-    const int32 Remaining = bSwordSelected ? WeaponStock : bStaminaSelected ? StaminaStock : Stock;
-    const bool bAlreadyOwned = bSwordSelected && bOwnsSword;
-    const bool bHasSelection = bSwordSelected || bPotionSelected || bStaminaSelected;
+    Text(*Canvas, Detail, FVector2D(Left + 15.0, Top + (bShowsScroll ? 142.0 : 112.0)), Body, Muted);
+    const int32 OwnedCount = bSwordSelected ? (bOwnsSword ? 1 : 0) : bStaminaSelected ? BagStamina
+        : bSlashSelected ? static_cast<int32>(Controller.HasSlashCapsule())
+        : bScrollSelected || bProtectionSelected ? Controller.GetStatScrollCount(
+            bProtectionSelected ? ECoopRPGScrollStat::Protection : ECoopRPGScrollStat::MartialPower) : BagCount;
+    Text(*Canvas, FString::Printf(TEXT("내 가방 ×%d"), OwnedCount), FVector2D(Left + 15.0, Top + 136.0 + FooterOffset), Emphasis, Ink);
+    const int32 Remaining = bSwordSelected ? WeaponStock : bStaminaSelected ? StaminaStock : bScrollSelected ? ScrollStock : bProtectionSelected ? ProtectionStock : bSlashSelected ? SlashStock : Stock;
+    const bool bAlreadyOwned = (bSwordSelected && bOwnsSword) || (bSlashSelected && bOwnsSlash);
+    const bool bHasSelection = bSwordSelected || bPotionSelected || bStaminaSelected || bScrollSelected
+        || bProtectionSelected || bSlashSelected;
     const bool bCanTake = bHasSelection && Remaining > 0 && !bAlreadyOwned;
     Fill(ChestTakeBounds, bCanTake ? FColor(67, 87, 55) : FColor(215, 196, 157));
     Centered(ChestTakeBounds, bAlreadyOwned ? TEXT("이미 보유")
         : bHasSelection && Remaining <= 0 ? TEXT("품절") : TEXT("가방에 담기"), Emphasis,
         bCanTake ? FLinearColor(FColor(255, 243, 208)) : Muted);
     Text(*Canvas, TEXT("[G] 검 받기  [F] HP 물약  [Q] 닫기"),
-        FVector2D(Left + 15.0, Top + 164.0), Font(10.0f), Muted);
+        FVector2D(Left + 15.0, Top + 164.0 + FooterOffset), Font(10.0f), Muted);
 
-    FString Display = FString::Printf(TEXT("Round=%s Stock=%d BagRecovery=%d Selected=%d X=%.0f Y=%.0f Width=%.0f WeaponStock=%d BagSword=%d StaminaStock=%d BagStamina=%d"),
+    FString Display = FString::Printf(TEXT("Round=%s Stock=%d BagRecovery=%d Selected=%d X=%.0f Y=%.0f Width=%.0f WeaponStock=%d BagSword=%d StaminaStock=%d BagStamina=%d ScrollStock=%d BagScrolls=%d ProtectionStock=%d BagProtection=%d ProtectionRowY=%.0f TakeY=%.0f SlashStock=%d BagSlash=%d SlashRowY=%.0f"),
         *State.GetRoundId().ToString(), Stock, BagCount, static_cast<int32>(SelectedChestItem), Left, Top, Width, WeaponStock,
-        bOwnsSword, StaminaStock, BagStamina);
+        bOwnsSword, StaminaStock, BagStamina, ScrollStock, Controller.GetStatScrollCount(ECoopRPGScrollStat::MartialPower),
+        ProtectionStock, Controller.GetStatScrollCount(ECoopRPGScrollStat::Protection),
+        bShowsScroll ? ChestProtectionBounds.GetCenter().Y : 0.0, ChestTakeBounds.GetCenter().Y,
+        SlashStock, Controller.HasSlashCapsule(), bShowsScroll ? ChestSlashBounds.GetCenter().Y : 0.0);
     if (LastChestPanelDisplay != Display)
     {
         UE_LOG(LogCoopRPGChestHUD, Log, TEXT("ChestPanelPresented %s"), *Display);
@@ -966,7 +1041,13 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
                 continue;
             }
             ExpeditionDashboard.DrawDarkPanel(*this, Position, Size);
-            const FString Label = FString::Printf(TEXT("[%s]"), *Plate.Name);
+            const auto* Hero = Cast<ACoopRPGCharacter>(Plate.Pawn);
+            const bool bGuarding = Hero && Hero->IsGuarding();
+            FString Label = FString::Printf(TEXT("[%s]"), *Plate.Name);
+            if (bGuarding)
+            {
+                Label += TEXT(" 가드");
+            }
             auto LabelFont = NameFont;
             FVector2D TextSize = Measure(*Canvas, Label, LabelFont);
             if (TextSize.X > Width - 2.0 * SidePad)
@@ -976,7 +1057,7 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
             }
             Text(*Canvas, Label, Position + FVector2D((Width - TextSize.X) * 0.5,
                 TopPad + (NameHeight - TextSize.Y) * 0.5), LabelFont,
-                Plate.Color);
+                bGuarding ? FLinearColor(0.63f, 0.87f, 0.99f) : Plate.Color);
             ExpeditionDashboard.DrawHealthBar(*this, Position + FVector2D(SidePad, TopPad + NameHeight + TextGap),
                 Width - 2.0 * SidePad, FMath::Clamp(Plate.HealthFraction, 0.0f, 1.0f));
             Placed.Add(Bounds);
@@ -1230,6 +1311,8 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
     const float Health = Hero.GetHealth();
     const float Stamina = Hero.GetStamina();
     const EAttackHudState Status = Attack.State;
+    const auto Slash = ReadAttackHud(State, Hero, CoopRPG::Expedition::IsSkirmish(GetWorld()) || CoopRPG::Expedition::IsBoss(GetWorld()), true);
+    const bool bSlashAssigned = Slash.State != EAttackHudState::Unassigned;
 
     const bool bWide = Canvas->ClipX >= 1200.0;
     const double Margin = bWide ? 22.0 : 12.0;
@@ -1284,21 +1367,32 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
     ExpeditionDashboard.DrawSkillSlot(*this, EmptySlot, SlotSide);
     const bool bDisabled = Status != EAttackHudState::Ready && Status != EAttackHudState::Cooling;
     ExpeditionDashboard.DrawBasicAttackGlyph(*this, *Canvas, FBox2D(AttackSlot, AttackSlot + FVector2D(SlotSide)), Attack);
-    const FVector2D DashSize = Measure(*Canvas, TEXT("—"), TrackFont);
-    Text(*Canvas, TEXT("—"), EmptySlot + FVector2D((SlotSide - DashSize.X) * 0.5, (SlotSide - DashSize.Y) * 0.5), TrackFont, Paper);
-
-    const int32 RemainingTenths = Attack.GetRemainingTenths();
-    if (Status == EAttackHudState::Cooling)
+    if (bSlashAssigned)
     {
-        if (RemainingTenths > 0)
-        {
-            const FString Seconds = FString::Printf(TEXT("%.1f"), RemainingTenths / 10.0);
-            const FVector2D Size = Measure(*Canvas, Seconds, TrackFont);
-            const FVector2D Position = AttackSlot + FVector2D((SlotSide - Size.X) * 0.5, SlotSide - Size.Y - 5.0);
-            DrawRect(FLinearColor(0.04f, 0.025f, 0.02f, 0.80f), Position.X - 3.0, Position.Y, Size.X + 6.0, Size.Y);
-            Text(*Canvas, Seconds, Position, TrackFont, Paper);
-        }
+        ExpeditionDashboard.DrawBasicAttackGlyph(*this, *Canvas, FBox2D(EmptySlot, EmptySlot + FVector2D(SlotSide)), Slash, true);
+        Text(*Canvas, TEXT("2"), EmptySlot + FVector2D(5.0, 4.0), LabelFont, Paper);
     }
+    else
+    {
+        const FVector2D DashSize = Measure(*Canvas, TEXT("—"), TrackFont);
+        Text(*Canvas, TEXT("—"), EmptySlot + FVector2D((SlotSide - DashSize.X) * 0.5, (SlotSide - DashSize.Y) * 0.5), TrackFont, Paper);
+    }
+
+    const auto DrawRemaining = [&](FVector2D SlotPosition, const FAttackHudStatus& SlotStatus)
+    {
+        if (SlotStatus.State != EAttackHudState::Cooling || SlotStatus.GetRemainingTenths() <= 0)
+        {
+            return;
+        }
+        const FString Seconds = FString::Printf(TEXT("%.1f"), SlotStatus.GetRemainingTenths() / 10.0);
+        const FVector2D Size = Measure(*Canvas, Seconds, TrackFont);
+        const FVector2D Position = SlotPosition + FVector2D((SlotSide - Size.X) * 0.5, SlotSide - Size.Y - 5.0);
+        DrawRect(FLinearColor(0.04f, 0.025f, 0.02f, 0.80f), Position.X - 3.0, Position.Y, Size.X + 6.0, Size.Y);
+        Text(*Canvas, Seconds, Position, TrackFont, Paper);
+    };
+    DrawRemaining(AttackSlot, Attack);
+    DrawRemaining(EmptySlot, Slash);
+    const int32 RemainingTenths = Attack.GetRemainingTenths();
 
     const auto DrawCaption = [&](FVector2D Slot, const TCHAR* Label, const FLinearColor& Color)
     {
@@ -1308,7 +1402,16 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
         Text(*Canvas, Label, Position, LabelFont, Color);
     };
     DrawCaption(AttackSlot, TEXT("기본 공격"), bDisabled ? DisabledInk : Paper);
-    DrawCaption(EmptySlot, TEXT("미배정"), Paper);
+    const bool bSlashDisabled = bSlashAssigned && Slash.State != EAttackHudState::Ready && Slash.State != EAttackHudState::Cooling;
+    DrawCaption(EmptySlot, bSlashAssigned ? TEXT("슬래시") : TEXT("미배정"), bSlashDisabled ? DisabledInk : Paper);
+    const FIntPoint SlashSample(static_cast<int32>(Slash.State), Slash.GetRemainingTenths());
+    if (SlashSample != LastLocalSlashSample || LastLocalCombatRound != State.GetRoundId())
+    {
+        LastLocalSlashSample = SlashSample;
+        UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("SlashSlotState Round=%s Slot=2 Player=%d State=%s Remaining=%.1f Duration=%.2f"),
+            *State.GetRoundId().ToString(), Hero.GetDisplaySlot(), AttackHudLogState(Slash.State),
+            SlashSample.Y / 10.0, Slash.Duration);
+    }
     if (bDisabled)
     {
         const TCHAR* Reason = AttackHudLabel(Status);

@@ -4,6 +4,8 @@
 #include "GameFramework/Actor.h"
 #include "CoopRPGSharedChest.generated.h"
 
+enum class ECoopRPGScrollStat : uint8;
+
 class USkeletalMeshComponent;
 
 UCLASS()
@@ -23,6 +25,10 @@ public:
     int32 GetStaminaRecoveryStock() const { return StaminaRecoveryStock; }
     bool TryTakeRecovery(bool bStamina);
     bool TryTakeWeapon();
+    int32 GetStatScrollStock(ECoopRPGScrollStat Stat) const;
+    bool TryTakeStatScroll(ECoopRPGScrollStat Stat);
+    int32 GetSlashCapsuleStock() const { return SlashCapsuleStock; }
+    bool TryTakeSlashCapsule();
     void RecordFirstOpen();
 
 private:
@@ -53,4 +59,13 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_WeaponStock)
     int32 WeaponStock = 2;
+
+    UPROPERTY(Transient, Replicated)
+    int32 MartialPowerScrollStock = 1;
+
+    UPROPERTY(Transient, Replicated)
+    int32 ProtectionScrollStock = 1;
+
+    UPROPERTY(Transient, Replicated)
+    int32 SlashCapsuleStock = 2;
 };
