@@ -4,6 +4,7 @@
 #include "GameFramework/OnlineReplStructs.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "CoopRPGRecoveryInventory.h"
+#include "CoopRPGExpeditionSupplies.h"
 #include "CoopRPGStatProgress.h"
 #include "CoopRPGSlashProgress.h"
 #include "CoopRPGSwordInventory.h"
@@ -15,8 +16,9 @@ struct FCoopRPGRoundTravelParticipant
     FCoopRPGRecoverySnapshot Recovery;
     FCoopRPGSwordSnapshot Sword;
     FCoopRPGStatProgress Stats;
-    bool bShieldEquipped = false;
+    FCoopRPGExpeditionSupplies Supplies;
     FCoopRPGSlashProgress Slash;
+    bool bExpeditionPowerReward = false;
 };
 
 UCLASS()
@@ -27,6 +29,8 @@ class UCoopRPGRoundTravelSeats : public UGameInstanceSubsystem
 public:
     void Reserve(FName Destination, TArray<FCoopRPGRoundTravelParticipant> Participants);
     void Clear();
+    bool HasHealthPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId) const;
+    void GrantHealthPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId);
     bool Allows(FName Map, const FUniqueNetIdRepl& ConnectionId) const;
     int32 Admit(FName Map, const FUniqueNetIdRepl& ConnectionId, FCoopRPGRoundTravelParticipant& OutParticipant);
 
@@ -38,4 +42,5 @@ private:
     TArray<FUniqueNetIdRepl> AwaitingPlayers;
     TArray<FCoopRPGRoundTravelParticipant> ReservedPlayers;
     double ExpiresAt = 0.0;
+    TArray<FUniqueNetIdRepl> HealthPotionCapacityOwners;
 };

@@ -57,7 +57,7 @@ private:
     void ResetSkillsView();
     FBox2D GetEquipmentListBounds() const;
     FBox2D GetEquipmentActionBounds(double RowY) const;
-    bool IsShieldActionAt(const FVector2D& Pointer) const;
+    bool IsEquipmentActionAt(const FVector2D& Pointer, int32 Slot) const;
     bool IsScrollableTab() const;
     FIntPoint GetScrollRowCounts() const;
     int32 GetFirstScrollRow() const;
@@ -99,6 +99,10 @@ private:
     bool bOwnsPrimaryButton = false;
     TOptional<bool> LastDisplayedWeaponState;
     TOptional<bool> PressedShieldAction;
+    TOptional<bool> PressedSupplySwordAction;
+    bool bLastDisplayedSupplySword = false;
+    bool bLastDisplayedEquippedSupplySword = false;
+    bool bLastDisplayedIssuedShield = false;
     bool bLastDisplayedShield = false;
     bool bLastDisplayedGuard = false;
 };

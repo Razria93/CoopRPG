@@ -2,13 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "GameFramework/OnlineReplStructs.h"
+#include "CoopRPGExpeditionSupplies.h"
+#include "CoopRPGPuzzleReward.h"
 #include "CoopRPGGameMode.generated.h"
 
 class ACoopRPGAttackTarget;
 class ACoopRPGEnemy;
 class ACoopRPGGameState;
 class ACoopRPGPlayerController;
-struct FUniqueNetIdRepl;
 
 UCLASS()
 class COOPRPG_API ACoopRPGGameMode : public AGameModeBase
@@ -26,6 +28,8 @@ public:
     const TArray<TObjectPtr<ACoopRPGEnemy>>& GetSkirmishEnemies() const { return SkirmishEnemies; }
     void UpdateLootRoundPhase(const AController* Leaving = nullptr);
     void AcknowledgeRoundResult(ACoopRPGPlayerController* Player, FGuid RoundId);
+    void SelectPuzzleReward(ACoopRPGPlayerController& Player, FGuid RoundId, ECoopRPGPuzzleReward Reward);
+    bool HasHealthPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId) const;
 
 protected:
     virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
@@ -43,6 +47,9 @@ private:
     FString GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId);
     bool ReserveRoundTravelSeats(const ACoopRPGGameState& State, const FString& Destination) const;
     bool IsRoundParticipant(const AController* Controller) const;
+    void TickPuzzleRewards(ACoopRPGGameState& State);
+    void FinalizePuzzleReward(ACoopRPGGameState& State, ACoopRPGPlayerController& Player,
+        ECoopRPGPuzzleReward Reward, bool bTimedOut);
     void AdvanceRoundIfReady(ACoopRPGGameState& State, const FString& Destination);
 
 private:
@@ -55,6 +62,8 @@ private:
     UPROPERTY()
     TArray<TObjectPtr<ACoopRPGEnemy>> SkirmishEnemies;
 
+    // A player may reconnect while the stage is still waiting for readiness.
+    TMap<FUniqueNetIdRepl, FCoopRPGExpeditionSupplies> WaitingPlayerSupplies;
     TWeakObjectPtr<APlayerController> PlayerSlots[2];
     FString ValidationClientLabels[2];
     FString LastValidationParticipants;

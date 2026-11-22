@@ -197,6 +197,7 @@ void ACoopRPGGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGGameState, RoundStatus);
     DOREPLIFETIME(ACoopRPGGameState, ReadySlots);
     DOREPLIFETIME(ACoopRPGGameState, LobbyDepartureDeadline);
+    DOREPLIFETIME(ACoopRPGGameState, PuzzleRewardDeadline);
     DOREPLIFETIME(ACoopRPGGameState, PuzzleStatus);
     DOREPLIFETIME(ACoopRPGGameState, ExtractionZone);
     DOREPLIFETIME(ACoopRPGGameState, EnemyPotion);
@@ -272,7 +273,6 @@ void ACoopRPGGameState::MulticastGameplayFeedback_Implementation(const FCoopRPGG
 {
     PresentGameplayFeedback(Feedback);
 }
-
 
 void ACoopRPGGameState::MulticastSlashFeedback_Implementation(const TArray<FCoopRPGGameplayFeedback>& Events)
 {
@@ -437,6 +437,15 @@ void ACoopRPGGameState::SetLobbyDepartureDeadline(double Deadline)
     }
 }
 
+void ACoopRPGGameState::SetPuzzleRewardDeadline(double Deadline)
+{
+    if (HasAuthority())
+    {
+        PuzzleRewardDeadline = Deadline;
+        ForceNetUpdate();
+    }
+}
+
 double ACoopRPGGameState::GetLobbyDepartureRemainingSeconds() const
 {
     return FMath::Max(0.0, LobbyDepartureDeadline - GetServerWorldTimeSeconds());
@@ -593,6 +602,8 @@ FString ACoopRPGGameState::GetRoundTravelDestination() const
         return CurrentMap;
     case ECoopRPGRoundEndReason::PuzzleSolved:
         return CurrentMap == CoopRPG::Expedition::PuzzlePackage ? FString(CoopRPG::Expedition::BossPackage) : FString();
+    case ECoopRPGRoundEndReason::BossDefeated:
+        return CurrentMap == CoopRPG::Expedition::BossPackage ? FString(CoopRPG::Expedition::LobbyPackage) : FString();
     case ECoopRPGRoundEndReason::Extracted:
         if (CurrentMap == CoopRPG::Expedition::SkirmishPackage)
         {
