@@ -5,6 +5,7 @@
 #include "CoopRPGMeleeAbility.generated.h"
 
 class AActor;
+class UAbilitySystemComponent;
 class UCoopRPGCombatProbeComponent;
 
 UCLASS()
@@ -14,6 +15,7 @@ class COOPRPG_API UCoopRPGMeleeAbility : public UGameplayAbility
 
 public:
     UCoopRPGMeleeAbility();
+    static bool CanPayPresentationCost(const UAbilitySystemComponent& Source);
 
 protected:
     virtual bool CheckCost(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

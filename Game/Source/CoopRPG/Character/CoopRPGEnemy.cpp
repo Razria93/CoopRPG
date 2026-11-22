@@ -152,6 +152,9 @@ ACoopRPGEnemy::ACoopRPGEnemy()
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> RingMaterial(
         TEXT("/Game/Presentation/Materials/M_EnemyGroundRing.M_EnemyGroundRing"));
     GroundRingMaterial = RingMaterial.Object;
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> OcclusionMaterial(
+        TEXT("/Game/Presentation/Materials/M_BlackKnightCounterOccluded.M_BlackKnightCounterOccluded"));
+    CounterOcclusionMaterial = OcclusionMaterial.Object;
 
     Axe = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Axe"));
     Shield = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Shield"));
@@ -189,6 +192,7 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     UpdateAttackPose();
+    UpdateCounterTelegraph();
 
     if (!HasAuthority() || bDead)
     {
@@ -489,8 +493,14 @@ ACoopRPGCharacter* ACoopRPGEnemy::FindTarget(float Range, bool bMeasureAttackDis
 double ACoopRPGEnemy::GetAttackDistance(const ACoopRPGCharacter& Player) const
 {
     const double CenterDistance = FVector::Dist2D(GetActorLocation(), Player.GetActorLocation());
-    return bLargeExpeditionBoss ? FMath::Max(0.0, CenterDistance - GetCapsuleComponent()->GetScaledCapsuleRadius()
-        - Player.GetCapsuleComponent()->GetScaledCapsuleRadius()) : CenterDistance;
+    return FMath::Max(0.0, CenterDistance - GetAttackDistanceOffset(Player));
+}
+
+double ACoopRPGEnemy::GetAttackDistanceOffset(const ACoopRPGCharacter& Player) const
+{
+    return bLargeExpeditionBoss
+        ? static_cast<double>(GetCapsuleComponent()->GetScaledCapsuleRadius()) + Player.GetCapsuleComponent()->GetScaledCapsuleRadius()
+        : 0.0;
 }
 
 float ACoopRPGEnemy::GetAttackRange() const
@@ -505,6 +515,10 @@ void ACoopRPGEnemy::SetShieldWarning(int32 TargetSlot, float FacingYaw, double E
     if (EndsAt > 0.0)
     {
         ++ShieldWarning.Sequence;
+        if (bLargeExpeditionBoss)
+        {
+            ShieldWarning.Origin = GetActorLocation();
+        }
     }
     else if (ShieldWarning.EndsAt == 0.0)
     {
@@ -513,6 +527,7 @@ void ACoopRPGEnemy::SetShieldWarning(int32 TargetSlot, float FacingYaw, double E
 
     ShieldWarning.FacingYaw = FacingYaw;
     ShieldWarning.TargetSlot = TargetSlot;
+    ShieldWarning.StartedAt = EndsAt > 0.0 ? GetWorld()->GetTimeSeconds() : 0.0;
     ShieldWarning.EndsAt = EndsAt;
     UE_LOG(LogCoopRPGEnemy, Log, TEXT("ShieldWarning Active=%d Pattern=%u TargetSlot=%d Yaw=%.2f EndsAt=%.3f X=%.2f Y=%.2f"),
         EndsAt > 0.0, ShieldWarning.Sequence, TargetSlot, FacingYaw, EndsAt, GetActorLocation().X, GetActorLocation().Y);
@@ -1074,6 +1089,199 @@ void ACoopRPGEnemy::UpdateShieldPresentation(bool bRaised)
     GroundRingFrontMaterial->SetVectorParameterValue(TEXT("Color"), bRaised ? RingGuardColor : RingBaseColor);
 }
 
+void ACoopRPGEnemy::UpdateCounterTelegraph()
+{
+    if (!bLargeExpeditionBoss || GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const ACoopRPGCharacter* WarningTarget = nullptr;
+    if (State && ShieldWarning.TargetSlot > 0 && IsShieldRaised())
+    {
+        for (const APlayerState* Participant : State->PlayerArray)
+        {
+            const auto* Hero = IsValid(Participant) ? Cast<ACoopRPGCharacter>(Participant->GetPawn()) : nullptr;
+            if (IsValid(Hero) && Hero->GetDisplaySlot() == ShieldWarning.TargetSlot && Hero->GetHealth() > 0.0f)
+            {
+                WarningTarget = Hero;
+                break;
+            }
+        }
+    }
+
+    const bool bWasVisible = CounterOutline && CounterOutline->IsVisible();
+    if (!WarningTarget || !GroundRingMaterial)
+    {
+        if (bWasVisible)
+        {
+            CounterOutline->SetVisibility(false);
+            CounterFill->SetVisibility(false);
+            if (CounterOccludedOutline)
+            {
+                CounterOccludedOutline->SetVisibility(false);
+                GetMesh()->SetRenderCustomDepth(false);
+            }
+            UE_LOG(LogCoopRPGEnemy, Log, TEXT("CounterTelegraph Active=0 Pattern=%u"), DisplayedCounterPattern);
+        }
+        return;
+    }
+
+    const double Radius = GetAttackRange() + GetAttackDistanceOffset(*WarningTarget);
+    if (!FMath::IsNearlyEqual(Radius, CounterTelegraphRadius))
+    {
+        CreateCounterTelegraph(Radius);
+    }
+
+    const double Progress = FMath::GetMappedRangeValueClamped(
+        FVector2D(ShieldWarning.StartedAt, ShieldWarning.EndsAt), FVector2D(0.0, 1.0), State->GetServerWorldTimeSeconds());
+    const bool bNewWarning = !bWasVisible || DisplayedCounterPattern != ShieldWarning.Sequence;
+    const FVector Floor = ShieldWarning.Origin - FVector::UpVector * GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+    if (bNewWarning)
+    {
+        const FRotator Facing(0.0, ShieldWarning.FacingYaw, 0.0);
+        CounterOutline->SetWorldLocationAndRotation(Floor + FVector(0.0, 0.0, 2.3), Facing);
+        CounterFill->SetWorldLocationAndRotation(Floor + FVector(0.0, 0.0, 1.7), Facing);
+        if (CounterOccludedOutline)
+        {
+            CounterOccludedOutline->SetWorldLocationAndRotation(Floor + FVector(0.0, 0.0, 2.3), Facing);
+        }
+    }
+    CounterFill->SetWorldScale3D(FVector(FMath::Max(Progress, 0.001), FMath::Max(Progress, 0.001), 1.0));
+    CounterOutline->SetVisibility(true);
+    if (CounterOccludedOutline && !bWasVisible)
+    {
+        GetMesh()->SetRenderCustomDepth(true);
+        CounterOccludedOutline->SetVisibility(true);
+    }
+    CounterFill->SetVisibility(Progress > 0.0);
+    if (bNewWarning)
+    {
+        DisplayedCounterPattern = ShieldWarning.Sequence;
+        UE_LOG(LogCoopRPGEnemy, Log,
+            TEXT("CounterTelegraph Active=1 Pattern=%u TargetSlot=%d Yaw=%.2f Radius=%.2f StartAt=%.3f EndsAt=%.3f Progress=%.3f OriginX=%.2f OriginY=%.2f OriginZ=%.2f"),
+            DisplayedCounterPattern, ShieldWarning.TargetSlot, ShieldWarning.FacingYaw, Radius,
+            ShieldWarning.StartedAt, ShieldWarning.EndsAt, Progress, Floor.X, Floor.Y, Floor.Z);
+    }
+}
+
+void ACoopRPGEnemy::CreateCounterTelegraph(double Radius)
+{
+    using namespace UE::Geometry;
+    const auto MakeLayer = [this](FName Name, UMaterialInterface* LayerMaterial, const FColor& Color)
+    {
+        auto* Layer = NewObject<UDynamicMeshComponent>(this, Name);
+        Layer->SetupAttachment(GetRootComponent());
+        Layer->SetAbsolute(true, true, true);
+        Layer->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        Layer->SetGenerateOverlapEvents(false);
+        Layer->SetCanEverAffectNavigation(false);
+        Layer->SetCastShadow(false);
+        Layer->SetReceivesDecals(false);
+        Layer->SetAffectDistanceFieldLighting(false);
+        if (LayerMaterial == GroundRingMaterial)
+        {
+            auto* Material = UMaterialInstanceDynamic::Create(LayerMaterial, Layer);
+            Material->SetVectorParameterValue(TEXT("Color"), FLinearColor(Color));
+            Layer->SetMaterial(0, Material);
+        }
+        else
+        {
+            Layer->SetMaterial(0, LayerMaterial);
+        }
+        Layer->SetVisibility(false);
+        Layer->RegisterComponent();
+        return Layer;
+    };
+    if (!CounterOutline)
+    {
+        // Both layers sit below the existing ground ring (3 cm) and above the walkable floor.
+        CounterOutline = MakeLayer(TEXT("CounterOutline"), GroundRingMaterial, FColor(255, 226, 74));
+        CounterFill = MakeLayer(TEXT("CounterFill"), GroundRingMaterial, FColor(197, 155, 31));
+        if (CounterOcclusionMaterial)
+        {
+            CounterOccludedOutline = MakeLayer(TEXT("CounterOccludedOutline"), CounterOcclusionMaterial, FColor::White);
+        }
+    }
+
+    FDynamicMesh3 Outline;
+    Outline.EnableAttributes();
+    Outline.Attributes()->EnableMaterialID();
+    Outline.EnableVertexNormals(FVector3f(0.0f, 0.0f, 1.0f));
+    constexpr double StrokeWidth = 3.5;
+    AddRingArc(Outline, Radius - StrokeWidth, Radius, -ShieldHalfAngleDegrees, ShieldHalfAngleDegrees, 0.0, 0);
+    const auto AddSide = [](FDynamicMesh3& Geometry, double Angle, double StartDistance, double EndDistance, double Width)
+    {
+        const FVector Edge = FRotator(0.0, Angle, 0.0).Vector();
+        const FVector Perp = FVector::CrossProduct(FVector::UpVector, Edge) * (Width * 0.5);
+        const FVector Start = Edge * StartDistance;
+        const FVector End = Edge * EndDistance;
+        const int32 StartLeft = Geometry.AppendVertex(Start - Perp);
+        const int32 StartRight = Geometry.AppendVertex(Start + Perp);
+        const int32 EndLeft = Geometry.AppendVertex(End - Perp);
+        const int32 EndRight = Geometry.AppendVertex(End + Perp);
+        Geometry.AppendTriangle(StartLeft, StartRight, EndRight);
+        Geometry.AppendTriangle(StartLeft, EndRight, EndLeft);
+    };
+    for (const double Angle : {-ShieldHalfAngleDegrees, ShieldHalfAngleDegrees})
+    {
+        AddSide(Outline, Angle, 0.0, Radius - StrokeWidth * 0.5, StrokeWidth);
+    }
+    FMeshNormals::InitializeOverlayToPerVertexNormals(Outline.Attributes()->PrimaryNormals());
+    CounterOutline->SetMesh(MoveTemp(Outline));
+
+    if (CounterOccludedOutline)
+    {
+        // Mirror the floor outline. The material draws these dashes only over pixels occluded by the knight.
+        FDynamicMesh3 Dashes;
+        Dashes.EnableAttributes();
+        Dashes.Attributes()->EnableMaterialID();
+        Dashes.EnableVertexNormals(FVector3f(0.0f, 0.0f, 1.0f));
+        constexpr double DashWidth = 2.4;
+        constexpr double DashLength = 9.0;
+        constexpr double DashPeriod = 16.0;
+        const double SideLength = Radius - StrokeWidth * 0.5;
+        for (const double Angle : {-ShieldHalfAngleDegrees, ShieldHalfAngleDegrees})
+        {
+            for (double Distance = 0.0; Distance < SideLength; Distance += DashPeriod)
+            {
+                AddSide(Dashes, Angle, Distance, FMath::Min(Distance + DashLength, SideLength), DashWidth);
+            }
+        }
+        const double DashAngle = FMath::RadiansToDegrees(DashLength / Radius);
+        const double DashStep = FMath::RadiansToDegrees(DashPeriod / Radius);
+        for (double Angle = -ShieldHalfAngleDegrees; Angle < ShieldHalfAngleDegrees; Angle += DashStep)
+        {
+            const double EndAngle = FMath::Min(Angle + DashAngle, ShieldHalfAngleDegrees);
+            AddRingArc(Dashes, Radius - (StrokeWidth + DashWidth) * 0.5, Radius - (StrokeWidth - DashWidth) * 0.5,
+                Angle, EndAngle, 0.0, 0);
+        }
+        FMeshNormals::InitializeOverlayToPerVertexNormals(Dashes.Attributes()->PrimaryNormals());
+        CounterOccludedOutline->SetMesh(MoveTemp(Dashes));
+    }
+
+    FDynamicMesh3 Fill;
+    Fill.EnableAttributes();
+    Fill.EnableVertexNormals(FVector3f(0.0f, 0.0f, 1.0f));
+    const int32 Center = Fill.AppendVertex(FVector::ZeroVector);
+    constexpr int32 Segments = 24;
+    int32 Previous = INDEX_NONE;
+    for (int32 Index = 0; Index <= Segments; ++Index)
+    {
+        const double Angle = FMath::Lerp(-ShieldHalfAngleDegrees, ShieldHalfAngleDegrees, static_cast<double>(Index) / Segments);
+        const int32 Vertex = Fill.AppendVertex(FRotator(0.0, Angle, 0.0).Vector() * Radius);
+        if (Previous != INDEX_NONE)
+        {
+            Fill.AppendTriangle(Center, Vertex, Previous);
+        }
+        Previous = Vertex;
+    }
+    FMeshNormals::InitializeOverlayToPerVertexNormals(Fill.Attributes()->PrimaryNormals());
+    CounterFill->SetMesh(MoveTemp(Fill));
+    CounterTelegraphRadius = Radius;
+}
+
 void ACoopRPGEnemy::OnRep_ShieldEncounter()
 {
     if (HasActorBegunPlay())
@@ -1087,6 +1295,7 @@ void ACoopRPGEnemy::OnRep_ShieldWarning()
     GetWorldTimerManager().ClearTimer(ShieldPresentationTimer);
     const bool bVisible = IsShieldRaised();
     UpdateShieldPresentation(bVisible);
+    UpdateCounterTelegraph();
     if (bVisible)
     {
         const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();

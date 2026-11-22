@@ -1,6 +1,6 @@
 #include "CoopRPGGameViewportClient.h"
 
-#include "CanvasItem.h"
+#include "CoopRPGExpeditionHUDText.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/NetDriver.h"
@@ -44,11 +44,10 @@ void UCoopRPGGameViewportClient::PostRender(UCanvas* Canvas)
         FLinearColor(0.02f, 0.04f, 0.08f, 0.94f));
     Background.BlendMode = SE_BLEND_Translucent;
     Canvas->DrawItem(Background);
-    FCanvasTextItem Title(Position + FVector2D(12.0f, 8.0f), FText::FromString(Notice), GEngine->GetMediumFont(), FLinearColor::White);
-    Canvas->DrawItem(Title);
-    FCanvasTextItem Hint(Position + FVector2D(12.0f, 32.0f), FText::FromString(TEXT("Open the client again to try another session.")),
-        GEngine->GetSmallFont(), FLinearColor(0.65f, 0.8f, 0.94f));
-    Canvas->DrawItem(Hint);
+    using namespace CoopRPG::ExpeditionUI;
+    Text(*Canvas, Notice, Position + FVector2D(12.0f, 5.0f), Font(13.0f, true), FLinearColor::White);
+    Text(*Canvas, TEXT("다른 세션에 참가하려면 게임을 다시 실행해 주세요."), Position + FVector2D(12.0f, 30.0f),
+        Font(11.5f), FLinearColor(0.65f, 0.8f, 0.94f));
     if (!bNoticeDrawn)
     {
         bNoticeDrawn = true;
@@ -73,39 +72,39 @@ void UCoopRPGGameViewportClient::OnConnectionFailure(UWorld* FailureWorld, UNetD
 
     if (Error == TEXT("RoundInProgress"))
     {
-        Notice = TEXT("This round is already in progress.");
+        Notice = TEXT("이미 진행 중인 스테이지예요.");
         NoticeReason = Error;
     }
     else if (Error == TEXT("RoundFull"))
     {
-        Notice = TEXT("The server already has two players.");
+        Notice = TEXT("서버에 이미 두 사람이 참가했어요.");
         NoticeReason = Error;
     }
     else if (Error == TEXT("RoundTravelReserved"))
     {
-        Notice = TEXT("The current players are moving to the next map.");
+        Notice = TEXT("파티가 다음 스테이지로 이동 중이에요.");
         NoticeReason = Error;
     }
     else if (Error == TEXT("RoundFinished"))
     {
-        Notice = TEXT("This round has ended.");
+        Notice = TEXT("이미 끝난 스테이지예요.");
         NoticeReason = Error;
     }
     else if (Error == TEXT("UnsupportedJoin"))
     {
-        Notice = TEXT("Join with one player per client.");
+        Notice = TEXT("한 클라이언트에 한 명씩 참가해 주세요.");
         NoticeReason = Error;
     }
     else if (Driver->NetDriverName == NAME_GameNetDriver
         && (Failure == ENetworkFailure::ConnectionLost || Failure == ENetworkFailure::ConnectionTimeout
             || Failure == ENetworkFailure::FailureReceived))
     {
-        Notice = TEXT("Connection to the server ended.");
+        Notice = TEXT("서버와의 연결이 끊겼어요.");
         NoticeReason = TEXT("ConnectionEnded");
     }
     else
     {
-        Notice = TEXT("Could not connect to the server.");
+        Notice = TEXT("서버에 접속할 수 없어요.");
         NoticeReason = TEXT("ConnectionFailed");
     }
     UE_LOG(LogCoopRPGConnectionNotice, Log, TEXT("ConnectionNoticeQueued Reason=%s Failure=%s"),

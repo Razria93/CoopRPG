@@ -5,6 +5,7 @@
 namespace CoopRPG::Expedition
 {
     inline constexpr TCHAR LobbyMap[] = TEXT("L_ExpeditionLobby");
+    inline constexpr TCHAR LobbyPackage[] = TEXT("/Game/Maps/L_ExpeditionLobby");
     inline constexpr TCHAR SkirmishMap[] = TEXT("L_ExpeditionSkirmish");
     inline constexpr int32 SkirmishEnemyCount = 4;
     inline constexpr int32 SkirmishPotionDefeats = 2;
@@ -17,6 +18,26 @@ namespace CoopRPG::Expedition
 
     inline constexpr TCHAR BossMap[] = TEXT("L_ExpeditionBoss");
     inline constexpr TCHAR BossPackage[] = TEXT("/Game/Maps/L_ExpeditionBoss");
+
+    inline bool IsExpedition(const UWorld* World)
+    {
+        if (!World)
+        {
+            return false;
+        }
+        const FString Package = UWorld::RemovePIEPrefix(World->GetPackage()->GetName());
+        return Package == LobbyPackage || Package == SkirmishPackage || Package == PuzzlePackage || Package == BossPackage;
+    }
+
+    inline bool IsLobby(const UWorld* World)
+    {
+        return World && UWorld::RemovePIEPrefix(World->GetPackage()->GetName()) == LobbyPackage;
+    }
+
+    inline bool IsPuzzle(const UWorld* World)
+    {
+        return World && UWorld::RemovePIEPrefix(World->GetPackage()->GetName()) == PuzzlePackage;
+    }
 
     inline bool IsBoss(const UWorld* World)
     {

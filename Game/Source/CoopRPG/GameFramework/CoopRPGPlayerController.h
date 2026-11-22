@@ -81,6 +81,8 @@ private:
 
     const TCHAR* GetEnemyLootRejection(FGuid RoundId, FGuid DropId, const ACoopRPGEnemyLoot* Drop) const;
 
+    void SetRecoveryCount(int32 Count);
+
     void LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId) const;
 
     const TCHAR* GetChestRejection(const ACoopRPGSharedChest* Chest, FGuid RoundId) const;

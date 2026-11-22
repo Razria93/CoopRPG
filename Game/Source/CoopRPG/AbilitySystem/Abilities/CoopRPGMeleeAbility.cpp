@@ -167,6 +167,15 @@ UCoopRPGMeleeAbility::UCoopRPGMeleeAbility()
     CooldownGameplayEffectClass = UCoopRPGMeleeCooldown::StaticClass();
 }
 
+bool UCoopRPGMeleeAbility::CanPayPresentationCost(const UAbilitySystemComponent& Source)
+{
+    const FGameplayAbilitySpec* Spec = Source.FindAbilitySpecFromClass(StaticClass());
+    const auto* Ability = Spec ? Cast<UCoopRPGMeleeAbility>(Spec->Ability) : nullptr;
+    // Read the real gameplay effect cost without reporting a failed input on every HUD frame.
+    return Ability && Source.AbilityActorInfo.IsValid()
+        && Ability->UGameplayAbility::CheckCost(Spec->Handle, Source.AbilityActorInfo.Get(), nullptr);
+}
+
 bool UCoopRPGMeleeAbility::CheckCost(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
     FGameplayTagContainer* OptionalRelevantTags) const
 {
