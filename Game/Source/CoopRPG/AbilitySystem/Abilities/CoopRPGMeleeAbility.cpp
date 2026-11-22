@@ -35,7 +35,7 @@ namespace
     using CoopRPG::Debug::DescribePlayerRequestContext;
 
     const TCHAR* SweepForEnemy(const AActor* Attacker, AActor*& Target, const FVector& Direction, uint32 Swing,
-        const ACoopRPGGameMode* Skirmish = nullptr)
+        TOptional<FVector>& ContactPoint, const ACoopRPGGameMode* Skirmish = nullptr)
     {
         const FVector Start = Attacker->GetActorLocation();
         if (!Skirmish && FVector::DotProduct(Direction, Target->GetActorLocation() - Start) <= 0.0)
@@ -79,13 +79,18 @@ namespace
                         EnemyTime = Contact.Time;
                         EnemyDistance = Distance;
                         ClosestEnemy = HitActor;
+                        ContactPoint = Contact.bStartPenetrating ? HitActor->GetActorLocation() : FVector(Contact.ImpactPoint);
                     }
                 }
             }
             else if (HitActor == Target)
             {
                 ++EnemyContacts;
-                EnemyTime = FMath::Min(EnemyTime, Contact.Time);
+                if (Contact.Time < EnemyTime)
+                {
+                    EnemyTime = Contact.Time;
+                    ContactPoint = Contact.bStartPenetrating ? HitActor->GetActorLocation() : FVector(Contact.ImpactPoint);
+                }
                 continue;
             }
 
@@ -328,6 +333,7 @@ void UCoopRPGMeleeAbility::ResolveHit()
 
     const TCHAR* MissReason = nullptr;
     float Distance = 0.0f;
+    TOptional<FVector> ContactPoint;
     if (!IsValid(Attacker) || !IsValid(Source)
         || Source->GetNumericAttribute(UCoopRPGCombatAttributes::GetHealthAttribute()) <= 0.0f)
     {
@@ -340,7 +346,7 @@ void UCoopRPGMeleeAbility::ResolveHit()
     }
     else if (GameMode && GameMode->IsSkirmishEncounter())
     {
-        MissReason = SweepForEnemy(Attacker, Target, AttackDirection, AttackSequence, GameMode);
+        MissReason = SweepForEnemy(Attacker, Target, AttackDirection, AttackSequence, ContactPoint, GameMode);
         if (!MissReason)
         {
             TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target, false);
@@ -361,7 +367,7 @@ void UCoopRPGMeleeAbility::ResolveHit()
         }
         else if (AttackSequence != 0)
         {
-            MissReason = SweepForEnemy(Attacker, Target, AttackDirection, AttackSequence);
+            MissReason = SweepForEnemy(Attacker, Target, AttackDirection, AttackSequence, ContactPoint);
         }
     }
 
@@ -384,12 +390,14 @@ void UCoopRPGMeleeAbility::ResolveHit()
         return;
     }
 
-    if (const auto* Enemy = Cast<ACoopRPGEnemy>(Target); Enemy && Enemy->IsShieldEncounter())
+    const auto* HitEnemy = Cast<ACoopRPGEnemy>(Target);
+    if (HitEnemy && HitEnemy->IsShieldEncounter())
     {
-        const double Angle = Enemy->GetShieldAngle(Attacker->GetActorLocation());
-        const bool bRaised = Enemy->IsShieldRaised();
+        const double Angle = HitEnemy->GetShieldAngle(Attacker->GetActorLocation());
+        const bool bRaised = HitEnemy->IsShieldRaised();
         // Allow roundoff at the inclusive shield front boundary.
-        const bool bBlocked = bRaised && Angle <= ACoopRPGEnemy::ShieldHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
+        const bool bWithinShieldFront = Angle <= ACoopRPGEnemy::ShieldHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
+        const bool bBlocked = bRaised && bWithinShieldFront;
         UE_LOG(LogCoopRPGMelee, Log, TEXT("ShieldMeleeEvaluated Angle=%.4f Raised=%d Outcome=%s %s Swing=%u"),
             Angle, bRaised, bBlocked ? TEXT("Blocked") : TEXT("Hit"),
             *DescribePlayerRequestContext(Attacker, ANSI_TO_TCHAR(__FUNCTION__)), AttackSequence);
@@ -400,8 +408,12 @@ void UCoopRPGMeleeAbility::ResolveHit()
                 const auto* Character = Cast<ACoopRPGCharacter>(Attacker);
                 FCoopRPGGameplayFeedback Feedback(ECoopRPGFeedbackKind::ShieldBlocked, Target, 0.0f,
                     Character ? Character->GetDisplaySlot() : INDEX_NONE);
-                const FVector ShieldForward = FRotator(0.0, Enemy->GetShieldWarning().FacingYaw, 0.0).Vector();
+                const FVector ShieldForward = FRotator(0.0, HitEnemy->GetShieldWarning().FacingYaw, 0.0).Vector();
                 Feedback.Location += ShieldForward * 56.0 + FVector(0.0, 0.0, 34.0);
+                Feedback.MeleeEffect = ECoopRPGMeleeEffect::ShieldBlock;
+                Feedback.MeleeEffectLocation = Feedback.Location;
+                Feedback.MeleeEffectYaw = HitEnemy->GetShieldWarning().FacingYaw;
+                Feedback.MeleeSwing = AttackSequence;
                 State->MulticastGameplayFeedback(Feedback);
             }
             EndAbility(Handle, ActorInfo, ActivationInfo, false, false);
@@ -409,6 +421,7 @@ void UCoopRPGMeleeAbility::ResolveHit()
         }
     }
 
+    const bool bPreserveEnemyAttackPose = HitEnemy && HitEnemy->ShouldPreserveAttackPose();
     const float HealthBefore = TargetASC->GetNumericAttribute(HealthAttribute);
     const FGameplayEffectSpecHandle Damage = MakeOutgoingGameplayEffectSpec(UCoopRPGMeleeDamage::StaticClass());
     check(Damage.IsValid());
@@ -417,7 +430,16 @@ void UCoopRPGMeleeAbility::ResolveHit()
     {
         const auto* Character = Cast<ACoopRPGCharacter>(Attacker);
         const int32 Slot = Character && Character->GetDisplaySlot() > 0 ? Character->GetDisplaySlot() : INDEX_NONE;
-        State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::Damage, Target, DamageAmount, Slot});
+        FCoopRPGGameplayFeedback Feedback(ECoopRPGFeedbackKind::Damage, Target, DamageAmount, Slot);
+        if (HitEnemy && Character)
+        {
+            Feedback.MeleeEffect = HitEnemy->IsMushroom() ? ECoopRPGMeleeEffect::MushroomHit : ECoopRPGMeleeEffect::ArmorHit;
+            Feedback.MeleeEffectLocation = ContactPoint.Get(Feedback.Location);
+            Feedback.MeleeEffectYaw = AttackDirection.Rotation().Yaw;
+            Feedback.MeleeSwing = AttackSequence;
+            Feedback.bPreserveEnemyAttackPose = bPreserveEnemyAttackPose;
+        }
+        State->MulticastGameplayFeedback(Feedback);
     }
     UE_LOG(LogCoopRPGMelee, Log,
         TEXT("AttackApproved Attacker=%s Target=%s Distance=%.2f Range=%.2f HP=%.2f->%.2f %s Swing=%u"),

@@ -11,6 +11,7 @@ class ACoopRPGExtractionZone;
 class ACoopRPGSharedChest;
 class UCoopRPGCombatProbeComponent;
 class UDynamicMeshComponent;
+class USoundAttenuation;
 
 UENUM()
 enum class ECoopRPGRoundPhase : uint8
@@ -146,6 +147,8 @@ public:
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
 
+    void PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVector& Location, float Yaw, int32 Slot, uint32 Swing, float ScaleMultiplier = 1.0f);
+
     UFUNCTION(NetMulticast, Reliable)
     void MulticastMeleeSweepTrace(const FCoopRPGMeleeSweepTrace& Trace);
 
@@ -178,6 +181,8 @@ public:
 
 private:
     friend class UCoopRPGCombatProbeComponent;
+
+    void PresentGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
 
     void FinishRound(ECoopRPGRoundEndReason Reason, double Now, bool bDisconnected, bool bDeath,
         bool bTimeout, bool bExtractionReady);
@@ -213,6 +218,9 @@ private:
 
     UPROPERTY(Replicated)
     FGuid RoundId;
+
+    UPROPERTY(Transient)
+    TObjectPtr<USoundAttenuation> MeleeSoundAttenuation;
 
     UPROPERTY(ReplicatedUsing = OnRep_RoundStatus)
     FCoopRPGRoundStatus RoundStatus;

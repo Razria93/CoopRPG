@@ -7,6 +7,7 @@
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Debug/CoopRPGCombatProbeComponent.h"
 #include "CoopRPG/GameFramework/CoopRPGGameplayFeedback.h"
+#include "CoopRPG/GameFramework/CoopRPGGameState.h"
 
 #include "CoopRPG/GameFramework/CoopRPGPlayerState.h"
 #include "AbilitySystemComponent.h"
@@ -17,6 +18,11 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Camera/CameraComponent.h"
+#include "Containers/Ticker.h"
+#include "CoreGlobals.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "TimerManager.h"
@@ -39,6 +45,28 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGMeleeMotion, Log, All);
 
 namespace
 {
+    constexpr float SwingEffectsLeadSeconds = 0.06f;
+    constexpr float SwingEffectsCatchUpSeconds = 0.15f;
+    constexpr int32 DefaultMeleeHitStopMs = 60;
+    constexpr double MeleeHitStopCatchUpSeconds = 0.10;
+    constexpr float OwnerMeleePresentationBufferSeconds = 0.080f;
+    constexpr float MeleeHitStopMaxPoseCorrectionSeconds = 0.10f;
+
+    int32 GetMeleeHitStopDurationMs()
+    {
+#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
+        const TCHAR* CommandLine = FCommandLine::Get();
+        int32 ComparisonMs = 0;
+        if (FParse::Param(CommandLine, TEXT("CoopCombatTest"))
+            && FParse::Value(CommandLine, TEXT("CoopMeleeHitStopMs="), ComparisonMs)
+            && (ComparisonMs == 80 || ComparisonMs == 100))
+        {
+            return ComparisonMs;
+        }
+#endif
+        return DefaultMeleeHitStopMs;
+    }
+
     struct FHeroAttackProfile
     {
         const TCHAR* ClipPath;
@@ -417,6 +445,10 @@ void ACoopRPGCharacter::OnRep_MeleePresentation()
     if (MeleePresentation.bCancelled)
     {
         ReleaseMeleeFacing();
+        if (PresentedMeleeSequence == MeleePresentation.Sequence)
+        {
+            GetWorldTimerManager().ClearTimer(MeleeSwingEffectsTimer);
+        }
         if (Animation && LocalMeleeMontage.IsValid() && PresentedMeleeSequence == MeleePresentation.Sequence)
         {
             Animation->Montage_Stop(0.06f, LocalMeleeMontage.Get());
@@ -435,6 +467,7 @@ void ACoopRPGCharacter::OnRep_MeleePresentation()
     const auto* State = GetWorld()->GetGameState();
     const double Now = State ? State->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
     const float Elapsed = FMath::Max(0.0, Now - MeleePresentation.StartedAt);
+    GetWorldTimerManager().ClearTimer(MeleeSwingEffectsTimer);
     PresentedMeleeSequence = MeleePresentation.Sequence;
     if (Elapsed >= HeroAttackClip->GetPlayLength())
     {
@@ -450,14 +483,150 @@ void ACoopRPGCharacter::OnRep_MeleePresentation()
         GetWorldTimerManager().SetTimer(MeleeFacingTimer, this, &ThisClass::ReleaseMeleeFacing, FacingTimeLeft, false);
     }
 
+    // A late replicated swing must still show the approach to contact for its attacker.
+    const float LatestWindupPose = FMath::Max(0.0f, MeleePresentation.Windup - OwnerMeleePresentationBufferSeconds);
+    const float ClipOffset = GetNetMode() == NM_Client && IsLocallyControlled()
+        ? FMath::Clamp(Elapsed - OwnerMeleePresentationBufferSeconds, 0.0f, LatestWindupPose)
+        : Elapsed;
     LocalMeleeMontage = Animation->PlaySlotAnimationAsDynamicMontage(
-        HeroAttackClip, UCoopRPGHeroAnimInstance::MeleeSlot, 0.045f, 0.08f, 1.0f, 1, -1.0f, Elapsed);
+        HeroAttackClip, UCoopRPGHeroAnimInstance::MeleeSlot, 0.045f, 0.08f, 1.0f, 1, -1.0f, ClipOffset);
     if (LocalMeleeMontage.IsValid())
     {
-        UE_LOG(LogCoopRPGMeleeMotion, Log, TEXT("MeleeMotionStarted Slot=%d Swing=%u Clip=%s Offset=%.3f Windup=%.3f Yaw=%.1f %s"),
-            DisplaySlot, MeleePresentation.Sequence, *GetNameSafe(HeroAttackClip), Elapsed, MeleePresentation.Windup,
-            MeleePresentation.FacingYaw, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+        UE_LOG(LogCoopRPGMeleeMotion, Log, TEXT("MeleeMotionStarted Slot=%d Swing=%u Clip=%s Offset=%.3f Windup=%.3f Yaw=%.1f ServerElapsed=%.3f %s"),
+            DisplaySlot, MeleePresentation.Sequence, *GetNameSafe(HeroAttackClip), ClipOffset, MeleePresentation.Windup,
+            MeleePresentation.FacingYaw, Elapsed,
+            *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+
+        const float SwingTime = FMath::Max(MeleePresentation.Windup - SwingEffectsLeadSeconds, 0.0f);
+        if (const float Delay = SwingTime - ClipOffset; Delay > 0.0f)
+        {
+            GetWorldTimerManager().SetTimer(MeleeSwingEffectsTimer, this, &ThisClass::PlayMeleeSwingEffects, Delay, false);
+        }
+        else if (ClipOffset - SwingTime <= SwingEffectsCatchUpSeconds)
+        {
+            PlayMeleeSwingEffects();
+        }
+
+        if (PendingHitStopSwing == PresentedMeleeSequence)
+        {
+            if (FPlatformTime::Seconds() <= PendingHitStopDeadline)
+            {
+                ApplyMeleeHitStop(PendingHitStopSwing);
+            }
+            PendingHitStopSwing = 0;
+        }
     }
+}
+
+void ACoopRPGCharacter::PlayMeleeSwingEffects()
+{
+    auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const auto* Animation = GetMesh()->GetAnimInstance();
+    if (State && Animation && LocalMeleeMontage.IsValid() && Animation->Montage_IsPlaying(LocalMeleeMontage.Get())
+        && !MeleePresentation.bCancelled && PresentedMeleeSequence == MeleePresentation.Sequence)
+    {
+        State->PlayMeleeEffect(ECoopRPGMeleeEffect::SwordSwing, HeroWeaponMesh->GetComponentLocation(),
+            MeleePresentation.FacingYaw, DisplaySlot, PresentedMeleeSequence);
+    }
+}
+
+void ACoopRPGCharacter::RequestMeleeHitStop(uint32 Swing)
+{
+    if (GetNetMode() != NM_Client || !IsLocallyControlled() || Swing == 0)
+    {
+        return;
+    }
+
+    if (Swing == PresentedMeleeSequence)
+    {
+        ApplyMeleeHitStop(Swing);
+    }
+    else if (Swing > MeleePresentation.Sequence && Swing > PendingHitStopSwing)
+    {
+        // Feedback can arrive a frame before the pawn's replicated swing.
+        PendingHitStopSwing = Swing;
+        PendingHitStopDeadline = FPlatformTime::Seconds() + MeleeHitStopCatchUpSeconds;
+    }
+}
+
+void ACoopRPGCharacter::ApplyMeleeHitStop(uint32 Swing)
+{
+    if (!IsLocallyControlled() || Swing == LastHitStoppedMeleeSequence || Swing != MeleePresentation.Sequence
+        || MeleePresentation.bCancelled)
+    {
+        return;
+    }
+
+    auto* Animation = GetMesh()->GetAnimInstance();
+    auto* Montage = LocalMeleeMontage.Get();
+    if (!Animation || !Montage || Montage->HasRootMotion())
+    {
+        return;
+    }
+
+    auto* Instance = Animation->GetActiveInstanceForMontage(Montage);
+    if (!Instance || !Instance->IsPlaying() || Instance->GetPlayRate() <= 0.0f)
+    {
+        return;
+    }
+
+    const float ContactPosition = MeleePresentation.Windup;
+    const float ReceivedPosition = Instance->GetPosition();
+    if (ContactPosition <= 0.0f || ContactPosition >= Montage->GetPlayLength()
+        || ReceivedPosition < ContactPosition - MeleeHitStopMaxPoseCorrectionSeconds)
+    {
+        UE_LOG(LogCoopRPGMeleeMotion, Log,
+            TEXT("MeleeHitStopSkipped Slot=%d Swing=%u ContactPosition=%.3f ReceivedPosition=%.3f"),
+            DisplaySlot, Swing, ContactPosition, ReceivedPosition);
+        return;
+    }
+
+    LastHitStoppedMeleeSequence = Swing;
+    const int32 InstanceId = Instance->GetInstanceID();
+    const float PreviousRate = Instance->GetPlayRate();
+    const int32 Slot = DisplaySlot;
+    // Late confirmations still hold the current attack pose without rewinding through recovery.
+    const bool bUseContactPose = ReceivedPosition <= ContactPosition + MeleeHitStopMaxPoseCorrectionSeconds;
+    if (bUseContactPose)
+    {
+        Instance->SetPosition(ContactPosition);
+    }
+    Instance->SetPlayRate(0.0f);
+    const int32 DurationMs = GetMeleeHitStopDurationMs();
+    const double HoldSeconds = DurationMs / 1000.0;
+    const double StartedAt = FPlatformTime::Seconds();
+    UE_LOG(LogCoopRPGMeleeMotion, Log,
+        TEXT("MeleeHitStopStarted Slot=%d Swing=%u RequestedMs=%d ActiveRate=%.2f "
+             "GameFrame=%llu ReceivedPosition=%.3f Position=%.3f Pose=%s"),
+        Slot, Swing, DurationMs, Instance->GetPlayRate(),
+        GFrameCounter, ReceivedPosition, Instance->GetPosition(), bUseContactPose ? TEXT("Contact") : TEXT("Current"));
+
+    // Restore only this local montage instance if it still exists when the hold expires.
+    FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
+        [WeakAnimation = TWeakObjectPtr<UAnimInstance>(Animation),
+            InstanceId, PreviousRate, StartedAt, HoldSeconds, Slot, Swing](float)
+        {
+            const double Elapsed = FPlatformTime::Seconds() - StartedAt;
+            if (Elapsed < HoldSeconds)
+            {
+                return true;
+            }
+
+            auto* ResumingAnimation = WeakAnimation.Get();
+            auto* ResumingInstance = ResumingAnimation ? ResumingAnimation->GetMontageInstanceForID(InstanceId) : nullptr;
+            const bool bHeroResumed = ResumingInstance && ResumingInstance->IsActive()
+                && ResumingInstance->GetPlayRate() == 0.0f;
+            if (bHeroResumed)
+            {
+                ResumingInstance->SetPlayRate(PreviousRate);
+            }
+            UE_LOG(LogCoopRPGMeleeMotion, Log,
+                TEXT("MeleeHitStopEnded Slot=%d Swing=%u ElapsedMs=%.2f RestoredRate=%.2f "
+                     "GameFrame=%llu Position=%.3f"),
+                Slot, Swing, Elapsed * 1000.0, bHeroResumed ? ResumingInstance->GetPlayRate() : 0.0f,
+                GFrameCounter, bHeroResumed ? ResumingInstance->GetPosition() : -1.0f);
+            return false;
+        }));
 }
 
 void ACoopRPGCharacter::ReleaseMeleeFacing()

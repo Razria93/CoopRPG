@@ -211,6 +211,7 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
             NextActionTime = Now + (bShieldEncounter ? ShieldRecoverySeconds : RecoverySeconds);
             if (bShieldEncounter)
             {
+                ResolvedKnightStrikeAt = ShieldWarning.EndsAt;
                 SetShieldWarning(0, ShieldWarning.FacingYaw, 0.0);
             }
             ResolveAttack(Player);
@@ -318,9 +319,32 @@ void ACoopRPGEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
     DOREPLIFETIME(ACoopRPGEnemy, ShieldWarning);
 }
 
-void ACoopRPGEnemy::FlashPresentationHit()
+bool ACoopRPGEnemy::ShouldPreserveAttackPose() const
 {
-    if (!bDead && Animation && HitMontage)
+    if (!IsBlackKnight() || !bShieldEncounter || bDead)
+    {
+        return false;
+    }
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State || !State->IsRoundPlaying())
+    {
+        return false;
+    }
+
+    if (ShieldWarning.EndsAt > 0.0)
+    {
+        return true;
+    }
+
+    const double StrikeAt = HasAuthority() ? ResolvedKnightStrikeAt : KnightStrikeAt;
+    return StrikeAt > 0.0 && AttackMontage
+        && State->GetServerWorldTimeSeconds() < StrikeAt + AttackMontage->GetPlayLength() - BlackKnightStrikeClipTime;
+}
+
+void ACoopRPGEnemy::FlashPresentationHit(bool bPreserveAttackPose)
+{
+    if (!bDead && Animation && HitMontage && !bPreserveAttackPose && !ShouldPreserveAttackPose())
     {
         PendingHitUntil = GetWorld()->GetTimeSeconds() + HitMontage->GetPlayLength();
     }
@@ -513,6 +537,7 @@ void ACoopRPGEnemy::StopCombat()
     StopChasing();
     Target.Reset();
     SetShieldWarning(0, ShieldWarning.FacingYaw, 0.0);
+    ResolvedKnightStrikeAt = 0.0;
     MushroomStrike = {};
     NextActionTime = 0.0;
     bAttackPending = false;
@@ -804,6 +829,15 @@ void ACoopRPGEnemy::UpdateAttackPose()
         // An early clear cancels the windup. Normal impact clears can arrive slightly before local server time.
         KnightStrikeAt = 0.0;
     }
+    if (ShouldPreserveAttackPose())
+    {
+        PendingHitUntil = 0.0;
+        if (Animation->Montage_IsPlaying(HitMontage))
+        {
+            Animation->Montage_Stop(0.04f, HitMontage);
+        }
+    }
+
     const double StrikeAt = bMushroomEncounter ? MushroomStrike.At : KnightStrikeAt;
     const double Elapsed = Now - StrikeAt;
     const double Length = AttackMontage->GetPlayLength();

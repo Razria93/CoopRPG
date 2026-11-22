@@ -238,7 +238,7 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
         }
         else if (auto* Enemy = Cast<ACoopRPGEnemy>(Subject))
         {
-            Enemy->FlashPresentationHit();
+            Enemy->FlashPresentationHit(Feedback.bPreserveEnemyAttackPose);
         }
         break;
     }
