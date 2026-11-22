@@ -73,7 +73,8 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     bool IsDead() const { return bDead; }
-    void FlashPresentationHit();
+    bool ShouldPreserveAttackPose() const;
+    void FlashPresentationHit(bool bPreserveAttackPose);
     void EnableShieldEncounter();
     bool IsShieldEncounter() const { return bShieldEncounter; }
     bool IsMushroom() const { return Kind == ECoopRPGEnemyKind::Mushroom; }
@@ -231,6 +232,7 @@ private:
 
     FTimerHandle CorpseTimer;
     double KnightStrikeAt = 0.0;
+    double ResolvedKnightStrikeAt = 0.0;
     float KnightFacingYaw = 0.0f;
     uint32 KnightSequence = 0;
     uint32 LastKnightImpact = 0;

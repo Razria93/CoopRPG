@@ -3,12 +3,16 @@
 #include "CoopRPGExtractionZone.h"
 #include "CoopRPGExpeditionMaps.h"
 #include "CoopRPGGameMode.h"
+#include "CoopRPGImpactCameraShake.h"
 #include "CoopRPGLootHUD.h"
+#include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
+#include "Camera/PlayerCameraManager.h"
+#include "Components/AudioComponent.h"
 #include "Components/DynamicMeshComponent.h"
 #include "CoreGlobals.h"
 #include "DynamicMesh/DynamicMesh3.h"
@@ -19,11 +23,27 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Math/Color.h"
+#include "Math/Rotator.h"
+#include "Math/UnrealMathUtility.h"
 #include "Misc/CommandLine.h"
+#include "Misc/PackageName.h"
 #include "Misc/Parse.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraComponent.h"
+#include "NiagaraEmitterHandle.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "Sound/SoundAttenuation.h"
+#include "Sound/SoundBase.h"
+#include "Sound/SoundWaveProcedural.h"
+#include "UObject/Class.h"
+#include "UObject/SoftObjectPath.h"
+#include "UObject/SoftObjectPtr.h"
+#include "UObject/UObjectGlobals.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRound, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGMeleeEffects, Log, All);
 
 namespace
 {
@@ -31,6 +51,111 @@ namespace
     constexpr double ExtractionHoldSeconds = 3.0;
     constexpr TCHAR FirstValidationMap[] = TEXT("/Game/Maps/L_Movement");
     constexpr TCHAR SecondValidationMap[] = TEXT("/Game/Maps/L_Movement_Round2");
+
+    enum class EBossImpactTrial
+    {
+        Default,
+        Effects,
+        HitStop,
+        Shake
+    };
+
+    EBossImpactTrial GetBossImpactTrial()
+    {
+#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
+        static const EBossImpactTrial Mode = []
+        {
+            FString Value;
+            if (FParse::Param(FCommandLine::Get(), TEXT("CoopCombatTest"))
+                && FParse::Value(FCommandLine::Get(), TEXT("CoopBossImpact="), Value))
+            {
+                if (Value.Equals(TEXT("Effects"), ESearchCase::IgnoreCase)) { return EBossImpactTrial::Effects; }
+                if (Value.Equals(TEXT("HitStop"), ESearchCase::IgnoreCase)) { return EBossImpactTrial::HitStop; }
+                if (Value.Equals(TEXT("Shake"), ESearchCase::IgnoreCase)) { return EBossImpactTrial::Shake; }
+            }
+            return EBossImpactTrial::Default;
+        }();
+        return Mode;
+#else
+        return EBossImpactTrial::Default;
+#endif
+    }
+
+    struct FMeleeEffectAssets
+    {
+        TSoftObjectPtr<UNiagaraSystem> System;
+        TSoftObjectPtr<USoundBase> Sound;
+        float Scale = 1.0f;
+        float Volume = 1.0f;
+    };
+
+    FMeleeEffectAssets& GetMeleeEffectAssets(ECoopRPGMeleeEffect Effect)
+    {
+        static FMeleeEffectAssets Assets[] =
+        {
+            {},
+            {
+                TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/ThirdParty/Effects/Combat/MedievalRPGVFX/Niagara/Combat/Melee/NS_MRPG_Sword_Slash_Light.NS_MRPG_Sword_Slash_Light"))),
+                TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/ThirdParty/Effects/Combat/WeaponMaster/cue/1_WM_Mono/Sword_Whoosh_02_Cue.Sword_Whoosh_02_Cue"))),
+                0.57f, 0.37f
+            },
+            {
+                TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/ThirdParty/Effects/Combat/MedievalRPGVFX/Niagara/Combat/Hits/NS_MRPG_Hit_Blood.NS_MRPG_Hit_Blood"))),
+                TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/ThirdParty/Effects/Combat/WeaponMaster/cue/1_WM_Mono/Sword_Damage_02_Cue.Sword_Damage_02_Cue"))),
+                0.78f, 0.68f
+            },
+            {
+                TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/ThirdParty/Effects/Combat/MedievalRPGVFX/Niagara/Combat/Hits/NS_MRPG_Hit_Metal.NS_MRPG_Hit_Metal"))),
+                TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/ThirdParty/Effects/Combat/WeaponMaster/cue/1_WM_Mono/Sword_Damage_02_Cue.Sword_Damage_02_Cue"))),
+                0.90f, 0.68f
+            },
+            {
+                TSoftObjectPtr<UNiagaraSystem>(FSoftObjectPath(TEXT("/Game/ThirdParty/Effects/Combat/MedievalRPGVFX/Niagara/Combat/Melee/NS_MRPG_Shield_Block.NS_MRPG_Shield_Block"))),
+                TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/ThirdParty/Effects/Combat/WeaponMaster/cue/1_WM_Mono/Sword_Defense_Impact_02_Cue.Sword_Defense_Impact_02_Cue"))),
+                0.52f, 0.76f
+            }
+        };
+        return Assets[static_cast<uint8>(Effect)];
+    }
+
+    template <typename AssetType>
+    AssetType* LoadLocalEffectAsset(TSoftObjectPtr<AssetType>& Asset)
+    {
+        if (Asset.IsValid())
+        {
+            return Asset.Get();
+        }
+        const FString Package = Asset.ToSoftObjectPath().GetLongPackageName();
+        return FPackageName::DoesPackageExist(Package) ? Asset.LoadSynchronous() : nullptr;
+    }
+
+    bool PlayFallbackShieldImpact(UWorld& World, const FVector& Position)
+    {
+        constexpr uint32 SampleRate = 24000;
+        constexpr float Duration = 0.10f;
+        TArray<int16> Samples;
+        Samples.SetNumUninitialized(static_cast<int32>(SampleRate * Duration));
+        for (int32 Index = 0; Index < Samples.Num(); ++Index)
+        {
+            const double Time = static_cast<double>(Index) / SampleRate;
+            const double Envelope = FMath::Min(Time * 600.0, 1.0) * FMath::Exp(-50.0 * Time);
+            Samples[Index] = static_cast<int16>(7000.0 * Envelope
+                * (0.7 * FMath::Sin(2.0 * UE_DOUBLE_PI * 890.0 * Time)
+                    + 0.3 * FMath::Sin(2.0 * UE_DOUBLE_PI * 1430.0 * Time)));
+        }
+
+        auto* Sound = NewObject<USoundWaveProcedural>(&World);
+        Sound->SetSampleRate(SampleRate);
+        Sound->NumChannels = 1;
+        Sound->Duration = Duration;
+        Sound->QueueAudio(reinterpret_cast<const uint8*>(Samples.GetData()), Samples.Num() * sizeof(int16));
+        if (UAudioComponent* Audio = UGameplayStatics::SpawnSoundAtLocation(&World, Sound, Position, FRotator::ZeroRotator, 0.65f))
+        {
+            Audio->FadeOut(Duration, 0.0f);
+            return true;
+        }
+        return false;
+    }
 
     bool IsSuccessful(ECoopRPGRoundEndReason Reason)
     {
@@ -143,14 +268,115 @@ void ACoopRPGGameState::SetRoundPlaying(bool bPlaying)
 
 void ACoopRPGGameState::MulticastGameplayFeedback_Implementation(const FCoopRPGGameplayFeedback& Feedback)
 {
-    if (GetNetMode() != NM_DedicatedServer)
+    PresentGameplayFeedback(Feedback);
+}
+
+
+void ACoopRPGGameState::PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVector& Location,
+    float Yaw, int32 Slot, uint32 Swing, float ScaleMultiplier)
+{
+    if (Effect == ECoopRPGMeleeEffect::None || GetNetMode() == NM_DedicatedServer)
     {
-        const APlayerController* Controller = GetWorld()->GetFirstPlayerController();
-        if (auto* HUD = Controller ? Cast<ACoopRPGLootHUD>(Controller->GetHUD()) : nullptr)
+        return;
+    }
+
+    FMeleeEffectAssets& Assets = GetMeleeEffectAssets(Effect);
+    const FRotator Rotation(0.0, Yaw, 0.0);
+    const bool bArmorHit = Effect == ECoopRPGMeleeEffect::ArmorHit;
+    FVector VisualLocation = Location;
+    if (bArmorHit)
+    {
+        // Keep the spark just outside the body at the sweep contact.
+        VisualLocation -= Rotation.Vector() * 20.0;
+        VisualLocation.Z += 30.0;
+    }
+
+    UNiagaraComponent* Visual = nullptr;
+    if (auto* System = LoadLocalEffectAsset(Assets.System))
+    {
+        Visual = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, System, VisualLocation, Rotation,
+            FVector::OneVector, true, false);
+    }
+    if (Visual)
+    {
+        Visual->SetVariableFloat(TEXT("User.Scale"), Assets.Scale * ScaleMultiplier);
+        if (Effect == ECoopRPGMeleeEffect::MushroomHit)
         {
-            HUD->ShowGameplayFeedback(Feedback);
+            Visual->SetVariableLinearColor(TEXT("User.PrimaryColor"), FLinearColor(1.65f, 0.86f, 0.30f));
+            Visual->SetVariableInt(TEXT("User.DropCount"), 9);
+            Visual->SetVariableInt(TEXT("User.SplatCount"), 1);
+        }
+        else if (bArmorHit)
+        {
+            Visual->SetVariableFloat(TEXT("User.Intensity"), 1.5f);
+        }
+        else
+        {
+            Visual->SetVariableFloat(TEXT("User.Intensity"), 0.65f);
         }
     }
+
+    UNiagaraComponent* ImpactFlash = nullptr;
+    if (bArmorHit || Effect == ECoopRPGMeleeEffect::MushroomHit)
+    {
+        // Give each damaging hit a short flash distinct from the sword trail and shield ring.
+        auto& FlashAssets = GetMeleeEffectAssets(ECoopRPGMeleeEffect::ArmorHit);
+        if (auto* System = LoadLocalEffectAsset(FlashAssets.System))
+        {
+            const FVector FlashLocation = bArmorHit ? VisualLocation + FVector(0.0, 0.0, 28.0)
+                : Location - Rotation.Vector() * 10.0 + FVector(0.0, 0.0, 34.0);
+            ImpactFlash = UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, System, FlashLocation, Rotation,
+                FVector::OneVector, true, false);
+            if (ImpactFlash)
+            {
+                for (const FNiagaraEmitterHandle& Emitter : System->GetEmitterHandles())
+                {
+                    const FName EmitterName = Emitter.GetName();
+                    ImpactFlash->SetEmitterEnable(EmitterName, EmitterName == TEXT("Flash") || EmitterName == TEXT("Glow"));
+                }
+                ImpactFlash->SetVariableFloat(TEXT("User.Scale"), bArmorHit ? 1.65f : 1.38f);
+                ImpactFlash->SetVariableFloat(TEXT("User.Intensity"), bArmorHit ? 2.25f : 2.15f);
+                ImpactFlash->SetVariableLinearColor(TEXT("User.PrimaryColor"),
+                    bArmorHit ? FLinearColor(1.85f, 1.36f, 0.60f) : FLinearColor(1.85f, 0.30f, 0.045f));
+                ImpactFlash->SetCustomTimeDilation(0.68f);
+                ImpactFlash->Activate(true);
+            }
+        }
+    }
+
+    if (Visual)
+    {
+        if (bArmorHit && ImpactFlash)
+        {
+            Visual->SetEmitterEnable(TEXT("Flash"), false);
+            Visual->SetEmitterEnable(TEXT("Glow"), false);
+        }
+        Visual->Activate(true);
+    }
+
+    auto* Sound = LoadLocalEffectAsset(Assets.Sound);
+    bool bFallbackSoundPlayed = false;
+    if (Sound)
+    {
+        if (!MeleeSoundAttenuation)
+        {
+            MeleeSoundAttenuation = NewObject<USoundAttenuation>(this);
+            MeleeSoundAttenuation->Attenuation.bSpatialize = true;
+            MeleeSoundAttenuation->Attenuation.AttenuationShapeExtents = FVector(900.0, 0.0, 0.0);
+            MeleeSoundAttenuation->Attenuation.FalloffDistance = 1500.0f;
+        }
+        UGameplayStatics::PlaySoundAtLocation(this, Sound, Location, Rotation, Assets.Volume, 1.0f, 0.0f,
+            MeleeSoundAttenuation);
+    }
+    else if (Effect == ECoopRPGMeleeEffect::ShieldBlock)
+    {
+        bFallbackSoundPlayed = PlayFallbackShieldImpact(*GetWorld(), Location);
+    }
+
+    UE_LOG(LogCoopRPGMeleeEffects, Log,
+        TEXT("MeleeEffect Kind=%s Slot=%d Swing=%u VFX=%d SFX=%d Location=%s VisualLocation=%s Flash=%d FallbackSFX=%d"),
+        *UEnum::GetValueAsString(Effect), Slot, Swing, Visual != nullptr, Sound != nullptr,
+        *Location.ToCompactString(), *VisualLocation.ToCompactString(), ImpactFlash != nullptr, bFallbackSoundPlayed);
 }
 
 void ACoopRPGGameState::MulticastMeleeSweepTrace_Implementation(const FCoopRPGMeleeSweepTrace& Trace)
@@ -359,6 +585,51 @@ FString ACoopRPGGameState::GetRoundTravelDestination() const
         return {};
     default:
         return {};
+    }
+}
+
+void ACoopRPGGameState::PresentGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback)
+{
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        const APlayerController* Controller = GetWorld()->GetFirstPlayerController();
+        if (auto* HUD = Controller ? Cast<ACoopRPGLootHUD>(Controller->GetHUD()) : nullptr)
+        {
+            HUD->ShowGameplayFeedback(Feedback);
+        }
+        PlayMeleeEffect(Feedback.MeleeEffect, Feedback.MeleeEffectLocation, Feedback.MeleeEffectYaw,
+            Feedback.AttackerSlot, Feedback.MeleeSwing);
+        if (Feedback.Kind == ECoopRPGFeedbackKind::Damage
+            && (Feedback.MeleeEffect == ECoopRPGMeleeEffect::MushroomHit
+                || Feedback.MeleeEffect == ECoopRPGMeleeEffect::ArmorHit))
+        {
+            if (Feedback.bPreserveEnemyAttackPose)
+            {
+                UE_LOG(LogCoopRPGMeleeEffects, Log,
+                    TEXT("EnemyMeleeReactionSuppressed Slot=%d Swing=%u Target=%s"),
+                    Feedback.AttackerSlot, Feedback.MeleeSwing, *GetNameSafe(Feedback.Subject.Get()));
+            }
+            auto* Hero = Controller ? Cast<ACoopRPGCharacter>(Controller->GetPawn()) : nullptr;
+            if (Feedback.bTriggerLocalMeleeImpact && Hero && Controller->IsLocalController()
+                && Hero->GetDisplaySlot() == Feedback.AttackerSlot)
+            {
+                auto* Enemy = Cast<ACoopRPGEnemy>(Feedback.Subject.Get());
+                const EBossImpactTrial Mode = Enemy && Enemy->IsBlackKnight() ? GetBossImpactTrial() : EBossImpactTrial::Default;
+                if (Mode == EBossImpactTrial::Default || Mode == EBossImpactTrial::Shake)
+                {
+                    auto* Camera = Controller->PlayerCameraManager.Get();
+                    if (Camera && Camera->StartCameraShake(UCoopRPGImpactCameraShake::StaticClass()))
+                    {
+                        UE_LOG(LogCoopRPGMeleeEffects, Log, TEXT("MeleeCameraShakeStarted Slot=%d Swing=%u"),
+                            Feedback.AttackerSlot, Feedback.MeleeSwing);
+                    }
+                }
+                if (Mode == EBossImpactTrial::Default || Mode == EBossImpactTrial::HitStop)
+                {
+                    Hero->RequestMeleeHitStop(Feedback.MeleeSwing);
+                }
+            }
+        }
     }
 }
 

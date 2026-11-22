@@ -60,6 +60,7 @@ public:
     float GetMeleeWindup() const;
     uint32 StartMeleePresentation(float FacingYaw, float Windup);
     void FinishMeleeWindup(bool bInterrupted);
+    void RequestMeleeHitStop(uint32 Swing);
 
 protected:
     virtual void BeginPlay() override;
@@ -87,6 +88,8 @@ private:
     UFUNCTION()
     void OnRep_MeleePresentation();
 
+    void PlayMeleeSwingEffects();
+    void ApplyMeleeHitStop(uint32 Swing);
     void ReleaseMeleeFacing();
     void ConfigureHeroWeapon(ECoopRPGHero Hero);
     void RefreshWeaponVisibility();
@@ -128,6 +131,7 @@ private:
     TObjectPtr<UMaterialInterface> HeroHitDarkenMaterial = nullptr;
     FTimerHandle HitFlashTimer;
     FTimerHandle MeleeFacingTimer;
+    FTimerHandle MeleeSwingEffectsTimer;
 
     UPROPERTY(Transient)
     TObjectPtr<UBlendSpace> HeroLocomotion;
@@ -140,6 +144,9 @@ private:
 
     TWeakObjectPtr<UAnimMontage> LocalMeleeMontage;
     uint32 PresentedMeleeSequence = 0;
+    uint32 LastHitStoppedMeleeSequence = 0;
+    uint32 PendingHitStopSwing = 0;
+    double PendingHitStopDeadline = 0.0;
     bool bMeleeFacingLocked = false;
 
     UPROPERTY(ReplicatedUsing = OnRep_MeleeWeapon)

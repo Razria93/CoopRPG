@@ -16,6 +16,16 @@ enum class ECoopRPGFeedbackKind : uint8
     ShieldBlocked
 };
 
+UENUM()
+enum class ECoopRPGMeleeEffect : uint8
+{
+    None,
+    SwordSwing,
+    MushroomHit,
+    ArmorHit,
+    ShieldBlock
+};
+
 USTRUCT()
 struct FCoopRPGGameplayFeedback
 {
@@ -45,6 +55,24 @@ public:
     // Zero identifies an enemy attacker. Player slots start at one.
     UPROPERTY()
     int32 AttackerSlot = INDEX_NONE;
+
+    UPROPERTY()
+    ECoopRPGMeleeEffect MeleeEffect = ECoopRPGMeleeEffect::None;
+
+    UPROPERTY()
+    FVector MeleeEffectLocation = FVector::ZeroVector;
+
+    UPROPERTY()
+    float MeleeEffectYaw = 0.0f;
+
+    UPROPERTY()
+    uint32 MeleeSwing = 0;
+
+    UPROPERTY()
+    bool bPreserveEnemyAttackPose = false;
+
+    UPROPERTY()
+    bool bTriggerLocalMeleeImpact = true;
 };
 
 namespace CoopRPG::Presentation
