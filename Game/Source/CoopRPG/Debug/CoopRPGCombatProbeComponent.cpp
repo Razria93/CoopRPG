@@ -116,6 +116,16 @@ namespace
             }
         }));
 
+    FAutoConsoleCommandWithWorldAndArgs ShopRequestCommand(TEXT("Coop.Test.ShopRequest"),
+        TEXT("Coop.Test.ShopRequest repeat-buy|supplied-hp|reward-ack: send existing RPCs for shop validation."),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World); Probe && Args.Num() == 1)
+            {
+                Probe->RequestShopValidation(FName(*Args[0]));
+            }
+        }));
+
     FAutoConsoleCommandWithWorldAndArgs VitalsCommand(TEXT("Coop.Test.Vitals"),
         TEXT("Coop.Test.Vitals <target health> <own health>: set test HP on the server."),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
@@ -267,6 +277,31 @@ void UCoopRPGCombatProbeComponent::RequestSlashValidation(FName Action)
         {
             Source->CallServerTryActivateAbility(Spec->Handle, true, FPredictionKey());
         }
+    }
+}
+
+void UCoopRPGCombatProbeComponent::RequestShopValidation(FName Scenario)
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const auto* Hero = Cast<ACoopRPGCharacter>(GetOwner());
+    auto* Player = Hero ? Hero->GetController<ACoopRPGPlayerController>() : nullptr;
+    if (!IsProbeEnabled(GetWorld()) || !Player || Player->HasAuthority() || !State)
+    {
+        return;
+    }
+    if (Scenario == TEXT("repeat-buy") && Player->NextShopRequest > 0)
+    {
+        Player->ServerShopTrade(State->GetRoundId(), Player->NextShopRequest, ECoopRPGStorageItem::HealthPotion, true);
+    }
+    else if (Scenario == TEXT("supplied-hp"))
+    {
+        Player->ServerShopTrade(State->GetRoundId(), ++Player->NextShopRequest, ECoopRPGStorageItem::HealthPotion, false);
+    }
+    else if (Scenario == TEXT("reward-ack"))
+    {
+        Player->ServerAcknowledgeRoundResult(State->GetRoundId());
+        Player->ServerAcknowledgeRoundResult(State->GetRoundId());
+        UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("ShopRewardAckProbe Round=%s"), *State->GetRoundId().ToString());
     }
 }
 
@@ -745,7 +780,8 @@ void UCoopRPGCombatProbeComponent::PrepareSlashLayout(
     const bool bFour = Layout == TEXT("slashFour");
     const bool bMix = Layout == TEXT("slashMix");
     const bool bSetStamina = Layout == TEXT("slashSP24") || Layout == TEXT("slashSP25");
-    if (!bFour && !bMix && !bSetStamina && Layout != TEXT("slashFreeze"))
+    const bool bSnapshot = Layout == TEXT("slashSnapshot");
+    if (!bFour && !bMix && !bSetStamina && !bSnapshot && Layout != TEXT("slashFreeze"))
     {
         return;
     }
@@ -754,6 +790,18 @@ void UCoopRPGCombatProbeComponent::PrepareSlashLayout(
         const float Stamina = Layout == TEXT("slashSP24") ? 24.0f : 25.0f;
         Character.GetAbilitySystemComponent()->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetStaminaAttribute(), Stamina);
         Character.ForceNetUpdate();
+    }
+    else if (bSnapshot)
+    {
+        int32 Rank = 0;
+        for (const ACoopRPGEnemy* Enemy : Mode.GetSkirmishEnemies())
+        {
+            if (IsValid(Enemy))
+            {
+                UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("SlashTestEnemy Layout=%s Player=%d Rank=%d Target=%s HP=%.2f"),
+                    *Layout.ToString(), Character.GetDisplaySlot(), ++Rank, *Enemy->GetName(), Enemy->GetHealth());
+            }
+        }
     }
     else
     {

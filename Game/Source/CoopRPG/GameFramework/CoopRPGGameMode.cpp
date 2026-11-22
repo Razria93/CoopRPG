@@ -417,6 +417,16 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
     {
         const bool bBossDefeated = bExpeditionBoss && IsValid(Enemy.Get()) && Enemy->IsDead();
         State->EvaluateRound(bParticipantDisconnected, bDeath, PlayersInside, bBossDefeated);
+        if (State->GetRoundEndReason() == ECoopRPGRoundEndReason::BossDefeated)
+        {
+            for (const auto& Participant : RoundPlayers)
+            {
+                if (auto* Player = Participant.Get())
+                {
+                    Player->AwardBossGold(State->GetRoundId());
+                }
+            }
+        }
     }
 }
 
@@ -553,9 +563,14 @@ void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
                 {
                     PublishReadySlots(*State);
                     auto* Controller = CastChecked<ACoopRPGPlayerController>(NewPlayer);
+                    if (CoopRPG::Expedition::IsExpedition(GetWorld()))
+                    {
+                        Controller->LoadSessionGold(State->GetRoundId());
+                    }
                     if (bExpeditionLobby)
                     {
                         Character->SetMeleeWeaponEquipped(Controller->GetTravelSword(true).bEquipped);
+                        Controller->LoadPersonalStorage();
                     }
                     else if (CoopRPG::Expedition::IsExpedition(GetWorld()))
                     {

@@ -198,6 +198,7 @@ void ACoopRPGGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGGameState, ReadySlots);
     DOREPLIFETIME(ACoopRPGGameState, LobbyDepartureDeadline);
     DOREPLIFETIME(ACoopRPGGameState, PuzzleRewardDeadline);
+    DOREPLIFETIME(ACoopRPGGameState, SharedStorage);
     DOREPLIFETIME(ACoopRPGGameState, PuzzleStatus);
     DOREPLIFETIME(ACoopRPGGameState, ExtractionZone);
     DOREPLIFETIME(ACoopRPGGameState, EnemyPotion);
@@ -211,7 +212,20 @@ void ACoopRPGGameState::InitializeLobby()
     if (HasAuthority() && !RoundId.IsValid())
     {
         RoundId = FGuid::NewGuid();
+        if (const auto* Storage = GetWorld()->GetGameInstance()->GetSubsystem<UCoopRPGLobbyStorage>())
+        {
+            SharedStorage = Storage->GetShared();
+        }
         UE_LOG(LogCoopRPGRound, Log, TEXT("ExpeditionLobbyCreated Round=%s"), *RoundId.ToString());
+        ForceNetUpdate();
+    }
+}
+
+void ACoopRPGGameState::UpdateSharedStorage(const FCoopRPGStorageStock& Stock)
+{
+    if (HasAuthority())
+    {
+        SharedStorage = Stock;
         ForceNetUpdate();
     }
 }

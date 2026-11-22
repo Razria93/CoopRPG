@@ -42,6 +42,10 @@ private:
     void DrawRegion(AHUD& HUD, const FBox2D& Bounds, int32 Row, float SourceX, float SourceWidth) const;
 
     void DrawStats(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller);
+    void DrawStorage(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller);
+    void DrawShop(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller);
+    int32 FindShopControl(const FVector2D& Pointer) const;
+    int32 FindStorageControl(const FVector2D& Pointer) const;
     void DrawAtlas(AHUD& HUD, const FBox2D& Bounds, const FBox2D& Source) const;
     void DrawInventory(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller);
     FBox2D GetInventoryGridBounds() const;
@@ -77,6 +81,14 @@ private:
     float ButtonHeight = 0.0f;
     float ContentInset = 14.0f;
     int32 ActiveTab = INDEX_NONE;
+    bool bStorageTabAvailable = false;
+    bool bPersonalStorage = false;
+    int32 SelectedStorageItem = 0;
+    int32 PressedStorageControl = INDEX_NONE;
+    FString LastStorageDisplay;
+    int32 SelectedShopItem = 0;
+    int32 PressedShopControl = INDEX_NONE;
+    FString LastShopDisplay;
     int32 PressedTab = INDEX_NONE;
     int32 FirstInventoryRow = 0;
     int32 SelectedInventorySlot = INDEX_NONE;

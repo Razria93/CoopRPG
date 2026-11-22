@@ -7,6 +7,7 @@
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGRecoveryEffect.h"
 #include "CoopRPGGameState.h"
+#include "CoopRPGSessionEconomy.h"
 #include "CoopRPGPlayerState.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
@@ -23,6 +24,16 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEquipmentHUD, Log, All);
 namespace
 {
     constexpr int32 TabCount = 4;
+    constexpr int32 StorageTab = TabCount;
+    constexpr int32 ShopTab = StorageTab + 1;
+    constexpr int32 ShopBuy = UE_ARRAY_COUNT(CoopRPG::Shop::Offers);
+    constexpr int32 ShopSell = ShopBuy + 1;
+    constexpr int32 StorageAreaShared = FCoopRPGStorageStock::ItemCount;
+    constexpr int32 StorageAreaPersonal = StorageAreaShared + 1;
+    constexpr int32 StorageDeposit = StorageAreaPersonal + 1;
+    constexpr int32 StorageWithdraw = StorageDeposit + 1;
+    constexpr double StorageRowHeight = 20.0;
+    constexpr double StorageRowTop = 69.0;
     constexpr int32 SkillsTab = 1;
     constexpr int32 EquipmentTab = 2;
     constexpr int32 SkillRows = 4;
@@ -54,9 +65,48 @@ namespace
     constexpr float AtlasWidth = 364.0f;
     constexpr float AtlasRowHeight = 214.0f;
     constexpr float AtlasHeight = AtlasRowHeight * 8.0f;
-    constexpr float TabUnits[] = { 1.0f, 1.0f, 1.0f, 1.38f };
-    constexpr const TCHAR* TabLabels[] = { TEXT("스탯"), TEXT("스킬"), TEXT("장비"), TEXT("인벤토리") };
-    constexpr const TCHAR* TabNames[] = { TEXT("Stats"), TEXT("Skills"), TEXT("Equipment"), TEXT("Inventory") };
+    constexpr const TCHAR* TabLabels[] = { TEXT("스탯"), TEXT("스킬"), TEXT("장비"), TEXT("인벤토리"), TEXT("창고"), TEXT("상점") };
+    constexpr const TCHAR* TabNames[] = { TEXT("Stats"), TEXT("Skills"), TEXT("Equipment"), TEXT("Inventory"), TEXT("Storage"), TEXT("Shop") };
+    constexpr const TCHAR* ShopLabels[] = { TEXT("HP 물약"), TEXT("슬래시 캡슐") };
+    static_assert(UE_ARRAY_COUNT(ShopLabels) == ShopBuy);
+
+    FBox2D ShopControlBounds(const FBox2D& Panel, float Inset, int32 Control)
+    {
+        const double Left = Panel.Min.X + Inset;
+        const double Right = Panel.Max.X - Inset;
+        const double Top = Panel.Min.Y;
+        const double Half = (Left + Right) * 0.5;
+        if (Control < ShopBuy)
+        {
+            const double Y = Top + 88.0 + Control * 45.0;
+            return FBox2D(FVector2D(Left, Y), FVector2D(Right, Y + 37.0));
+        }
+        return FBox2D(FVector2D(Control == ShopBuy ? Left : Half + 4.0, Top + 199.0),
+            FVector2D(Control == ShopBuy ? Half - 4.0 : Right, Top + 228.0));
+    }
+    constexpr const TCHAR* StorageLabels[] = { TEXT("HP 물약"), TEXT("SP 물약"), TEXT("한손검 · 미귀속"), TEXT("한손검 · 귀속"),
+        TEXT("무력 스크롤"), TEXT("수호 스크롤"), TEXT("슬래시 캡슐") };
+    static_assert(UE_ARRAY_COUNT(StorageLabels) == FCoopRPGStorageStock::ItemCount);
+
+    FBox2D StorageControlBounds(const FBox2D& Panel, float Inset, int32 Control)
+    {
+        const double Left = Panel.Min.X + Inset;
+        const double Right = Panel.Max.X - Inset;
+        const double Top = Panel.Min.Y;
+        const double Half = (Left + Right) * 0.5;
+        if (Control < FCoopRPGStorageStock::ItemCount)
+        {
+            const double Y = Top + StorageRowTop + Control * StorageRowHeight;
+            return FBox2D(FVector2D(Left, Y), FVector2D(Right, Y + StorageRowHeight - 2.0));
+        }
+        if (Control == StorageAreaShared || Control == StorageAreaPersonal)
+        {
+            return FBox2D(FVector2D(Control == StorageAreaShared ? Left : Half + 3.0, Top + 15.0),
+                FVector2D(Control == StorageAreaShared ? Half - 3.0 : Right, Top + 41.0));
+        }
+        return FBox2D(FVector2D(Control == StorageDeposit ? Left : Half + 3.0, Top + 215.0),
+            FVector2D(Control == StorageDeposit ? Half - 3.0 : Right, Top + 239.0));
+    }
 
     FLinearColor Color(uint8 R, uint8 G, uint8 B)
     {
@@ -123,11 +173,16 @@ void FCoopRPGEquipmentPanel::Draw(AHUD& HUD, UCanvas& Surface, ACoopRPGPlayerCon
         return;
     }
     Anchor = FVector2D(ViewSize.X - Padding - Width, Padding);
+    bStorageTabAvailable = CoopRPG::Expedition::IsLobby(Controller.GetWorld());
+    if (!bStorageTabAvailable && ActiveTab >= StorageTab)
+    {
+        ActiveTab = INDEX_NONE;
+    }
 
     using namespace CoopRPG::ExpeditionUI;
     const auto TabFont = Font(bWide ? 11.0f : 10.0f, true);
     const FLinearColor TabInk(FColor(255, 240, 202));
-    for (int32 Index = 0; Index < TabCount; ++Index)
+    for (int32 Index = 0; Index < (bStorageTabAvailable ? UE_ARRAY_COUNT(TabLabels) : TabCount); ++Index)
     {
         const FBox2D Bounds = GetTabBounds(Index);
         DrawRegion(HUD, Bounds, Index == ActiveTab ? 1 : 0, 0.0f, 91.0f);
@@ -145,6 +200,16 @@ void FCoopRPGEquipmentPanel::Draw(AHUD& HUD, UCanvas& Surface, ACoopRPGPlayerCon
         DragScrollTrack(Pointer.Y);
     }
     DrawPanelFrame(HUD, GetPanelBounds());
+    if (ActiveTab == ShopTab)
+    {
+        DrawShop(HUD, Surface, Controller);
+        return;
+    }
+    if (ActiveTab == StorageTab)
+    {
+        DrawStorage(HUD, Surface, Controller);
+        return;
+    }
     if (ActiveTab == InventoryTab)
     {
         DrawInventory(HUD, Surface, Controller);
@@ -182,12 +247,6 @@ void FCoopRPGEquipmentPanel::DrawPanelFrame(AHUD& HUD, const FBox2D& Bounds) con
         return;
     }
 
-    if (!Skin.IsValid())
-    {
-        DrawPanelBox(HUD, Bounds, FLinearColor(FColor(245, 230, 190)), FLinearColor(FColor(104, 72, 41)));
-        return;
-    }
-
     const double TextureY = BlankFrameRow * AtlasRowHeight;
     const double SourceX[] = {0.0, 11.0, AtlasWidth - 11.0, AtlasWidth};
     const double SourceY[] = {TextureY, TextureY + 10.0, TextureY + AtlasRowHeight - 12.0, TextureY + AtlasRowHeight};
@@ -211,6 +270,11 @@ void FCoopRPGEquipmentPanel::Hide()
     ResetSkillsView();
     FirstEquipmentRow = 0;
     LastDisplayedWeaponState.Reset();
+    LastStorageDisplay.Reset();
+    LastShopDisplay.Reset();
+    SelectedShopItem = 0;
+    bPersonalStorage = false;
+    SelectedStorageItem = 0;
 }
 
 bool FCoopRPGEquipmentPanel::HandlePrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
@@ -233,6 +297,41 @@ bool FCoopRPGEquipmentPanel::HandlePrimaryButton(ACoopRPGPlayerController& Contr
                 UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("EquipmentPanelTab Tab=%s Open=%d %s"),
                     TabNames[Tab], ActiveTab == Tab ? 1 : 0,
                     *CoopRPG::Debug::DescribeLogContext(Controller.GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+            }
+            else if (bHasPointer && ActiveTab == ShopTab && PressedShopControl != INDEX_NONE
+                && PressedShopControl == FindShopControl(Pointer))
+            {
+                if (PressedShopControl < ShopBuy)
+                {
+                    SelectedShopItem = PressedShopControl;
+                }
+                else
+                {
+                    Controller.RequestShopTrade(CoopRPG::Shop::Offers[SelectedShopItem], PressedShopControl == ShopBuy);
+                }
+            }
+            else if (bHasPointer && ActiveTab == StorageTab && PressedStorageControl != INDEX_NONE
+                && PressedStorageControl == FindStorageControl(Pointer))
+            {
+                if (PressedStorageControl < FCoopRPGStorageStock::ItemCount)
+                {
+                    SelectedStorageItem = PressedStorageControl;
+                    Controller.ClearStorageFeedback();
+                }
+                else if (PressedStorageControl == StorageAreaShared || PressedStorageControl == StorageAreaPersonal)
+                {
+                    bPersonalStorage = PressedStorageControl == StorageAreaPersonal;
+                    Controller.ClearStorageFeedback();
+                }
+                else
+                {
+                    const auto* State = Controller.GetWorld()->GetGameState<ACoopRPGGameState>();
+                    if (State && !State->IsLobbyDepartureScheduled())
+                    {
+                        Controller.RequestStorageTransfer(static_cast<ECoopRPGStorageItem>(SelectedStorageItem),
+                            bPersonalStorage, PressedStorageControl == StorageDeposit);
+                    }
+                }
             }
             else if (bHasPointer && ActiveTab == EquipmentTab && PressedSupplySwordAction.IsSet()
                 && IsEquipmentActionAt(Pointer, 0))
@@ -296,6 +395,14 @@ bool FCoopRPGEquipmentPanel::HandlePrimaryButton(ACoopRPGPlayerController& Contr
     PressedTab = Input.Event == IE_DoubleClick ? INDEX_NONE : Tab;
     if (Input.Event == IE_Pressed && Tab == INDEX_NONE)
     {
+        if (ActiveTab == StorageTab)
+        {
+            PressedStorageControl = FindStorageControl(Pointer);
+        }
+        if (ActiveTab == ShopTab)
+        {
+            PressedShopControl = FindShopControl(Pointer);
+        }
         if (ActiveTab == InventoryTab)
         {
             PressedInventorySlot = FindInventorySlot(Pointer);
@@ -382,6 +489,8 @@ void FCoopRPGEquipmentPanel::ReleasePointer()
 {
     bOwnsPrimaryButton = false;
     PressedTab = INDEX_NONE;
+    PressedStorageControl = INDEX_NONE;
+    PressedShopControl = INDEX_NONE;
     PressedInventorySlot = INDEX_NONE;
     PressedActionItem = EInventoryItem::None;
     PressedInventoryAction.Reset();
@@ -412,9 +521,12 @@ void FCoopRPGEquipmentPanel::UpdateInventorySelection(const FInventoryItems& Ite
 
 FBox2D FCoopRPGEquipmentPanel::GetTabBounds(int32 Index) const
 {
-    const float Unit = (Width - 3.0f * EquipmentTabGap) / 4.38f;
-    const FVector2D Start = Anchor + FVector2D(Index * (Unit + EquipmentTabGap), 0.0f);
-    return FBox2D(Start, Start + FVector2D(Unit * TabUnits[Index], ButtonHeight));
+    const float InventoryUnits = bStorageTabAvailable ? 1.60f : 1.38f;
+    const int32 VisibleTabs = bStorageTabAvailable ? UE_ARRAY_COUNT(TabLabels) : TabCount;
+    const float Unit = (Width - (VisibleTabs - 1) * EquipmentTabGap) / (VisibleTabs - 1 + InventoryUnits);
+    const float Offset = Index * (Unit + EquipmentTabGap) + (Index > InventoryTab ? (InventoryUnits - 1.0f) * Unit : 0.0f);
+    const FVector2D Start = Anchor + FVector2D(Offset, 0.0f);
+    return FBox2D(Start, Start + FVector2D(Unit * (Index == InventoryTab ? InventoryUnits : 1.0f), ButtonHeight));
 }
 
 FBox2D FCoopRPGEquipmentPanel::GetPanelBounds() const
@@ -425,7 +537,7 @@ FBox2D FCoopRPGEquipmentPanel::GetPanelBounds() const
 
 int32 FCoopRPGEquipmentPanel::FindTab(const FVector2D& Pointer) const
 {
-    for (int32 Index = 0; Index < TabCount; ++Index)
+    for (int32 Index = 0; Index < (bStorageTabAvailable ? UE_ARRAY_COUNT(TabLabels) : TabCount); ++Index)
     {
         if (GetTabBounds(Index).IsInsideOrOn(Pointer))
         {
@@ -498,6 +610,181 @@ void FCoopRPGEquipmentPanel::DrawStats(AHUD& HUD, UCanvas& Surface, const ACoopR
         UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("StatsPanelState %s %s"), *LastStatsDisplay,
             *CoopRPG::Debug::DescribeLogContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
     }
+}
+
+void FCoopRPGEquipmentPanel::DrawStorage(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller)
+{
+    using namespace CoopRPG::ExpeditionUI;
+    const auto* State = Controller.GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State)
+    {
+        return;
+    }
+    const auto& Stock = bPersonalStorage ? Controller.GetPersonalStorage() : State->GetSharedStorage();
+    const FBox2D Panel = GetPanelBounds();
+    const double Left = Panel.Min.X + ContentInset;
+    const double Right = Panel.Max.X - ContentInset;
+    const double BagX = Right - 71.0;
+    const double StockX = Right - 24.0;
+    const FLinearColor Ink = Color(60, 41, 25);
+    const FLinearColor Outline = Color(204, 178, 116);
+    const FLinearColor Green = Color(65, 87, 52);
+    const FLinearColor Cream = Color(255, 240, 204);
+    const auto Body = Font(11.0f);
+    const auto Bold = Font(11.0f, true);
+    const auto Caption = Font(9.0f);
+    const auto Bounds = [&](int32 Control) { return StorageControlBounds(Panel, ContentInset, Control); };
+    const auto Center = [&](FStringView Label, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Tint)
+    {
+        DrawPanelLabel(Surface, Label, X - Measure(Surface, Label, Face).X * 0.5, Y, Face, Tint);
+    };
+    const auto Button = [&](int32 Control, const TCHAR* Label, bool bSelected, bool bEnabled)
+    {
+        const FBox2D Box = Bounds(Control);
+        DrawPanelBox(HUD, Box, bSelected ? Green : Color(236, 219, 182), Outline);
+        Center(Label, Box.GetCenter().X, Box.GetCenter().Y, Bold,
+            bSelected ? Cream : bEnabled ? Ink : Color(113, 100, 76));
+    };
+    Button(StorageAreaShared, TEXT("공용 창고"), !bPersonalStorage, true);
+    Button(StorageAreaPersonal, TEXT("개인 창고"), bPersonalStorage, true);
+    DrawPanelLabel(Surface, TEXT("품목"), Left + 7.0, Panel.Min.Y + 56.0, Caption, Ink);
+    Center(TEXT("가방"), BagX, Panel.Min.Y + 56.0, Caption, Ink);
+    Center(TEXT("창고"), StockX, Panel.Min.Y + 56.0, Caption, Ink);
+    for (int32 Index = 0; Index < FCoopRPGStorageStock::ItemCount; ++Index)
+    {
+        const auto Item = static_cast<ECoopRPGStorageItem>(Index);
+        const FBox2D Box = Bounds(Index);
+        DrawPanelBox(HUD, Box, SelectedStorageItem == Index ? Color(255, 237, 178) : Color(241, 225, 190), Outline);
+        DrawPanelLabel(Surface, StorageLabels[Index], Left + 7.0, Box.GetCenter().Y, Body, Ink);
+        Center(FString::FromInt(Controller.GetStorageBagCount(Item)), BagX, Box.GetCenter().Y, Body, Ink);
+        Center(FString::FromInt(Stock.Get(Item)), StockX, Box.GetCenter().Y, Body, Ink);
+    }
+    const bool bOpen = !State->IsLobbyDepartureScheduled();
+    Button(StorageDeposit, TEXT("1개 넣기"), false, bOpen);
+    Button(StorageWithdraw, TEXT("1개 꺼내기"), false, bOpen);
+    const FString Feedback = !bOpen ? FString(TEXT("원정 출발 대기 중")) : Controller.GetStorageFeedback().IsEmpty()
+        ? FString(TEXT("품목을 선택해 한 개씩 옮길 수 있어요.")) : Controller.GetStorageFeedback();
+    Center(Fit(Surface, Feedback, Caption, Right - Left), (Left + Right) * 0.5, Panel.Min.Y + 253.0, Caption, Ink);
+
+    FString Display = FString::Printf(
+        TEXT("Round=%s Area=%s Selected=%d StockHP=%d BagHP=%d StockBound=%d BagBound=%d StockSword=%d BagSword=%d "
+            "X=%.0f Y=%.0f Width=%.0f HPY=%.0f BoundY=%.0f SharedX=%.0f PersonalX=%.0f TabY=%.0f DepositX=%.0f WithdrawX=%.0f ActionY=%.0f"),
+        *State->GetRoundId().ToString(), bPersonalStorage ? TEXT("Personal") : TEXT("Shared"), SelectedStorageItem,
+        Stock.Get(ECoopRPGStorageItem::HealthPotion), Controller.GetStorageBagCount(ECoopRPGStorageItem::HealthPotion),
+        Stock.Get(ECoopRPGStorageItem::BoundSword), Controller.GetStorageBagCount(ECoopRPGStorageItem::BoundSword),
+        Stock.Get(ECoopRPGStorageItem::UnboundSword), Controller.GetStorageBagCount(ECoopRPGStorageItem::UnboundSword),
+        Panel.Min.X, Panel.Min.Y, Panel.GetSize().X, Bounds(0).GetCenter().Y,
+        Bounds(static_cast<int32>(ECoopRPGStorageItem::BoundSword)).GetCenter().Y,
+        Bounds(StorageAreaShared).GetCenter().X, Bounds(StorageAreaPersonal).GetCenter().X, Bounds(StorageAreaShared).GetCenter().Y,
+        Bounds(StorageDeposit).GetCenter().X, Bounds(StorageWithdraw).GetCenter().X, Bounds(StorageWithdraw).GetCenter().Y);
+    if (LastStorageDisplay != Display)
+    {
+        LastStorageDisplay = MoveTemp(Display);
+        UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("StoragePanel %s"), *LastStorageDisplay);
+    }
+}
+
+void FCoopRPGEquipmentPanel::DrawShop(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller)
+{
+    using namespace CoopRPG::ExpeditionUI;
+    const auto* State = Controller.GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!State)
+    {
+        return;
+    }
+    const FBox2D Panel = GetPanelBounds();
+    const double Left = Panel.Min.X + ContentInset;
+    const double Right = Panel.Max.X - ContentInset;
+    const double Top = Panel.Min.Y;
+    const double BuyX = Right - 106.0;
+    const double SellX = Right - 63.0;
+    const double BagX = Right - 24.0;
+    const int32 Gold = Controller.GetSessionGold();
+    const FLinearColor Ink = Color(60, 41, 25);
+    const FLinearColor Outline = Color(204, 178, 116);
+    const FLinearColor Green = Color(65, 87, 52);
+    const FLinearColor Cream = Color(255, 240, 204);
+    const auto Title = Font(14.0f, true);
+    const auto Body = Font(11.0f);
+    const auto Bold = Font(11.0f, true);
+    const auto Caption = Font(9.0f);
+    const auto Bounds = [&](int32 Control) { return ShopControlBounds(Panel, ContentInset, Control); };
+    const auto Center = [&](FStringView Value, double X, double Y, const FSlateFontInfo& Style, const FLinearColor& Tint)
+    {
+        DrawPanelLabel(Surface, Value, X - Measure(Surface, Value, Style).X * 0.5, Y, Style, Tint);
+    };
+    DrawPanelLabel(Surface, TEXT("원정 상점"), Left + 4.0, Top + 30.0, Title, Ink);
+    const FString GoldLabel = FString::Printf(TEXT("골드 %d"), Gold);
+    const double GoldWidth = Measure(Surface, GoldLabel, Bold).X + 36.0;
+    const FBox2D GoldBounds(FVector2D(Right - GoldWidth, Top + 15.0), FVector2D(Right, Top + 45.0));
+    DrawPanelBox(HUD, GoldBounds, Color(243, 224, 174), Outline);
+    DrawItemIcon(HUD, 3, GoldBounds.Min + FVector2D(3.0, 2.0), 26.0, FLinearColor::White);
+    DrawPanelLabel(Surface, GoldLabel, GoldBounds.Min.X + 29.0, Top + 30.0, Bold, Ink);
+
+    HUD.DrawRect(Outline, Left, Top + 56.0, Right - Left, 1.0);
+    DrawPanelLabel(Surface, TEXT("품목"), Left + 8.0, Top + 72.0, Caption, Ink);
+    Center(TEXT("구매가"), BuyX, Top + 72.0, Caption, Ink);
+    Center(TEXT("판매가"), SellX, Top + 72.0, Caption, Ink);
+    Center(TEXT("가방"), BagX, Top + 72.0, Caption, Ink);
+    for (int32 Index = 0; Index < ShopBuy; ++Index)
+    {
+        const auto Item = CoopRPG::Shop::Offers[Index];
+        const FBox2D Row = Bounds(Index);
+        DrawPanelBox(HUD, Row, SelectedShopItem == Index ? Color(255, 238, 176) : Color(241, 225, 190), Outline);
+        DrawPanelLabel(Surface, ShopLabels[Index], Left + 9.0, Row.GetCenter().Y, Body, Ink);
+        Center(FString::FromInt(CoopRPG::Shop::BuyPrice(Item)), BuyX, Row.GetCenter().Y, Body, Ink);
+        Center(FString::FromInt(CoopRPG::Shop::SellPrice(Item)), SellX, Row.GetCenter().Y, Body, Ink);
+        Center(FString::FromInt(Controller.GetStorageBagCount(Item)), BagX, Row.GetCenter().Y, Bold, Ink);
+    }
+    const bool bOpen = !State->IsLobbyDepartureScheduled();
+    const bool bPending = Controller.IsShopTradePending();
+    const auto Button = [&](int32 Control, const TCHAR* Label)
+    {
+        const FBox2D Box = Bounds(Control);
+        const bool bEnabled = bOpen && !bPending;
+        DrawPanelBox(HUD, Box, bEnabled ? Green : Color(218, 204, 164), Outline);
+        Center(Label, Box.GetCenter().X, Box.GetCenter().Y, Bold, bEnabled ? Cream : Ink);
+    };
+    Button(ShopBuy, TEXT("1개 구매"));
+    Button(ShopSell, TEXT("1개 판매"));
+    const FString Message = !bOpen ? FString(TEXT("원정 출발 대기 중")) : bPending ? FString(TEXT("거래 확인 중"))
+        : Controller.GetShopFeedback().IsEmpty() ? FString(TEXT("개인 물품을 한 개씩 거래할 수 있어요.")) : Controller.GetShopFeedback();
+    Center(Fit(Surface, Message, Caption, Right - Left), (Left + Right) * 0.5, Top + 248.0, Caption, Ink);
+
+    FString Display = FString::Printf(TEXT("Round=%s Gold=%d HP=%d Capsule=%d Selected=%d X=%.0f Width=%.0f PotionY=%.0f CapsuleY=%.0f BuyX=%.0f SellX=%.0f ActionY=%.0f Pending=%d"),
+        *State->GetRoundId().ToString(), Gold, Controller.GetStorageBagCount(ECoopRPGStorageItem::HealthPotion),
+        Controller.GetStorageBagCount(ECoopRPGStorageItem::SlashCapsule), SelectedShopItem, Panel.Min.X, Panel.GetSize().X,
+        Bounds(0).GetCenter().Y, Bounds(1).GetCenter().Y, Bounds(ShopBuy).GetCenter().X, Bounds(ShopSell).GetCenter().X,
+        Bounds(ShopBuy).GetCenter().Y, bPending);
+    if (LastShopDisplay != Display)
+    {
+        LastShopDisplay = MoveTemp(Display);
+        UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("ShopPanel %s"), *LastShopDisplay);
+    }
+}
+
+int32 FCoopRPGEquipmentPanel::FindShopControl(const FVector2D& Pointer) const
+{
+    for (int32 Index = 0; Index <= ShopSell; ++Index)
+    {
+        if (ShopControlBounds(GetPanelBounds(), ContentInset, Index).IsInsideOrOn(Pointer))
+        {
+            return Index;
+        }
+    }
+    return INDEX_NONE;
+}
+
+int32 FCoopRPGEquipmentPanel::FindStorageControl(const FVector2D& Pointer) const
+{
+    for (int32 Index = 0; Index <= StorageWithdraw; ++Index)
+    {
+        if (StorageControlBounds(GetPanelBounds(), ContentInset, Index).IsInsideOrOn(Pointer))
+        {
+            return Index;
+        }
+    }
+    return INDEX_NONE;
 }
 
 void FCoopRPGEquipmentPanel::DrawAtlas(AHUD& HUD, const FBox2D& Bounds, const FBox2D& Source) const
@@ -577,10 +864,12 @@ void FCoopRPGEquipmentPanel::DrawInventory(AHUD& HUD, UCanvas& Surface, const AC
     };
 
     Label(TEXT("인벤토리"), Left, Top + 23.0, TitleFont, Ink);
-    Box(FBox2D(FVector2D(Right - 81.0, Top + 13.0), FVector2D(Right, Top + 34.0)), Color(244, 227, 183), Outline);
-    Icon(3, FVector2D(Right - 76.0, Top + 14.0), 27.0, FLinearColor::White);
-    Label(TEXT("골드"), Right - 57.0, Top + 23.0, SmallFont, Muted);
-    RightLabel(TEXT("—"), Right - 7.0, Top + 23.0, BodyFont, Muted);
+    const FString GoldValue = FString::FromInt(Controller.GetSessionGold());
+    const double GoldWidth = FMath::Max(81.0, Measure(Surface, GoldValue, BodyFont).X + 50.0);
+    Box(FBox2D(FVector2D(Right - GoldWidth, Top + 13.0), FVector2D(Right, Top + 34.0)), Color(244, 227, 183), Outline);
+    Icon(3, FVector2D(Right - GoldWidth + 5.0, Top + 14.0), 27.0, FLinearColor::White);
+    Label(TEXT("골드"), Right - GoldWidth + 24.0, Top + 23.0, SmallFont, Muted);
+    RightLabel(GoldValue, Right - 7.0, Top + 23.0, BodyFont, Ink);
     HUD.DrawRect(Color(191, 157, 100), Left, Top + 41.0, Right - Left, 1.0);
     const FIntPoint Supplies = Controller.GetStageRecoverySupplies();
     const FIntPoint Uses = Controller.GetStageRecoveryUsesRemaining();
@@ -716,12 +1005,12 @@ void FCoopRPGEquipmentPanel::DrawInventory(AHUD& HUD, UCanvas& Surface, const AC
     const TCHAR* StoneStatus = bHasStone ? TEXT("획득") : TEXT("미획득");
     Label(StoneStatus, Right - 37.0 - Measure(Surface, StoneStatus, SmallFont).X * 0.5, FooterCenter, SmallFont, bHasStone ? Green : Muted);
 
-    FString Display = FString::Printf(TEXT("Round=%s Potion=%d Stone=%d Sword=%d PotionSlot=%d SwordSlot=%d First=%d Last=%d Slots=%d Selected=%d X=%.0f Y=%.0f Width=%.0f Height=%.0f FooterBottom=%.0f SupplyHP=%d SupplySP=%d SwordBound=%d SwordEquipped=%d PotionSP=%d StaminaSlot=%d RegisteredHP=%d RegisteredSP=%d UsesHP=%d UsesSP=%d MartialPowerScrolls=%d ScrollSlot=%d ProtectionScrolls=%d ProtectionSlot=%d SlashCapsule=%d CapsuleSlot=%d SlashRegistered=%d"),
+    FString Display = FString::Printf(TEXT("Round=%s Potion=%d Stone=%d Sword=%d PotionSlot=%d SwordSlot=%d First=%d Last=%d Slots=%d Selected=%d X=%.0f Y=%.0f Width=%.0f Height=%.0f FooterBottom=%.0f SupplyHP=%d SupplySP=%d SwordBound=%d SwordEquipped=%d PotionSP=%d StaminaSlot=%d RegisteredHP=%d RegisteredSP=%d UsesHP=%d UsesSP=%d MartialPowerScrolls=%d ScrollSlot=%d ProtectionScrolls=%d ProtectionSlot=%d SlashCapsule=%d CapsuleSlot=%d SlashRegistered=%d Gold=%d"),
         *InventoryRound.ToString(), PotionCount, bHasStone, bHasSword, PotionSlot + 1, SwordSlot + 1,
         FirstInventoryRow * InventoryColumns + 1,
         FirstInventoryRow * InventoryColumns + VisibleInventorySlots, InventorySlotCount, SelectedInventorySlot + 1,
         Panel.Min.X, Panel.Min.Y, Panel.GetSize().X, Panel.GetSize().Y, Top + InventoryFooterY + InventoryFooterHeight, Supplies.X, Supplies.Y, bSwordBound, bSwordEquipped,
-        StaminaCount, StaminaSlot + 1, bHealthRegistered, bStaminaRegistered, Uses.X, Uses.Y, ScrollCount, ScrollSlot + 1, ProtectionCount, ProtectionSlot + 1, Controller.HasSlashCapsule(), CapsuleSlot + 1, Controller.HasSlashRegistered());
+        StaminaCount, StaminaSlot + 1, bHealthRegistered, bStaminaRegistered, Uses.X, Uses.Y, ScrollCount, ScrollSlot + 1, ProtectionCount, ProtectionSlot + 1, Controller.HasSlashCapsule(), CapsuleSlot + 1, Controller.HasSlashRegistered(), Controller.GetSessionGold());
     if (LastInventoryDisplay != Display)
     {
         UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("ExpeditionInventory %s"), *Display);
@@ -955,7 +1244,7 @@ void FCoopRPGEquipmentPanel::DrawSkills(AHUD& HUD, UCanvas& Surface, const ACoop
         Dashboard.DrawBasicAttackGlyph(HUD, Surface, IconBounds, SlotStatus, bSlashRow);
 
         const FString Name = Fit(Surface, bSlashRow ? TEXT("한손검 슬래시") : TEXT("기본 공격"), RowFont, TextWidth);
-        const FString Hint = Fit(Surface, bSlashRow ? TEXT("정면 최대 3명 · SP 25") : TEXT("무기를 휘둘러 공격"), HintFont, TextWidth);
+        const FString Hint = Fit(Surface, bSlashRow ? TEXT("최대 3명 · SP 25") : TEXT("무기를 휘둘러 공격"), HintFont, TextWidth);
         constexpr double LineGap = 4.0;
         const double NameHeight = Measure(Surface, Name, RowFont).Y;
         const double HintHeight = Measure(Surface, Hint, HintFont).Y;
