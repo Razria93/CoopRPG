@@ -31,7 +31,7 @@ namespace
     using namespace CoopRPG::ExpeditionUI;
 
     constexpr int32 MaxRecords = 5;
-    const FLinearColor Ink(FColor(61, 41, 25));
+    const FLinearColor DashboardTextColor(FColor(61, 41, 25));
     const FLinearColor NoticeInk(FColor(255, 241, 210));
     const FLinearColor WaitingInk(FColor(153, 41, 39));
     const FLinearColor ReadyInk(FColor(34, 99, 54));
@@ -221,8 +221,8 @@ void FCoopRPGExpeditionDashboard::Draw(AHUD& HUD, UCanvas& Canvas, const ACoopRP
 
     const float IconY = HeaderTop + (TitleBottom - HeaderTop - Icon) * 0.5f;
     DrawImage(HUD, FBox2D(FVector2D(284, 200), FVector2D(316, 232)), FVector2D(Left, IconY), FVector2D(Icon, Icon));
-    Text(Canvas, TEXT("숲 원정"), FVector2D(TitleX, HeaderTop + (HeaderRowHeight - SmallHeight) * 0.5f), SmallFont, Ink);
-    Text(Canvas, StageTitle(Stage), FVector2D(TitleX, TitleTop), StageFont, Ink);
+    Text(Canvas, TEXT("숲 원정"), FVector2D(TitleX, HeaderTop + (HeaderRowHeight - SmallHeight) * 0.5f), SmallFont, DashboardTextColor);
+    Text(Canvas, StageTitle(Stage), FVector2D(TitleX, TitleTop), StageFont, DashboardTextColor);
 
     if (!bWaiting && (Stage == 1 || Stage == 3))
     {
@@ -236,14 +236,14 @@ void FCoopRPGExpeditionDashboard::Draw(AHUD& HUD, UCanvas& Canvas, const ACoopRP
 
     if (Stage == 0)
     {
-        Text(Canvas, TEXT("파티원 모두가 준비하면"), FVector2D(Left, ObjectiveTop), BodyFont, Ink);
-        Text(Canvas, TEXT("다음 스테이지로 출발합니다."), FVector2D(Left, DetailTop), BodyFont, Ink);
+        Text(Canvas, TEXT("파티원 모두가 준비하면"), FVector2D(Left, ObjectiveTop), BodyFont, DashboardTextColor);
+        Text(Canvas, TEXT("다음 스테이지로 출발합니다."), FVector2D(Left, DetailTop), BodyFont, DashboardTextColor);
     }
     else
     {
         const TCHAR* Objective = Stage == 1 ? TEXT("버섯을 모두 처치하세요")
             : Stage == 2 ? TEXT("각 발판에 한 명씩 서세요") : TEXT("흑기사를 처치하세요");
-        Text(Canvas, Objective, FVector2D(Left, ObjectiveTop), BodyFont, Ink);
+        Text(Canvas, Objective, FVector2D(Left, ObjectiveTop), BodyFont, DashboardTextColor);
         if (Stage == 1 || Stage == 2)
         {
             const auto& Puzzle = State.GetPuzzleStatus();
@@ -274,7 +274,7 @@ void FCoopRPGExpeditionDashboard::Draw(AHUD& HUD, UCanvas& Canvas, const ACoopRP
             const FRecord& Record = Records[Records.Num() - Count + Entry];
             const float Y = RowTop + Entry * (SmallHeight + LogGap);
             HUD.DrawRect(SecondaryInk, Left, Y + (SmallHeight - 3.0f) * 0.5f, 3.0f, 3.0f);
-            Text(Canvas, RecordText(Record.Label), FVector2D(Left + 9.0f, Y), SmallFont, Ink);
+            Text(Canvas, RecordText(Record.Label), FVector2D(Left + 9.0f, Y), SmallFont, DashboardTextColor);
             if (Record.Value != INDEX_NONE)
             {
                 const FString Value = FString::Printf(TEXT("%d/%d"), Record.Value, CoopRPG::Expedition::SkirmishEnemyCount);
@@ -286,7 +286,7 @@ void FCoopRPGExpeditionDashboard::Draw(AHUD& HUD, UCanvas& Canvas, const ACoopRP
             ToggleBounds = FBox2D(FVector2D(Right - ToggleWidth, SectionTop - 6.0f), FVector2D(Right, SectionBottom + 6.0f));
             const TCHAR* Label = bExpanded ? TEXT("접기") : TEXT("더 보기");
             const FVector2D Size = Measure(Canvas, Label, SmallFont);
-            Text(Canvas, Label, FVector2D(Right - 14.0 - Size.X, DividerCenter - Size.Y * 0.5), SmallFont, Ink);
+            Text(Canvas, Label, FVector2D(Right - 14.0 - Size.X, DividerCenter - Size.Y * 0.5), SmallFont, DashboardTextColor);
             const float SourceX = bExpanded ? 12.0f : 0.0f;
             DrawImage(HUD, FBox2D(FVector2D(SourceX, 297), FVector2D(SourceX + 10.0f, 305)),
                 FVector2D(Right - 10.0f, SectionTop), FVector2D(10.0f, DividerHeight));
@@ -329,7 +329,7 @@ void FCoopRPGExpeditionDashboard::DrawReadyParty(AHUD& HUD, UCanvas& Canvas, con
         const float NameX = Left + BadgeSide + 8.0f;
         if (Statuses[Index] != ECoopRPGReadyStatus::Disconnected && !Names[Index].IsEmpty())
         {
-            Text(Canvas, Fit(Canvas, Names[Index], NameFont, Right - NameX), FVector2D(NameX, Y), NameFont, Ink);
+            Text(Canvas, Fit(Canvas, Names[Index], NameFont, Right - NameX), FVector2D(NameX, Y), NameFont, DashboardTextColor);
         }
         Text(Canvas, ReadyText(Statuses[Index]), FVector2D(NameX, Y + NameHeight + 3.0f), SmallFont, ReadyColor(Statuses[Index]));
     }

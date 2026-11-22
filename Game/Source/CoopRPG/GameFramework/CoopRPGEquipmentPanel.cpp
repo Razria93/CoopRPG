@@ -47,9 +47,9 @@ namespace
     constexpr double InventoryTrackGap = 5.0;
     constexpr double InventoryFooterY = 221.0;
     constexpr double InventoryFooterHeight = 34.0;
-    constexpr float PanelHeight = 272.0f;
+    constexpr float EquipmentPanelHeight = 272.0f;
     constexpr int32 BlankFrameRow = 7;
-    constexpr float Gap = 5.0f;
+    constexpr float EquipmentTabGap = 5.0f;
     constexpr float PanelGap = 6.0f;
     constexpr float AtlasWidth = 364.0f;
     constexpr float AtlasRowHeight = 214.0f;
@@ -117,7 +117,7 @@ void FCoopRPGEquipmentPanel::Draw(AHUD& HUD, UCanvas& Surface, ACoopRPGPlayerCon
     ButtonHeight = bWide ? 33.0f : 29.0f;
     ContentInset = bWide ? 17.0f : 14.0f;
     Width = FMath::Min(Width, ViewSize.X - 2.0f * Padding);
-    bVisible = Width >= 180.0f && ViewSize.Y >= PanelHeight + ButtonHeight + PanelGap + 2.0f * Padding;
+    bVisible = Width >= 180.0f && ViewSize.Y >= EquipmentPanelHeight + ButtonHeight + PanelGap + 2.0f * Padding;
     if (!bVisible)
     {
         return;
@@ -268,15 +268,15 @@ void FCoopRPGEquipmentPanel::ReleasePointer()
 
 FBox2D FCoopRPGEquipmentPanel::GetTabBounds(int32 Index) const
 {
-    const float Unit = (Width - 3.0f * Gap) / 4.38f;
-    const FVector2D Start = Anchor + FVector2D(Index * (Unit + Gap), 0.0f);
+    const float Unit = (Width - 3.0f * EquipmentTabGap) / 4.38f;
+    const FVector2D Start = Anchor + FVector2D(Index * (Unit + EquipmentTabGap), 0.0f);
     return FBox2D(Start, Start + FVector2D(Unit * TabUnits[Index], ButtonHeight));
 }
 
 FBox2D FCoopRPGEquipmentPanel::GetPanelBounds() const
 {
     const FVector2D Start = Anchor + FVector2D(0.0f, ButtonHeight + PanelGap);
-    return FBox2D(Start, Start + FVector2D(Width, PanelHeight));
+    return FBox2D(Start, Start + FVector2D(Width, EquipmentPanelHeight));
 }
 
 int32 FCoopRPGEquipmentPanel::FindTab(const FVector2D& Pointer) const
