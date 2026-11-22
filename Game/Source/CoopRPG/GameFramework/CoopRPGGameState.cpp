@@ -121,7 +121,7 @@ namespace
         return FPackageName::DoesPackageExist(Package) ? Asset.LoadSynchronous() : nullptr;
     }
 
-    void PlayFallbackShieldImpact(UWorld& World, const FVector& Position)
+    bool PlayFallbackShieldImpact(UWorld& World, const FVector& Position)
     {
         constexpr uint32 SampleRate = 24000;
         constexpr float Duration = 0.10f;
@@ -144,7 +144,9 @@ namespace
         if (UAudioComponent* Audio = UGameplayStatics::SpawnSoundAtLocation(&World, Sound, Position, FRotator::ZeroRotator, 0.65f))
         {
             Audio->FadeOut(Duration, 0.0f);
+            return true;
         }
+        return false;
     }
 
     bool IsSuccessful(ECoopRPGRoundEndReason Reason)
@@ -345,6 +347,7 @@ void ACoopRPGGameState::PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVecto
     }
 
     auto* Sound = LoadLocalEffectAsset(Assets.Sound);
+    bool bFallbackSoundPlayed = false;
     if (Sound)
     {
         if (!MeleeSoundAttenuation)
@@ -359,13 +362,13 @@ void ACoopRPGGameState::PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVecto
     }
     else if (Effect == ECoopRPGMeleeEffect::ShieldBlock)
     {
-        PlayFallbackShieldImpact(*GetWorld(), Location);
+        bFallbackSoundPlayed = PlayFallbackShieldImpact(*GetWorld(), Location);
     }
 
     UE_LOG(LogCoopRPGMeleeEffects, Log,
-        TEXT("MeleeEffect Kind=%s Slot=%d Swing=%u VFX=%d SFX=%d Location=%s VisualLocation=%s Flash=%d"),
+        TEXT("MeleeEffect Kind=%s Slot=%d Swing=%u VFX=%d SFX=%d Location=%s VisualLocation=%s Flash=%d FallbackSFX=%d"),
         *UEnum::GetValueAsString(Effect), Slot, Swing, Visual != nullptr, Sound != nullptr,
-        *Location.ToCompactString(), *VisualLocation.ToCompactString(), ImpactFlash != nullptr);
+        *Location.ToCompactString(), *VisualLocation.ToCompactString(), ImpactFlash != nullptr, bFallbackSoundPlayed);
 }
 
 void ACoopRPGGameState::MulticastMeleeSweepTrace_Implementation(const FCoopRPGMeleeSweepTrace& Trace)

@@ -21,10 +21,8 @@
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
-#include "Sound/SoundWaveProcedural.h"
 #include "Fonts/FontMeasure.h"
 #include "Rendering/SlateRenderer.h"
-#include "Components/AudioComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGGameplayFeedback, Log, All);
 
@@ -45,32 +43,6 @@ namespace
     constexpr float HealthNameplateLineSpacing = 17.0f;
     constexpr float ShieldNameplateHalfWidth = 36.0f;
     constexpr float AttackTargetTextScale = 0.85f;
-
-    void PlayShieldImpact(UWorld& World, const FVector& Position)
-    {
-        constexpr uint32 SampleRate = 24000;
-        constexpr float Duration = 0.10f;
-        TArray<int16> Samples;
-        Samples.SetNumUninitialized(static_cast<int32>(SampleRate * Duration));
-        for (int32 Index = 0; Index < Samples.Num(); ++Index)
-        {
-            const double Time = static_cast<double>(Index) / SampleRate;
-            const double Envelope = FMath::Min(Time * 600.0, 1.0) * FMath::Exp(-50.0 * Time);
-            Samples[Index] = static_cast<int16>(7000.0 * Envelope
-                * (0.7 * FMath::Sin(2.0 * UE_DOUBLE_PI * 890.0 * Time)
-                    + 0.3 * FMath::Sin(2.0 * UE_DOUBLE_PI * 1430.0 * Time)));
-        }
-
-        auto* Sound = NewObject<USoundWaveProcedural>(&World);
-        Sound->SetSampleRate(SampleRate);
-        Sound->NumChannels = 1;
-        Sound->Duration = Duration;
-        Sound->QueueAudio(reinterpret_cast<const uint8*>(Samples.GetData()), Samples.Num() * sizeof(int16));
-        if (UAudioComponent* Audio = UGameplayStatics::SpawnSoundAtLocation(&World, Sound, Position, FRotator::ZeroRotator, 0.65f))
-        {
-            Audio->FadeOut(Duration, 0.0f);
-        }
-    }
 
     const TCHAR* ReadyStatusLabel(ECoopRPGReadyStatus Status)
     {
@@ -258,7 +230,6 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
         Text = TEXT("Blocked");
         Color = FLinearColor(1.0f, 0.78f, 0.24f);
         bNextToActor = false;
-        PlayShieldImpact(*GetWorld(), Feedback.Location);
         break;
     }
 
