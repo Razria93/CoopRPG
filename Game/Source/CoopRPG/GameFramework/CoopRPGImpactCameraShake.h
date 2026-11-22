@@ -15,6 +15,7 @@ private:
         FCameraShakePatternUpdateResult& OutResult) override;
     virtual bool IsFinishedImpl() const override;
 
+private:
     float Elapsed = 0.0f;
 };
 

@@ -315,6 +315,25 @@ void ACoopRPGCharacter::FinishMeleeWindup(bool bInterrupted)
     }
 }
 
+void ACoopRPGCharacter::RequestMeleeHitStop(uint32 Swing)
+{
+    if (GetNetMode() != NM_Client || !IsLocallyControlled() || Swing == 0)
+    {
+        return;
+    }
+
+    if (Swing == PresentedMeleeSequence)
+    {
+        ApplyMeleeHitStop(Swing);
+    }
+    else if (Swing > MeleePresentation.Sequence && Swing > PendingHitStopSwing)
+    {
+        // Feedback can arrive a frame before the pawn's replicated swing.
+        PendingHitStopSwing = Swing;
+        PendingHitStopDeadline = FPlatformTime::Seconds() + MeleeHitStopCatchUpSeconds;
+    }
+}
+
 void ACoopRPGCharacter::BeginPlay()
 {
     Super::BeginPlay();
@@ -527,25 +546,6 @@ void ACoopRPGCharacter::PlayMeleeSwingEffects()
     {
         State->PlayMeleeEffect(ECoopRPGMeleeEffect::SwordSwing, HeroWeaponMesh->GetComponentLocation(),
             MeleePresentation.FacingYaw, DisplaySlot, PresentedMeleeSequence);
-    }
-}
-
-void ACoopRPGCharacter::RequestMeleeHitStop(uint32 Swing)
-{
-    if (GetNetMode() != NM_Client || !IsLocallyControlled() || Swing == 0)
-    {
-        return;
-    }
-
-    if (Swing == PresentedMeleeSequence)
-    {
-        ApplyMeleeHitStop(Swing);
-    }
-    else if (Swing > MeleePresentation.Sequence && Swing > PendingHitStopSwing)
-    {
-        // Feedback can arrive a frame before the pawn's replicated swing.
-        PendingHitStopSwing = Swing;
-        PendingHitStopDeadline = FPlatformTime::Seconds() + MeleeHitStopCatchUpSeconds;
     }
 }
 

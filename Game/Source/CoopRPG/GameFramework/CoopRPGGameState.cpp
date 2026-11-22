@@ -261,51 +261,6 @@ void ACoopRPGGameState::MulticastGameplayFeedback_Implementation(const FCoopRPGG
 }
 
 
-void ACoopRPGGameState::PresentGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback)
-{
-    if (GetNetMode() != NM_DedicatedServer)
-    {
-        const APlayerController* Controller = GetWorld()->GetFirstPlayerController();
-        if (auto* HUD = Controller ? Cast<ACoopRPGLootHUD>(Controller->GetHUD()) : nullptr)
-        {
-            HUD->ShowGameplayFeedback(Feedback);
-        }
-        PlayMeleeEffect(Feedback.MeleeEffect, Feedback.MeleeEffectLocation, Feedback.MeleeEffectYaw,
-            Feedback.AttackerSlot, Feedback.MeleeSwing);
-        if (Feedback.Kind == ECoopRPGFeedbackKind::Damage
-            && (Feedback.MeleeEffect == ECoopRPGMeleeEffect::MushroomHit
-                || Feedback.MeleeEffect == ECoopRPGMeleeEffect::ArmorHit))
-        {
-            if (Feedback.bPreserveEnemyAttackPose)
-            {
-                UE_LOG(LogCoopRPGMeleeEffects, Log,
-                    TEXT("EnemyMeleeReactionSuppressed Slot=%d Swing=%u Target=%s"),
-                    Feedback.AttackerSlot, Feedback.MeleeSwing, *GetNameSafe(Feedback.Subject.Get()));
-            }
-            auto* Hero = Controller ? Cast<ACoopRPGCharacter>(Controller->GetPawn()) : nullptr;
-            if (Feedback.bTriggerLocalMeleeImpact && Hero && Controller->IsLocalController()
-                && Hero->GetDisplaySlot() == Feedback.AttackerSlot)
-            {
-                auto* Enemy = Cast<ACoopRPGEnemy>(Feedback.Subject.Get());
-                const EBossImpactTrial Mode = Enemy && Enemy->IsBlackKnight() ? GetBossImpactTrial() : EBossImpactTrial::Default;
-                if (Mode == EBossImpactTrial::Default || Mode == EBossImpactTrial::Shake)
-                {
-                    auto* Camera = Controller->PlayerCameraManager.Get();
-                    if (Camera && Camera->StartCameraShake(UCoopRPGImpactCameraShake::StaticClass()))
-                    {
-                        UE_LOG(LogCoopRPGMeleeEffects, Log, TEXT("MeleeCameraShakeStarted Slot=%d Swing=%u"),
-                            Feedback.AttackerSlot, Feedback.MeleeSwing);
-                    }
-                }
-                if (Mode == EBossImpactTrial::Default || Mode == EBossImpactTrial::HitStop)
-                {
-                    Hero->RequestMeleeHitStop(Feedback.MeleeSwing);
-                }
-            }
-        }
-    }
-}
-
 void ACoopRPGGameState::PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVector& Location,
     float Yaw, int32 Slot, uint32 Swing, float ScaleMultiplier)
 {
@@ -618,6 +573,51 @@ FString ACoopRPGGameState::GetRoundTravelDestination() const
         return {};
     default:
         return {};
+    }
+}
+
+void ACoopRPGGameState::PresentGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback)
+{
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        const APlayerController* Controller = GetWorld()->GetFirstPlayerController();
+        if (auto* HUD = Controller ? Cast<ACoopRPGLootHUD>(Controller->GetHUD()) : nullptr)
+        {
+            HUD->ShowGameplayFeedback(Feedback);
+        }
+        PlayMeleeEffect(Feedback.MeleeEffect, Feedback.MeleeEffectLocation, Feedback.MeleeEffectYaw,
+            Feedback.AttackerSlot, Feedback.MeleeSwing);
+        if (Feedback.Kind == ECoopRPGFeedbackKind::Damage
+            && (Feedback.MeleeEffect == ECoopRPGMeleeEffect::MushroomHit
+                || Feedback.MeleeEffect == ECoopRPGMeleeEffect::ArmorHit))
+        {
+            if (Feedback.bPreserveEnemyAttackPose)
+            {
+                UE_LOG(LogCoopRPGMeleeEffects, Log,
+                    TEXT("EnemyMeleeReactionSuppressed Slot=%d Swing=%u Target=%s"),
+                    Feedback.AttackerSlot, Feedback.MeleeSwing, *GetNameSafe(Feedback.Subject.Get()));
+            }
+            auto* Hero = Controller ? Cast<ACoopRPGCharacter>(Controller->GetPawn()) : nullptr;
+            if (Feedback.bTriggerLocalMeleeImpact && Hero && Controller->IsLocalController()
+                && Hero->GetDisplaySlot() == Feedback.AttackerSlot)
+            {
+                auto* Enemy = Cast<ACoopRPGEnemy>(Feedback.Subject.Get());
+                const EBossImpactTrial Mode = Enemy && Enemy->IsBlackKnight() ? GetBossImpactTrial() : EBossImpactTrial::Default;
+                if (Mode == EBossImpactTrial::Default || Mode == EBossImpactTrial::Shake)
+                {
+                    auto* Camera = Controller->PlayerCameraManager.Get();
+                    if (Camera && Camera->StartCameraShake(UCoopRPGImpactCameraShake::StaticClass()))
+                    {
+                        UE_LOG(LogCoopRPGMeleeEffects, Log, TEXT("MeleeCameraShakeStarted Slot=%d Swing=%u"),
+                            Feedback.AttackerSlot, Feedback.MeleeSwing);
+                    }
+                }
+                if (Mode == EBossImpactTrial::Default || Mode == EBossImpactTrial::HitStop)
+                {
+                    Hero->RequestMeleeHitStop(Feedback.MeleeSwing);
+                }
+            }
+        }
     }
 }
 
