@@ -423,11 +423,11 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
     }
 
     int32 ReservedSlot = INDEX_NONE;
-    int32 RecoveryCount = 0;
+    FCoopRPGRoundTravelParticipant Arrival;
     if (GetNetMode() == NM_DedicatedServer)
     {
         const FName Map(*UGameplayStatics::GetCurrentLevelName(this));
-        ReservedSlot = GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->Admit(Map, UniqueId, RecoveryCount);
+        ReservedSlot = GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->Admit(Map, UniqueId, Arrival);
         UE_LOG(LogCoopRPGRoundAdmission, Log, TEXT("RoundPlayerAdmitted Map=%s Players=%d"),
             *Map.ToString(), GetNumPlayers());
     }
@@ -451,13 +451,14 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
             // Lobby selection can replace this default without changing pawn or slot identity.
             Identity->SetSelectedHero(SlotIndex == 0 ? ECoopRPGHero::Adventurer : ECoopRPGHero::AnimalHero);
         }
-        if ((bExpeditionPuzzle || bExpeditionBoss) && ReservedSlot != INDEX_NONE)
+        if (ReservedSlot != INDEX_NONE && !bExpeditionLobby && CoopRPG::Expedition::IsExpedition(GetWorld()))
         {
             if (auto* CoopPlayer = Cast<ACoopRPGPlayerController>(Player))
             {
-                CoopPlayer->RestoreTravelRecovery(RecoveryCount);
+                CoopPlayer->RestoreTravelInventory(Arrival.Recovery, Arrival.Sword);
+                const TCHAR* Stage = bExpeditionBoss ? TEXT("Boss") : bExpeditionPuzzle ? TEXT("Puzzle") : TEXT("Skirmish");
                 UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("%sRecoveryRestored Slot=%d Count=%d"),
-                    bExpeditionBoss ? TEXT("Boss") : TEXT("Puzzle"), SlotIndex + 1, CoopPlayer->GetRecoveryCount());
+                    Stage, SlotIndex + 1, CoopPlayer->GetRecoveryCount());
             }
         }
         const FString Label = UGameplayStatics::ParseOption(Options, TEXT("CoopValidationLabel"));
@@ -504,9 +505,13 @@ void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
                 if (auto* State = GetGameState<ACoopRPGGameState>())
                 {
                     PublishReadySlots(*State);
+                    auto* Controller = CastChecked<ACoopRPGPlayerController>(NewPlayer);
+                    if (!bExpeditionLobby && CoopRPG::Expedition::IsExpedition(GetWorld()))
+                    {
+                        Controller->InitializeStageInventory(State->GetRoundId());
+                    }
                     if (bExpeditionPuzzle || bExpeditionBoss)
                     {
-                        const auto* Controller = CastChecked<ACoopRPGPlayerController>(NewPlayer);
                         UE_LOG(LogCoopRPGRoundTravel, Log,
                             TEXT("%sPlayerInitialized Round=%s Slot=%d HP=%.0f SP=%.0f Armed=%d Recovery=%d Ready=%d Playing=%d TeamLoot=%d Score=%d"),
                             bExpeditionBoss ? TEXT("Boss") : TEXT("Puzzle"), *State->GetRoundId().ToString(), Index + 1, Character->GetHealth(),
@@ -590,7 +595,7 @@ FString ACoopRPGGameMode::GetRoundJoinRejection(const FString& Options, const FU
     return Seats->Allows(Map, UniqueId) ? FString() : FString(TEXT("RoundTravelReserved"));
 }
 
-bool ACoopRPGGameMode::ReserveRoundTravelSeats(const FString& Destination) const
+bool ACoopRPGGameMode::ReserveRoundTravelSeats(const ACoopRPGGameState& State, const FString& Destination) const
 {
     if (GetNetMode() != NM_DedicatedServer)
     {
@@ -600,7 +605,11 @@ bool ACoopRPGGameMode::ReserveRoundTravelSeats(const FString& Destination) const
     const bool bToPuzzle = Destination == CoopRPG::Expedition::PuzzlePackage
         && CoopRPG::Expedition::IsSkirmish(GetWorld());
     const bool bToBoss = Destination == CoopRPG::Expedition::BossPackage && bExpeditionPuzzle;
-    const bool bCarryRecovery = bToPuzzle || bToBoss;
+    const bool bRetryStage = !bExpeditionLobby && CoopRPG::Expedition::IsExpedition(GetWorld())
+        && (State.GetRoundEndReason() == ECoopRPGRoundEndReason::Death
+            || State.GetRoundEndReason() == ECoopRPGRoundEndReason::Timeout)
+        && Destination == UWorld::RemovePIEPrefix(GetWorld()->GetPackage()->GetName());
+    const bool bAdvanceStage = bToPuzzle || bToBoss;
     TArray<FCoopRPGRoundTravelParticipant> Participants;
     for (const auto& Slot : PlayerSlots)
     {
@@ -616,13 +625,26 @@ bool ACoopRPGGameMode::ReserveRoundTravelSeats(const FString& Destination) const
         {
             return false;
         }
-        const int32 Before = Player->GetRecoveryCount();
-        const int32 Carried = bCarryRecovery ? FMath::Clamp(Before, 0, 1) : 0;
-        Participants.Add({ConnectionId, Carried});
-        if (bCarryRecovery)
+        const FCoopRPGRecoverySnapshot Before = Player->GetTravelRecovery(false);
+        const bool bCarryInventory = bRetryStage || bAdvanceStage;
+        const FCoopRPGRecoverySnapshot Carried = bCarryInventory ? Player->GetTravelRecovery(bRetryStage)
+            : FCoopRPGRecoverySnapshot{};
+        const FCoopRPGSwordSnapshot Sword = bCarryInventory ? Player->GetTravelSword(bRetryStage)
+            : FCoopRPGSwordSnapshot{};
+        Participants.Add({ConnectionId, Carried, Sword});
+        if (bRetryStage || bAdvanceStage)
+        {
+            const FIntPoint Supplies = Player->GetStageRecoverySupplies();
+            UE_LOG(LogCoopRPGRoundTravel, Log,
+                TEXT("RecoveryTravelReserved Round=%s Slot=%d Transfer=%s Before=%d Carry=%d SupplyHP=%d SupplySP=%d BeforeSP=%d CarrySP=%d RegisteredHP=%d RegisteredSP=%d"),
+                *State.GetRoundId().ToString(), Participants.Num(), bRetryStage ? TEXT("Retry") : TEXT("Advance"),
+                Before.Personal.X, Carried.Personal.X, Supplies.X, Supplies.Y, Before.Personal.Y, Carried.Personal.Y,
+                Carried.Registration.bHealth, Carried.Registration.bStamina);
+        }
+        if (bAdvanceStage)
         {
             UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("%sRecoveryReserved Slot=%d Before=%d Carry=%d"),
-                bToBoss ? TEXT("Boss") : TEXT("Puzzle"), Participants.Num(), Before, Carried);
+                bToBoss ? TEXT("Boss") : TEXT("Puzzle"), Participants.Num(), Before.Personal.X, Carried.Personal.X);
         }
     }
 
@@ -657,7 +679,7 @@ void ACoopRPGGameMode::AdvanceRoundIfReady(ACoopRPGGameState& State, const FStri
 
     bTravelAttempted = true;
     const bool bDestinationAvailable = FPackageName::DoesPackageExist(Destination);
-    if (bDestinationAvailable && ReserveRoundTravelSeats(Destination))
+    if (bDestinationAvailable && ReserveRoundTravelSeats(State, Destination))
     {
         const FString URL = Destination + TEXT("?EnemyCombat?NoSeamlessTravel");
         UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("RoundTravelStarted Round=%s TargetMap=%s"),

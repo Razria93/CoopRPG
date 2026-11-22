@@ -41,7 +41,7 @@ protected:
 private:
     void PublishReadySlots(ACoopRPGGameState& State);
     FString GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId);
-    bool ReserveRoundTravelSeats(const FString& Destination) const;
+    bool ReserveRoundTravelSeats(const ACoopRPGGameState& State, const FString& Destination) const;
     bool IsRoundParticipant(const AController* Controller) const;
     void AdvanceRoundIfReady(ACoopRPGGameState& State, const FString& Destination);
 

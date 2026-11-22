@@ -32,7 +32,7 @@ bool UCoopRPGRoundTravelSeats::Allows(FName Map, const FUniqueNetIdRepl& Connect
     return !IsActive(Map) || (ConnectionId.IsValid() && AwaitingPlayers.Contains(ConnectionId));
 }
 
-int32 UCoopRPGRoundTravelSeats::Admit(FName Map, const FUniqueNetIdRepl& ConnectionId, int32& OutRecoveryCount)
+int32 UCoopRPGRoundTravelSeats::Admit(FName Map, const FUniqueNetIdRepl& ConnectionId, FCoopRPGRoundTravelParticipant& OutParticipant)
 {
     if (IsActive(Map) && AwaitingPlayers.RemoveSingle(ConnectionId) == 1)
     {
@@ -42,7 +42,7 @@ int32 UCoopRPGRoundTravelSeats::Admit(FName Map, const FUniqueNetIdRepl& Connect
             [&ConnectionId](const auto& Participant) { return Participant.ConnectionId == ConnectionId; });
         if (ReservedPlayers.IsValidIndex(Slot))
         {
-            OutRecoveryCount = ReservedPlayers[Slot].RecoveryCount;
+            OutParticipant = ReservedPlayers[Slot];
         }
         return Slot;
     }

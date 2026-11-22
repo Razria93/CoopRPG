@@ -66,13 +66,14 @@ void ACoopRPGSharedChest::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGSharedChest, RecoveryStock);
+    DOREPLIFETIME(ACoopRPGSharedChest, StaminaRecoveryStock);
     DOREPLIFETIME(ACoopRPGSharedChest, WeaponStock);
     DOREPLIFETIME(ACoopRPGSharedChest, FirstOpenedAt);
 }
 
-bool ACoopRPGSharedChest::TryTakeRecovery()
+bool ACoopRPGSharedChest::TryTakeRecovery(bool bStamina)
 {
-    return TryTakeStock(RecoveryStock);
+    return TryTakeStock(bStamina ? StaminaRecoveryStock : RecoveryStock);
 }
 
 bool ACoopRPGSharedChest::TryTakeWeapon()

@@ -3,12 +3,15 @@
 #include "CoreMinimal.h"
 #include "GameFramework/OnlineReplStructs.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "CoopRPGRecoveryInventory.h"
+#include "CoopRPGSwordInventory.h"
 #include "CoopRPGRoundTravelSeats.generated.h"
 
 struct FCoopRPGRoundTravelParticipant
 {
     FUniqueNetIdRepl ConnectionId;
-    int32 RecoveryCount = 0;
+    FCoopRPGRecoverySnapshot Recovery;
+    FCoopRPGSwordSnapshot Sword;
 };
 
 UCLASS()
@@ -20,7 +23,7 @@ public:
     void Reserve(FName Destination, TArray<FCoopRPGRoundTravelParticipant> Participants);
     void Clear();
     bool Allows(FName Map, const FUniqueNetIdRepl& ConnectionId) const;
-    int32 Admit(FName Map, const FUniqueNetIdRepl& ConnectionId, int32& OutRecoveryCount);
+    int32 Admit(FName Map, const FUniqueNetIdRepl& ConnectionId, FCoopRPGRoundTravelParticipant& OutParticipant);
 
 private:
     bool IsActive(FName Map) const;

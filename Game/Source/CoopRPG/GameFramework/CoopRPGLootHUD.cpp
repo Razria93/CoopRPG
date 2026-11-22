@@ -11,6 +11,7 @@
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
+#include "CoopRPG/AbilitySystem/Effects/CoopRPGRecoveryEffect.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
@@ -27,6 +28,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "Internationalization/BreakIterator.h"
+#include "InputKeyEventArgs.h"
 #include "Kismet/GameplayStatics.h"
 #include "Fonts/FontCache.h"
 #include "Fonts/FontMeasure.h"
@@ -35,6 +37,7 @@
 #include "GlobalRenderResources.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGGameplayFeedback, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGChestHUD, Log, All);
 
 namespace CoopRPG::ExpeditionUI
 {
@@ -254,6 +257,7 @@ namespace
 void ACoopRPGLootHUD::DrawHUD()
 {
     Super::DrawHUD();
+    ChestPanelBounds = FBox2D(ForceInit);
     const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
     if (Viewport && Viewport->HasConnectionNotice())
     {
@@ -282,6 +286,13 @@ void ACoopRPGLootHUD::DrawHUD()
     const auto Attack = bShowEquipment && LocalHero ? CoopRPG::ExpeditionUI::ReadAttackHud(*State, *LocalHero,
         ExpeditionStage == 1 || ExpeditionStage == 3) : CoopRPG::ExpeditionUI::FAttackHudStatus{};
     WorldLabelBounds.Reset();
+    const bool bShowChestPanel = bShowEquipment && State->IsRoundPlaying()
+        && (ExpeditionStage == 1 || ExpeditionStage == 3) && IsValid(Controller->GetOpenedChest());
+    if (!bShowChestPanel)
+    {
+        SelectedChestItem = EChestControl::None;
+        LastChestPanelDisplay.Reset();
+    }
     if (bHasExpeditionSkin && State->GetRoundId().IsValid())
     {
         const bool bShowTeamStone = MapName == CoopRPG::Expedition::SkirmishMap
@@ -306,8 +317,19 @@ void ACoopRPGLootHUD::DrawHUD()
         if (bShowDashboard)
         {
             ExpeditionDashboard.Draw(*this, *Canvas, *State, *Controller, ExpeditionStage, ViewSize);
+        }
+        else
+        {
+            ExpeditionDashboard.Hide();
+        }
+        if (bShowChestPanel)
+        {
+            DrawChestPanel(*State, *Controller);
+        }
+        if (bShowDashboard)
+        {
             for (const FBox2D& Bounds : {EquipmentPanel.GetVisibleBounds(), ExpeditionDashboard.GetPanelBounds(),
-                ExpeditionDashboard.GetNoticeBounds(), ExpeditionDashboard.GetBossHealthBounds()})
+                ExpeditionDashboard.GetNoticeBounds(), ExpeditionDashboard.GetBossHealthBounds(), ChestPanelBounds})
             {
                 if (Bounds.bIsValid)
                 {
@@ -315,10 +337,6 @@ void ACoopRPGLootHUD::DrawHUD()
                 }
             }
             DrawExpeditionNameplates(*Controller, ExpeditionStage);
-        }
-        else
-        {
-            ExpeditionDashboard.Hide();
         }
     };
     if (MapName == CoopRPG::Expedition::LobbyMap)
@@ -469,8 +487,14 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
         Color = FLinearColor(0.36f, 1.0f, 0.55f);
         bNextToActor = false;
         break;
+    case ECoopRPGFeedbackKind::StaminaRecovery:
+        Text = FString::Printf(TEXT("SP +%.0f"), Feedback.Amount);
+        Color = FLinearColor(0.36f, 1.0f, 0.55f);
+        bNextToActor = false;
+        break;
     case ECoopRPGFeedbackKind::WeaponAcquired: Text = bExpedition ? TEXT("한손검 획득") : TEXT("Melee weapon acquired"); break;
     case ECoopRPGFeedbackKind::RecoveryAcquired: Text = bExpedition ? TEXT("회복 물약 획득") : TEXT("Recovery item acquired"); break;
+    case ECoopRPGFeedbackKind::StaminaRecoveryAcquired: Text = TEXT("SP 회복 물약 획득"); break;
     case ECoopRPGFeedbackKind::RecoveryUsed:
         Text = bExpedition ? TEXT("회복 물약 사용") : TEXT("Recovery item used");
         Color = FLinearColor(1.0f, 0.83f, 0.32f);
@@ -512,15 +536,17 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
         Feedback.Amount, Feedback.AttackerSlot, *CoopRPG::Debug::DescribeLogContext(GetOwningPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
-bool ACoopRPGLootHUD::HandleHudPrimaryButton(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
+bool ACoopRPGLootHUD::HandleHudPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
 {
     const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
     if (Viewport && Viewport->HasConnectionNotice())
     {
         EquipmentPanel.Hide();
         ExpeditionDashboard.Hide();
+        ChestPanelBounds = FBox2D(ForceInit);
     }
-    return EquipmentPanel.HandlePrimaryButton(Controller, Input)
+    return HandleChestPrimaryButton(Controller, Input)
+        || EquipmentPanel.HandlePrimaryButton(Controller, Input)
         || ExpeditionDashboard.HandlePrimaryButton(Controller, Input);
 }
 
@@ -534,6 +560,167 @@ void ACoopRPGLootHUD::ReleaseHudPointer()
 {
     EquipmentPanel.ReleasePointer();
     ExpeditionDashboard.ReleasePointer();
+    bOwnsChestPointer = false;
+    PressedChestControl = EChestControl::None;
+}
+
+bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
+{
+    FVector2D Pointer = FVector2D::ZeroVector;
+    const auto* Chest = Controller.GetOpenedChest();
+    const bool bInsidePanel = IsValid(Chest) && ChestPanelBounds.bIsValid
+        && Controller.GetMousePosition(Pointer.X, Pointer.Y) && ChestPanelBounds.IsInsideOrOn(Pointer);
+    const auto ControlAt = [&]()
+    {
+        if (!bInsidePanel)
+        {
+            return EChestControl::None;
+        }
+        if (ChestPotionBounds.IsInsideOrOn(Pointer))
+        {
+            return EChestControl::Potion;
+        }
+        if (ChestSwordBounds.IsInsideOrOn(Pointer))
+        {
+            return EChestControl::Sword;
+        }
+        if (ChestStaminaBounds.IsInsideOrOn(Pointer))
+        {
+            return EChestControl::StaminaPotion;
+        }
+        return ChestTakeBounds.IsInsideOrOn(Pointer) ? EChestControl::Take : EChestControl::None;
+    };
+    if (bOwnsChestPointer)
+    {
+        if (Input.Event == IE_Released)
+        {
+            const EChestControl Released = ControlAt();
+            if (Released == PressedChestControl && (Released == EChestControl::Potion || Released == EChestControl::Sword
+                || Released == EChestControl::StaminaPotion))
+            {
+                SelectedChestItem = Released;
+            }
+            else if (Released == PressedChestControl && Released == EChestControl::Take)
+            {
+                if (SelectedChestItem == EChestControl::Sword)
+                {
+                    Controller.TakeMeleeWeapon();
+                }
+                else if (SelectedChestItem == EChestControl::StaminaPotion)
+                {
+                    Controller.TakeStaminaRecoveryItem();
+                }
+                else
+                {
+                    Controller.TakeRecoveryItem();
+                }
+            }
+            bOwnsChestPointer = false;
+            PressedChestControl = EChestControl::None;
+        }
+        return true;
+    }
+    if (!bInsidePanel || (Input.Event != IE_Pressed && Input.Event != IE_DoubleClick))
+    {
+        return false;
+    }
+
+    bOwnsChestPointer = true;
+    if (Input.Event == IE_Pressed)
+    {
+        PressedChestControl = ControlAt();
+        if (PressedChestControl == EChestControl::Take)
+        {
+            const bool bAvailable = SelectedChestItem == EChestControl::Sword
+                ? Chest->GetWeaponStock() > 0 && Controller.GetSwordOwnership() == ECoopRPGSwordOwnership::None
+                : SelectedChestItem == EChestControl::StaminaPotion ? Chest->GetStaminaRecoveryStock() > 0
+                : SelectedChestItem == EChestControl::Potion && Chest->GetRecoveryStock() > 0;
+            if (!bAvailable)
+            {
+                PressedChestControl = EChestControl::None;
+            }
+        }
+    }
+    return true;
+}
+
+void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller)
+{
+    using namespace CoopRPG::ExpeditionUI;
+    const auto* Chest = Controller.GetOpenedChest();
+    const int32 Stock = Chest->GetRecoveryStock();
+    const int32 WeaponStock = Chest->GetWeaponStock();
+    const int32 BagCount = Controller.GetRecoveryCount();
+    const int32 StaminaStock = Chest->GetStaminaRecoveryStock();
+    const int32 BagStamina = Controller.GetStaminaRecoveryCount();
+    const bool bOwnsSword = Controller.GetSwordOwnership() != ECoopRPGSwordOwnership::None;
+    const bool bSwordSelected = SelectedChestItem == EChestControl::Sword;
+    const bool bPotionSelected = SelectedChestItem == EChestControl::Potion;
+    const bool bStaminaSelected = SelectedChestItem == EChestControl::StaminaPotion;
+    const FBox2D& Status = ExpeditionDashboard.GetPanelBounds();
+    const double Left = Status.bIsValid ? Status.Min.X : PanelPad;
+    const double Top = Status.bIsValid ? Status.Max.Y + 8.0 : 136.0;
+    constexpr double Height = 190.0;
+    constexpr double Width = 252.0;
+    // Keep the chest above the party cards in the compact viewport.
+    ChestPanelBounds = FBox2D(FVector2D(Left, Top), FVector2D(Left + Width, Top + Height));
+    ChestPotionBounds = FBox2D(FVector2D(Left + 13.0, Top + 33.0), FVector2D(Left + Width - 13.0, Top + 56.0));
+    ChestStaminaBounds = FBox2D(FVector2D(Left + 13.0, Top + 59.0), FVector2D(Left + Width - 13.0, Top + 82.0));
+    ChestSwordBounds = FBox2D(FVector2D(Left + 13.0, Top + 85.0), FVector2D(Left + Width - 13.0, Top + 108.0));
+    ChestTakeBounds = FBox2D(FVector2D(Left + Width - 105.0, Top + 130.0), FVector2D(Left + Width - 13.0, Top + 155.0));
+
+    const FLinearColor Ink(FColor(64, 43, 25));
+    const FLinearColor Muted(FColor(112, 84, 54));
+    const auto Body = Font(11.0f);
+    const auto Emphasis = Font(11.0f, true);
+    const auto Fill = [&](const FBox2D& Box, FColor Color)
+    {
+        DrawRect(FLinearColor(Color), Box.Min.X, Box.Min.Y, Box.GetSize().X, Box.GetSize().Y);
+    };
+    const auto Centered = [&](const FBox2D& Box, FStringView Label, const FSlateFontInfo& Face, const FLinearColor& Tint)
+    {
+        Text(*Canvas, Label, Box.GetCenter() - Measure(*Canvas, Label, Face) * 0.5, Face, Tint);
+    };
+
+    EquipmentPanel.DrawPanelFrame(*this, ChestPanelBounds);
+    Text(*Canvas, TEXT("공용 상자"), FVector2D(Left + 14.0, Top + 11.0), Font(13.0f, true), Ink);
+    const auto DrawChestRow = [&](const FBox2D& Bounds, const TCHAR* Name, int32 Remaining, bool bSelected)
+    {
+        Fill(Bounds, bSelected ? FColor(221, 207, 160) : FColor(236, 221, 181));
+        Text(*Canvas, Name, Bounds.Min + FVector2D(9.0, 5.0), Emphasis, Ink);
+        const FString StockLabel = FString::Printf(TEXT("남은 수량 %d"), Remaining);
+        Text(*Canvas, StockLabel, FVector2D(Bounds.Max.X - 9.0 - Measure(*Canvas, StockLabel, Body).X,
+            Bounds.Min.Y + 5.0), Body, Ink);
+    };
+    DrawChestRow(ChestPotionBounds, TEXT("HP 회복 물약"), Stock, bPotionSelected);
+    DrawChestRow(ChestStaminaBounds, TEXT("SP 회복 물약"), StaminaStock, bStaminaSelected);
+    DrawChestRow(ChestSwordBounds, TEXT("한손검"), WeaponStock, bSwordSelected);
+    const FString Detail = bSwordSelected ? FString(TEXT("가방에서 장착 · 최초 장착 시 귀속"))
+        : bPotionSelected ? FString::Printf(TEXT("HP %d 회복"), FMath::RoundToInt(UCoopRPGRecoveryEffect::HealthRestored))
+        : bStaminaSelected ? FString::Printf(TEXT("SP %d 회복"), FMath::RoundToInt(UCoopRPGStaminaRecoveryEffect::StaminaRestored))
+        : FString(TEXT("아이템을 선택해 주세요."));
+    Text(*Canvas, Detail, FVector2D(Left + 15.0, Top + 112.0), Body, Muted);
+    const int32 OwnedCount = bSwordSelected ? (bOwnsSword ? 1 : 0) : bStaminaSelected ? BagStamina : BagCount;
+    Text(*Canvas, FString::Printf(TEXT("내 가방 ×%d"), OwnedCount), FVector2D(Left + 15.0, Top + 136.0), Emphasis, Ink);
+    const int32 Remaining = bSwordSelected ? WeaponStock : bStaminaSelected ? StaminaStock : Stock;
+    const bool bAlreadyOwned = bSwordSelected && bOwnsSword;
+    const bool bHasSelection = bSwordSelected || bPotionSelected || bStaminaSelected;
+    const bool bCanTake = bHasSelection && Remaining > 0 && !bAlreadyOwned;
+    Fill(ChestTakeBounds, bCanTake ? FColor(67, 87, 55) : FColor(215, 196, 157));
+    Centered(ChestTakeBounds, bAlreadyOwned ? TEXT("이미 보유")
+        : bHasSelection && Remaining <= 0 ? TEXT("품절") : TEXT("가방에 담기"), Emphasis,
+        bCanTake ? FLinearColor(FColor(255, 243, 208)) : Muted);
+    Text(*Canvas, TEXT("[G] 검 받기  [F] HP 물약  [Q] 닫기"),
+        FVector2D(Left + 15.0, Top + 164.0), Font(10.0f), Muted);
+
+    FString Display = FString::Printf(TEXT("Round=%s Stock=%d BagRecovery=%d Selected=%d X=%.0f Y=%.0f Width=%.0f WeaponStock=%d BagSword=%d StaminaStock=%d BagStamina=%d"),
+        *State.GetRoundId().ToString(), Stock, BagCount, static_cast<int32>(SelectedChestItem), Left, Top, Width, WeaponStock,
+        bOwnsSword, StaminaStock, BagStamina);
+    if (LastChestPanelDisplay != Display)
+    {
+        UE_LOG(LogCoopRPGChestHUD, Log, TEXT("ChestPanelPresented %s"), *Display);
+        LastChestPanelDisplay = MoveTemp(Display);
+    }
 }
 
 void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
@@ -555,7 +742,7 @@ void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
             PanelAccent, PanelTextX, PanelPad + 7.0f);
         if (IsValid(Chest))
         {
-            DrawText(FString::Printf(TEXT("[G] Equip  ·  Weapons %d"), Chest->GetWeaponStock()),
+            DrawText(FString::Printf(TEXT("[G] Take sword  ·  Weapons %d"), Chest->GetWeaponStock()),
                 FLinearColor::White, PanelTextX, PanelPad + 32.0f);
             DrawText(FString::Printf(TEXT("[F] Take potion  ·  Stock %d"), Chest->GetRecoveryStock()),
                 FLinearColor::White, PanelTextX, PanelPad + 54.0f);
@@ -596,7 +783,7 @@ void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
         DrawLootDropLabel(Potion->GetActorLocation(), false);
     }
 
-    if (IsValid(Chest))
+    if (bLegacyStatus && IsValid(Chest))
     {
         const FString Stock = FString::Printf(TEXT("[G] 검 ×%d  ·  [F] 물약 ×%d  ·  [Q] 닫기"),
             Chest->GetWeaponStock(), Chest->GetRecoveryStock());

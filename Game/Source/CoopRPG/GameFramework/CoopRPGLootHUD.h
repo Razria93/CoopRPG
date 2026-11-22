@@ -21,7 +21,7 @@ class COOPRPG_API ACoopRPGLootHUD : public AHUD
 public:
     virtual void DrawHUD() override;
     void ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
-    bool HandleHudPrimaryButton(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
+    bool HandleHudPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     bool HandleHudWheel(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     void ReleaseHudPointer();
 
@@ -38,6 +38,10 @@ private:
         bool bAtContact = false;
     };
 
+    enum class EChestControl : uint8 { None, Potion, Sword, Take, StaminaPotion };
+
+    bool HandleChestPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
+    void DrawChestPanel(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller);
     void DrawExpeditionCombat(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, bool bBoss, bool bLegacyStatus);
     void DrawPuzzle(const ACoopRPGGameState& State, ACoopRPGPlayerController& Controller, bool bLegacyStatus);
     void DrawExpeditionNameplates(const ACoopRPGPlayerController& Controller, int32 Stage);
@@ -61,6 +65,15 @@ private:
 private:
     FCoopRPGEquipmentPanel EquipmentPanel;
     FCoopRPGExpeditionDashboard ExpeditionDashboard;
+    FBox2D ChestPanelBounds{ForceInit};
+    FBox2D ChestPotionBounds{ForceInit};
+    FBox2D ChestSwordBounds{ForceInit};
+    FBox2D ChestStaminaBounds{ForceInit};
+    FBox2D ChestTakeBounds{ForceInit};
+    FString LastChestPanelDisplay;
+    EChestControl SelectedChestItem = EChestControl::None;
+    bool bOwnsChestPointer = false;
+    EChestControl PressedChestControl = EChestControl::None;
     FGuid LastPresentedExpeditionResult;
     FGuid LastPresentedPartyRound;
     TOptional<FIntVector4> PartyCardValues[2];

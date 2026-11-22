@@ -54,7 +54,7 @@ public:
     float GetStamina() const;
     int32 GetPartyStamina() const { return PartyStamina; }
     bool HasMeleeWeapon() const { return bHasMeleeWeapon; }
-    void EquipMeleeWeapon();
+    void SetMeleeWeaponEquipped(bool bEquipped);
     int32 GetDisplaySlot() const { return DisplaySlot; }
     void SetDisplaySlot(int32 Slot);
     void FlashPresentationHit();

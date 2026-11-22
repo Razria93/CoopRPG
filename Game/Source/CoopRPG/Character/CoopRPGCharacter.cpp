@@ -188,11 +188,15 @@ float ACoopRPGCharacter::GetStamina() const
     return CombatAttributes->GetStamina();
 }
 
-void ACoopRPGCharacter::EquipMeleeWeapon()
+void ACoopRPGCharacter::SetMeleeWeaponEquipped(bool bEquipped)
 {
-    if (HasAuthority() && !bHasMeleeWeapon)
+    if (HasAuthority() && bHasMeleeWeapon != bEquipped)
     {
-        bHasMeleeWeapon = true;
+        bHasMeleeWeapon = bEquipped;
+        if (!bEquipped)
+        {
+            ServerCancelAttack_Implementation();
+        }
         RefreshWeaponVisibility();
         ForceNetUpdate();
     }
