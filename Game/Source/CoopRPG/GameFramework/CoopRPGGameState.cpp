@@ -23,6 +23,9 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Math/Color.h"
+#include "Math/Rotator.h"
+#include "Math/UnrealMathUtility.h"
 #include "Misc/CommandLine.h"
 #include "Misc/PackageName.h"
 #include "Misc/Parse.h"
@@ -32,7 +35,12 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Sound/SoundAttenuation.h"
+#include "Sound/SoundBase.h"
 #include "Sound/SoundWaveProcedural.h"
+#include "UObject/Class.h"
+#include "UObject/SoftObjectPath.h"
+#include "UObject/SoftObjectPtr.h"
+#include "UObject/UObjectGlobals.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRound, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGMeleeEffects, Log, All);

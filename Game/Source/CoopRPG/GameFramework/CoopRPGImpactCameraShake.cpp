@@ -1,5 +1,8 @@
 #include "CoopRPGImpactCameraShake.h"
 
+#include "Math/UnrealMathUtility.h"
+#include "Math/Vector.h"
+
 namespace
 {
     constexpr float ImpactDurationSeconds = 0.18f;

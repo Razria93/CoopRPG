@@ -11,6 +11,7 @@
 
 #include "CoopRPG/GameFramework/CoopRPGPlayerState.h"
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimInstance.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/BlendSpace1D.h"
@@ -37,6 +38,7 @@
 #include "InputCoreTypes.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UObject/WeakObjectPtrTemplates.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGInput, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEquipment, Log, All);

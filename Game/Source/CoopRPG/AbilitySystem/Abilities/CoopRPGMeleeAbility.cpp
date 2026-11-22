@@ -6,14 +6,17 @@
 #include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGGameMode.h"
+#include "CoopRPG/GameFramework/CoopRPGGameplayFeedback.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Components/PrimitiveComponent.h"
+#include "Engine/HitResult.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Misc/CommandLine.h"
+#include "Misc/Optional.h"
 #include "Misc/Parse.h"
 #include "TimerManager.h"
 
