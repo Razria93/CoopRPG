@@ -11,10 +11,6 @@ class COOPRPG_API UCoopRPGSlashAbility : public UGameplayAbility
 
 public:
     UCoopRPGSlashAbility();
-    static constexpr int32 MaxTargets = 3;
-    static constexpr double RangeCm = 230.0;
-    static constexpr double HalfAngleDegrees = 55.0;
-    static constexpr float DamagePerTarget = 18.0f;
 
 protected:
     virtual bool CheckCost(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
@@ -29,6 +25,13 @@ protected:
 private:
     void ResolveHit();
 
+public:
+    static constexpr int32 MaxTargets = 3;
+    static constexpr double RangeCm = 230.0;
+    static constexpr double HalfAngleDegrees = 55.0;
+    static constexpr float DamagePerTarget = 18.0f;
+
+private:
     FGuid Round;
     FTimerHandle HitTimer;
     FVector Facing = FVector::ForwardVector;

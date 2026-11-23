@@ -64,8 +64,6 @@ public:
     void ReleaseGuardInput();
     void ClearGuard();
     double GetGuardAngle(const FVector& SourcePosition) const;
-    static constexpr double GuardHalfAngleDegrees = 45.0;
-    static constexpr float GuardDamageMultiplier = 0.5f;
     int32 GetDisplaySlot() const { return DisplaySlot; }
     void SetDisplaySlot(int32 Slot);
     void FlashPresentationHit();
@@ -120,6 +118,10 @@ private:
     void ConfigureHeroShield(ECoopRPGHero Hero);
     void SetPresentationTint(bool bDarkened);
     void RestorePresentationTint();
+
+public:
+    static constexpr double GuardHalfAngleDegrees = 45.0;
+    static constexpr float GuardDamageMultiplier = 0.5f;
 
 private:
     UPROPERTY()

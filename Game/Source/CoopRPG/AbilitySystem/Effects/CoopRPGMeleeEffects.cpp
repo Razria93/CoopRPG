@@ -60,11 +60,6 @@ UCoopRPGSlashCost::UCoopRPGSlashCost()
     Cost.ModifierMagnitude = FScalableFloat(-Stamina);
 }
 
-FGameplayTag UCoopRPGSlashCooldown::GetCooldownTag()
-{
-    return TAG_Cooldown_Slash.GetTag();
-}
-
 UCoopRPGSlashCooldown::UCoopRPGSlashCooldown()
 {
     DurationPolicy = EGameplayEffectDurationType::HasDuration;
@@ -75,4 +70,9 @@ UCoopRPGSlashCooldown::UCoopRPGSlashCooldown()
     Changes.AddTag(GetCooldownTag());
     Tags->SetAndApplyTargetTagChanges(Changes);
     GEComponents.Add(Tags);
+}
+
+FGameplayTag UCoopRPGSlashCooldown::GetCooldownTag()
+{
+    return TAG_Cooldown_Slash.GetTag();
 }

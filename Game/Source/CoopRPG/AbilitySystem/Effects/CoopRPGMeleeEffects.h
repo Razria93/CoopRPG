@@ -12,6 +12,8 @@ public:
     UCoopRPGMeleeDamage();
 
     static void SetDamage(FGameplayEffectSpec& Spec, float Amount);
+
+public:
     static constexpr float BaseDamage = 10.0f;
 };
 
@@ -42,6 +44,8 @@ class COOPRPG_API UCoopRPGSlashCost : public UGameplayEffect
 
 public:
     UCoopRPGSlashCost();
+
+public:
     static constexpr float Stamina = 25.0f;
 };
 
@@ -53,5 +57,7 @@ class COOPRPG_API UCoopRPGSlashCooldown : public UGameplayEffect
 public:
     UCoopRPGSlashCooldown();
     static FGameplayTag GetCooldownTag();
+
+public:
     static constexpr float Seconds = 6.0f;
 };
