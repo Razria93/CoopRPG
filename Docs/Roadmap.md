@@ -73,6 +73,11 @@
 - **로컬 2인 확인** · 잡몹과 흑기사에 수호기사 3번 슬롯 도발을 적용했다. 범위·벽, SP·쿨다운, 흑기사 반격 대상과 방향 유지, 만료 후 기존 대상 복귀를 확인했다. [게임 규칙](Project.md#guardian-taunt) · [시험 결과](Validation/ForestExpedition.md#guardian-taunt-verification)
 - **다음 후보** · 수동 플레이에서 인접한 적의 도발 표시와 방패 반격 마커를 확인한다. 이어 흑기사 처치 후 보상 상자를 거쳐 두 명이 탈출 포탈로 나가는 흐름을 검증한다.
 
+<a id="boss-reward-extraction"></a>
+## 3차 MVP 후속 · 흑기사 보상과 공동 탈출
+
+흑기사 처치 후 보상 상자와 마법진을 열고 두 사람이 포탈에 머물렀을 때 원정 결과와 골드를 확정한다. 상자에는 HP·SP 회복 물약을 한 개씩 배치했다. 11/24 전용 서버와 A·B에서 처치 뒤 잔류, 마지막 HP 물약 경합, 포탈 이탈·재진입 뒤 로비 복귀, 실패 후 같은 맵 재도전과 입장 재고 복원을 확인했다. [패키지 검증 근거](Validation/ForestExpedition.md#boss-reward-extraction-verification)
+
 <a id="phase2-current"></a>
 ## 2차 MVP 현행 작업 · 2026-11-18
 

@@ -50,6 +50,7 @@ private:
     void TickPuzzleRewards(ACoopRPGGameState& State);
     void FinalizePuzzleReward(ACoopRPGGameState& State, ACoopRPGPlayerController& Player,
         ECoopRPGPuzzleReward Reward, bool bTimedOut);
+    void OpenBossRewards(ACoopRPGGameState& State);
     void AdvanceRoundIfReady(ACoopRPGGameState& State, const FString& Destination);
 
 private:

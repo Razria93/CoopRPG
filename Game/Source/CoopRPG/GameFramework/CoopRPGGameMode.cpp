@@ -374,7 +374,7 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
     }
 
     const ACoopRPGExtractionZone* Zone = State->GetExtractionZone();
-    const bool bCanUseZone = IsValid(Zone) && State->GetTeamLootCount() >= 1;
+    const bool bCanUseZone = IsValid(Zone) && State->IsExtractionUnlocked();
     bool bDeath = false;
     int32 PlayersInside = 0;
     uint8 OccupantsA = 0;
@@ -415,8 +415,12 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
     }
     else
     {
-        const bool bBossDefeated = bExpeditionBoss && IsValid(Enemy.Get()) && Enemy->IsDead();
-        State->EvaluateRound(bParticipantDisconnected, bDeath, PlayersInside, bBossDefeated);
+        if (!bParticipantDisconnected && !bDeath && bExpeditionBoss && IsValid(Enemy.Get())
+            && Enemy->IsDead() && State->CanStartBossRewards())
+        {
+            OpenBossRewards(*State);
+        }
+        State->EvaluateRound(bParticipantDisconnected, bDeath, PlayersInside);
         if (State->GetRoundEndReason() == ECoopRPGRoundEndReason::BossDefeated)
         {
             for (const auto& Participant : RoundPlayers)
@@ -427,6 +431,42 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
                 }
             }
         }
+    }
+}
+
+void ACoopRPGGameMode::OpenBossRewards(ACoopRPGGameState& State)
+{
+    const FVector ChestLocation(1200.0, 0.0, 28.0);
+    // Matches the placed Joint Extraction in L_ExpeditionSkirmish.
+    const FVector PortalLocation(2440.0, 0.0, 6.0);
+    auto* RewardChest = GetWorld()->SpawnActor<ACoopRPGSharedChest>(ChestLocation, FRotator::ZeroRotator);
+    auto* Portal = GetWorld()->SpawnActor<ACoopRPGExtractionZone>(PortalLocation, FRotator::ZeroRotator);
+    if (!IsValid(RewardChest) || !IsValid(Portal))
+    {
+        if (IsValid(RewardChest))
+        {
+            RewardChest->Destroy();
+        }
+        if (IsValid(Portal))
+        {
+            Portal->Destroy();
+        }
+        return;
+    }
+
+    auto* SupplyChest = State.GetSharedChest();
+    RewardChest->SetBossRewardStock();
+    for (const auto& Participant : RoundPlayers)
+    {
+        if (auto* Player = Participant.Get(); IsValid(Player) && Player->GetOpenedChest() == SupplyChest)
+        {
+            Player->CloseOpenedChest(State.GetRoundId(), TEXT("BossRewards"));
+        }
+    }
+    State.StartBossRewards(*RewardChest, *Portal);
+    if (IsValid(SupplyChest))
+    {
+        SupplyChest->Destroy();
     }
 }
 

@@ -116,6 +116,18 @@ void ACoopRPGSharedChest::RecordFirstOpen()
     OnRep_FirstOpenedAt();
 }
 
+void ACoopRPGSharedChest::SetBossRewardStock()
+{
+    check(HasAuthority());
+    RecoveryStock = 1;
+    StaminaRecoveryStock = 1;
+    WeaponStock = 0;
+    MartialPowerScrollStock = 0;
+    ProtectionScrollStock = 0;
+    SlashCapsuleStock = 0;
+    ForceNetUpdate();
+}
+
 bool ACoopRPGSharedChest::TryTakeStock(int32& Stock)
 {
     if (!HasAuthority() || Stock <= 0)

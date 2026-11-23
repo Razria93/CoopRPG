@@ -85,6 +85,7 @@ public:
     void TakeRecoveryItem();
     void TakeStaminaRecoveryItem();
     void TakeMeleeWeapon();
+    void CloseOpenedChest(FGuid RoundId, const TCHAR* Reason);
     void RequestRecoveryRegistration(bool bStamina, bool bRegistered);
     void TakeStatScroll(ECoopRPGScrollStat Stat);
     void TakeSlashCapsule();
@@ -107,7 +108,6 @@ private:
     void ServerAcknowledgeRoundResult(FGuid RoundId);
     void OpenSharedChest();
     void CloseSharedChest();
-    void CloseOpenedChest(FGuid RoundId, const TCHAR* Reason);
     void UseRecoveryItem();
     void UseStaminaRecoveryItem();
     void RequestRecoveryUse(bool bStamina);

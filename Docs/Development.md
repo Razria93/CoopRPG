@@ -322,6 +322,15 @@ Win64 패키지의 서버와 A·B에서 첫 로비·원정 완주·두 번째 �
 
 A·B는 War Cry 파동, 바닥 범위선과 적의 도발 표시로 발동을 확인할 수 있다. 반격 대상 마커와 이름표가 겹치면 기존 표시가 우선한다. 첫 패키지는 바닥 파동 표현을 위해 Holy Nova를 사용했다. 사용자가 합의한 War Cry를 다시 확인해 MedievalRPGVFX의 Combat/Melee에 있는 NS_MRPG_War_Cry로 교체했다. War Cry 에셋에 설정된 기본 색상과 밝기를 사용한다. 짙은 주황빛 범위선은 발동 순간부터 지면의 400cm 경계를 그리고 0.72초 안에 사라진다. 적 위의 도발 표시는 짙은 적갈색 배경과 밝은 살구색 글씨를 사용한다. 범위선은 플레이어 카드보다 먼저 그리고 War Cry의 가로 크기도 같은 판정 반경에 맞춰 계산한다. [규칙](Project.md#guardian-taunt) · [2인 패키지 확인](Validation/ForestExpedition.md#guardian-taunt-verification)
 
+<a id="boss-reward-extraction-implementation"></a>
+### 11/24 · 흑기사 보상과 공동 탈출
+
+흑기사 처치는 보상 단계의 시작으로 사용한다. 서버가 전투용 보급 상자의 열람을 닫고 HP·SP 물약이 한 개씩 들어 있는 보상 상자와 포탈을 연다. 재고 차감은 기존 공용 상자 경로로 처리한다. 포탈에 두 사람이 머물면 기존 탈출 카운트다운을 시작하고, 한 명이 이탈하면 초기화한다. 성공 결과와 기존 개인 골드는 탈출을 마친 뒤 확정한다.
+
+사용자 요청에 따라 보스 포탈과 마법진을 버섯 군락과 같은 좌표에 배치했다. 포탈 메시의 회전과 크기도 버섯 군락의 배치값을 사용했다. 수동 확인 후 보상 상자를 포탈과 같은 중심선 Y 0으로 옮기고 A·B 상자 열기와 공동 탈출을 다시 확인했다.
+
+**근거** · [보스 보상 작업](Roadmap.md#boss-reward-extraction) · [패키지 검증과 화면·로그 위치](Validation/ForestExpedition.md#boss-reward-extraction-verification)
+
 <a id="gates"></a>
 ## 중간 목표의 최초 기한과 실제 판정
 

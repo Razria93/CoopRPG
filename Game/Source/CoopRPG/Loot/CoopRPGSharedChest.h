@@ -30,6 +30,7 @@ public:
     int32 GetSlashCapsuleStock() const { return SlashCapsuleStock; }
     bool TryTakeSlashCapsule();
     void RecordFirstOpen();
+    void SetBossRewardStock();
 
 private:
     bool TryTakeStock(int32& Stock);

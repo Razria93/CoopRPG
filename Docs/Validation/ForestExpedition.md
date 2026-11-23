@@ -1011,3 +1011,41 @@ MedievalRPGVFX의 `Combat/Melee/NS_MRPG_War_Cry`와 의존 에셋 16개를 로�
 **색상 재검증** · 범위선은 짙은 주황색 `#C43E1E`, 적 위 도발 표시는 적갈색 `#5D2214` 바탕과 밝은 살구색 `#FFD7AA` 글씨로 바꿨다. 같은 전용 서버 실행 파일과 Cook 데이터를 재사용하고 새 클라이언트를 적용했다. 잡몹전 A 1440×810과 B 960×540에서 두 대상의 도발 표시와 War Cry의 밝은 파동 위에서 읽히는 경계를 확인했다. 스크린샷과 원본 로그는 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-WarmLabel/`에 있다.
 
 **11/24 사용자 조작 회차** · 서버는 수호기사 도발 5회와 발동당 SP 15 소모, 한 번에 버섯 2~3마리 적용을 기록했다. A·B에서 각각 War Cry 재생 5회를 확인했다. 이 기록은 사용자 조작 중 재생을 대조한 결과다. 원본은 `Artifacts/Validation/guardian-taunt/PackageWarCryWarm/manual-20261123-235957-110/`에 있다.
+
+
+<a id="boss-reward-extraction-verification"></a>
+## 11/24 · 흑기사 보상 상자와 공동 탈출
+
+`feat/boss-reward-extraction`의 `66f770c` 위 미커밋 변경을 UE 5.8.4 Win64 Development로 검증했다. 같은 PC에서 전용 서버 1개와 A 1440×810, B 960×540을 실행했다. 시험 명령으로 보스의 측면 공격 각도와 체력을 고정하고, 실제 기본 공격 입력으로 마지막 피해를 냈다. 상자는 이동 후 [E]로 열고 두 클라이언트에서 [F]를 함께 눌렀다. 포탈 진입 위치와 재도전용 실패는 시험 명령으로 재현했다.
+
+| 확인 항목 | 서버와 A·B 대조 결과 |
+|---|---|
+| 흑기사 처치 | 피해 10이 확정된 뒤 보상 상자와 포탈이 한 번 열렸다. A·B에 보상 단계가 전달되고 화면에서 보상 상자와 포탈을 확인했다. 이 시점에는 점수·골드·맵 전환이 발생하지 않았다. |
+| 공용 보상 상자 | 같은 상자에 HP·SP 물약이 한 개씩 표시됐다. 두 사람의 마지막 HP 물약 요청 중 하나만 승인됐고 상대 요청은 재고 소진으로 거절됐다. A·B 모두 남은 HP 물약 0을 표시했다. |
+| 공동 탈출 | 1인 진입 중에는 카운트다운을 시작하지 않았다. 2인 진입 뒤 이탈하자 0.133초에 초기화됐고, 재진입부터 3.020초를 채우자 성공 1회와 팀 점수 1점이 확정됐다. 각 플레이어에게 30골드가 한 번 지급되고 A·B가 같은 세션 로비로 돌아왔다. |
+| 실패와 재도전 | 보상 물약을 가져간 뒤 사망과 만료 조건을 동시에 발생시켜 실패 0점·사망 우선 판정을 확인했다. 같은 보스 맵의 새 라운드에서 두 사람의 개인 HP·SP 물약은 입장 때와 같은 0개였다. 보급분은 HP·SP 각각 1개로 초기화됐다. 이번 실패에는 성공 골드 지급이 없었다. |
+
+첫 화면에서 포탈이 옆을 보며 마법진을 가렸다. 포탈을 접근 방향으로 돌리고 마법진 바깥쪽으로 옮겼다. 최종 클라이언트를 다시 링크하고 같은 서버 실행 파일과 Cook 콘텐츠로 A·B 화면을 다시 확인했다. 최종 Editor Unity 빌드도 통과했다.
+
+**로컬 근거** · `Artifacts/Validation/boss-reward-extraction/`의 아래 두 회차에 `server.log`, `a.log`, `b.log`, `result.json`과 A·B 화면을 보관했다.
+
+- `PackagedAB-success-final/BossRewards/` · 보스 라운드 `693FE055461B0024BC0D88AD80520562`. `02-both-looting`, `04-one-waiting`, `05-reset`, `06-success`, `07-lobby` 화면.
+- `PackagedAB-retry-confirmed/BossRewards/` · 보스 라운드 `597BDC3145A22EAED7ED1DB9832C52DB`에서 재도전 `570C1D0042887FE757FA70B51B98A3CB`로 전환. `03-stock-depleted`, `04-retry` 화면.
+- `PortalAlignmentBuild/prior-executables.json` · 위 두 회차에 사용한 서버와 클라이언트 SHA-256. `Editor-final.log` · 해당 회차의 Editor 빌드.
+
+### 11/24 · 1스테이지와 보스 포탈 위치 통일
+
+에디터에서 버섯 군락의 배치를 읽어 보스 포탈 메시를 `(3000, 0, 0)`, 가이드 원·마법진·서버 탈출 판정 중심을 `(2440, 0, 6)`으로 맞췄다. 메시 회전은 90°, 배율은 1배다. 갱신한 양쪽 실행 파일에 이전 Cook 콘텐츠를 사용했다. 같은 패키지의 전용 서버에서 버섯 군락과 보스전의 탈출 판정 중심이 같은 좌표로 기록됐다.
+
+A 1440×810에서 보상 상자부터 마법진까지 걸어 들어갔다. B 960×540의 진입·이탈·재진입은 시험 명령으로 재현했다. 한 사람만 있을 때는 카운트다운이 시작되지 않았다. 이탈 시 초기화됐고 재진입 후 3.012초에 성공 1점이 한 번 확정됐다. A·B가 같은 세션 로비로 돌아왔다.
+
+**로컬 근거** · `Artifacts/Validation/boss-reward-extraction/`의 `portal-map-transforms.json`, `PortalAlignmentBuild/skirmish-stage.log`, `Package/executables.json`. `PackagedAB-portal-alignment-final/BossRewards/`에 라운드 `D72877AA4A81C17DB4E1358940C1383B`의 서버·A·B 원본 로그와 화면 `04-one-waiting-a.png`, `05-reset-b.png`를 보관했다.
+
+
+### 11/24 · 흑기사 보상 상자 중앙 배치
+
+수동 확인에서 보상 상자가 출구 통로 중심선에서 옆으로 한쪽에 치우쳐 보였다. 보상 상자는 `(1200, 0, 28)`에 배치했다. 서버 로그에서 상자와 마법진의 Y 좌표가 모두 0임을 확인했다. 변경한 Win64 Development 서버를 별도 경로에서 실행하고 이전 Cook 콘텐츠와 클라이언트 실행 파일을 사용했다.
+
+A 1440×810과 B 960×540에서 [E]로 같은 상자를 열었다. 마지막 HP 물약은 한 번 지급됐고 양쪽 재고가 0으로 갱신됐다. A는 상자에서 마법진까지 걸어갔고, B의 이탈·재진입은 시험 위치 제어로 재현했다. 재진입 후 3.012초에 성공 1점이 확정됐고 두 사람은 같은 세션 로비로 복귀했다.
+
+**로컬 근거** · `Artifacts/Validation/boss-reward-extraction/` 아래 `PackagedAB-centered-chest/BossRewards/`에 라운드 `E2E0665C40AF323F4B1921BCA46462CF`의 A·B 화면과 서버·A·B 원본 로그를 보관했다. 실행 파일 해시는 `CenteredChestBuild/executables.json`에 있다.

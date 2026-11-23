@@ -20,7 +20,7 @@ public:
     bool ContainsPawn(const APawn& Pawn) const;
     bool IsPortalOpen() const { return bPortalOpened; }
     void SetPresentationColor(const FLinearColor& Color);
-    void PresentSkirmishPortal(bool bActive, bool bCountingDown);
+    void PresentExpeditionPortal(bool bActive, bool bCountingDown);
     void OpenPortal();
 
 protected:

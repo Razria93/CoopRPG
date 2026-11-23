@@ -22,7 +22,8 @@ enum class ECoopRPGDashboardLabel : uint8
 {
     Lobby, Skirmish, Puzzle, Boss, Expedition, Ready, OpenChest, ChestActions, Mushrooms, Plates, Knight,
     Stone, Portal, WaitForPartner, Countdown, Start, Defeat, StoneGranted, CountStarted, CountReset,
-    More, Fold, ReadyYes, ReadyWait, ReadyMissing, Objective, StoneAppeared, CloseChest, Departure, EquipSword
+    More, Fold, ReadyYes, ReadyWait, ReadyMissing, Objective, StoneAppeared, CloseChest, Departure, EquipSword,
+    BossRewards, BossRewardsOpened
 };
 
 namespace
@@ -51,13 +52,17 @@ namespace
         {
             return ELabel::Plates;
         }
-        if (Stage == 1 && State.GetTeamLootCount() > 0)
+        if ((Stage == 1 || Stage == 3) && State.IsExtractionUnlocked())
         {
             if (State.IsExtractionInProgress())
             {
                 return ELabel::Countdown;
             }
-            return State.GetExtractionPlayersInside() == 1 ? ELabel::WaitForPartner : ELabel::Portal;
+            if (State.GetExtractionPlayersInside() == 1)
+            {
+                return ELabel::WaitForPartner;
+            }
+            return Stage == 3 ? ELabel::BossRewards : ELabel::Portal;
         }
         if (const auto* Drop = State.GetEnemyLoot(); Stage == 1 && IsValid(Drop) && !Drop->IsClaimed())
         {
@@ -83,6 +88,7 @@ namespace
         case ELabel::Defeat: return TEXT("버섯 처치");
         case ELabel::StoneAppeared: return TEXT("마법석 드롭");
         case ELabel::StoneGranted: return TEXT("마법석 획득 · 포탈 개방");
+        case ELabel::BossRewardsOpened: return TEXT("흑기사 처치 · 보상과 포탈 개방");
         case ELabel::CountStarted: return TEXT("공동 탈출 시작");
         case ELabel::CountReset: return TEXT("공동 탈출 대기 취소");
         default: return TEXT("");
@@ -130,6 +136,8 @@ namespace
             return {TEXT("전투 준비를 마쳤어요. 버섯을 모두 처치해 주세요.")};
         case ELabel::Stone:
             return {TEXT("떨어진 마법석에 다가가 [T] 키로 주워 주세요.")};
+        case ELabel::BossRewards:
+            return {TEXT("[E]로 보상 상자를 열 수 있어요."), TEXT("두 사람이 포탈에 서면 원정을 마쳐요.")};
         case ELabel::Portal:
             return {TEXT("마법석으로 포탈이 열렸어요."), TEXT("두 사람 모두 포탈의 마법진에 올라서 주세요.")};
         case ELabel::WaitForPartner:
@@ -226,7 +234,7 @@ void FCoopRPGExpeditionDashboard::Draw(AHUD& HUD, UCanvas& Canvas, const ACoopRP
     Text(Canvas, TEXT("숲 원정"), FVector2D(TitleX, HeaderTop + (HeaderRowHeight - SmallHeight) * 0.5f), SmallFont, DashboardTextColor);
     Text(Canvas, StageTitle(Stage), FVector2D(TitleX, TitleTop), StageFont, DashboardTextColor);
 
-    if (!bWaiting && (Stage == 1 || Stage == 3))
+    if (!bWaiting && (Stage == 1 || Stage == 3) && !State.AreBossRewardsAvailable())
     {
         const int32 Time = FMath::Max(0, FMath::CeilToInt(State.GetRoundRemainingSeconds()));
         const FString Clock = FString::Printf(TEXT("%d:%02d"), Time / 60, Time % 60);
@@ -244,7 +252,8 @@ void FCoopRPGExpeditionDashboard::Draw(AHUD& HUD, UCanvas& Canvas, const ACoopRP
     else
     {
         const TCHAR* Objective = Stage == 1 ? TEXT("버섯을 모두 처치하세요")
-            : Stage == 2 ? TEXT("각 발판에 한 명씩 서세요") : TEXT("흑기사를 처치하세요");
+            : Stage == 2 ? TEXT("각 발판에 한 명씩 서세요")
+            : State.AreBossRewardsAvailable() ? TEXT("두 사람이 포탈로 탈출하세요") : TEXT("흑기사를 처치하세요");
         Text(Canvas, Objective, FVector2D(Left, ObjectiveTop), BodyFont, DashboardTextColor);
         if (Stage == 1 || Stage == 2)
         {
@@ -295,7 +304,7 @@ void FCoopRPGExpeditionDashboard::Draw(AHUD& HUD, UCanvas& Canvas, const ACoopRP
         }
     }
 
-    const bool bBossActive = Stage == 3 && State.IsRoundPlaying();
+    const bool bBossActive = Stage == 3 && State.IsRoundPlaying() && !State.AreBossRewardsAvailable();
     DrawNotice(HUD, Canvas, State, Goal, ViewSize, Pad, Width, bWide, bBossActive);
     DrawBossHealth(HUD, Canvas, State, bBossActive, bWide);
 }
@@ -502,6 +511,7 @@ void FCoopRPGExpeditionDashboard::Update(const ACoopRPGGameState& State, int32 S
         LastDefeats = Defeats;
         LastInside = Inside;
         bLastStone = bStone;
+        bLastBossRewards = false;
         bLastCountdown = bCountdown;
         UE_LOG(LogCoopRPGExpeditionHUD, Log, TEXT("DashboardReset Round=%s Stage=%d Records=0 Defeats=%d Stone=%d Inside=%d"),
             *Round.ToString(), Stage, Defeats, bStone, Inside);
@@ -514,6 +524,11 @@ void FCoopRPGExpeditionDashboard::Update(const ACoopRPGGameState& State, int32 S
     if (bStone && !bLastStone)
     {
         AddRecord(ELabel::StoneGranted);
+    }
+    if (State.AreBossRewardsAvailable() && !bLastBossRewards)
+    {
+        AddRecord(ELabel::BossRewardsOpened);
+        bLastBossRewards = true;
     }
     if (bCountdown != bLastCountdown)
     {

@@ -369,7 +369,8 @@ void ACoopRPGLootHUD::DrawHUD()
             }
         }
     }
-    const bool bShowChestPanel = bShowCombat && IsValid(Controller->GetOpenedChest());
+    const bool bShowChestPanel = bShowCombat && IsValid(Controller->GetOpenedChest())
+        && Controller->GetOpenedChest() == State->GetSharedChest();
     if (!bShowChestPanel)
     {
         SelectedChestItem = EChestControl::None;
@@ -764,13 +765,14 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     const int32 BagCount = Controller.GetRecoveryCount();
     const int32 StaminaStock = Chest->GetStaminaRecoveryStock();
     const int32 BagStamina = Controller.GetStaminaRecoveryCount();
+    const bool bBossReward = State.AreBossRewardsAvailable();
     const bool bShowsScroll = CoopRPG::Expedition::IsSkirmish(Controller.GetWorld());
     const int32 ScrollStock = bShowsScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::MartialPower) : 0;
     const int32 ProtectionStock = bShowsScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::Protection) : 0;
     const int32 SlashStock = bShowsScroll ? Chest->GetSlashCapsuleStock() : 0;
     const bool bOwnsSlash = Controller.HasSlashCapsule() || Controller.HasSlashRegistered();
     const bool bOwnsSword = Controller.GetSwordOwnership() != ECoopRPGSwordOwnership::None;
-    const bool bSwordSelected = SelectedChestItem == EChestControl::Sword;
+    const bool bSwordSelected = !bBossReward && SelectedChestItem == EChestControl::Sword;
     const bool bPotionSelected = SelectedChestItem == EChestControl::Potion;
     const bool bStaminaSelected = SelectedChestItem == EChestControl::StaminaPotion;
     const bool bScrollSelected = bShowsScroll && SelectedChestItem == EChestControl::MartialPowerScroll;
@@ -779,7 +781,8 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     const FBox2D& Status = ExpeditionDashboard.GetPanelBounds();
     const double Left = Status.bIsValid ? Status.Min.X : PanelPad;
     const double Top = Status.bIsValid ? Status.Max.Y + 8.0 : 136.0;
-    const double FooterOffset = bShowsScroll ? 24.0 : 0.0;
+    const double RewardOffset = bBossReward ? -26.0 : 0.0;
+    const double FooterOffset = bShowsScroll ? 24.0 : RewardOffset;
     const double Height = 190.0 + FooterOffset;
     constexpr double Width = 252.0;
     // Keep the chest above the party cards in the compact viewport.
@@ -793,11 +796,11 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     };
     ChestPotionBounds = RowBounds(0);
     ChestStaminaBounds = RowBounds(1);
-    ChestSwordBounds = RowBounds(2);
+    ChestSwordBounds = bBossReward ? FBox2D(ForceInit) : RowBounds(2);
     ChestScrollBounds = bShowsScroll ? RowBounds(3) : FBox2D(ForceInit);
     ChestProtectionBounds = bShowsScroll ? RowBounds(4) : FBox2D(ForceInit);
     ChestSlashBounds = bShowsScroll ? RowBounds(5) : FBox2D(ForceInit);
-    const double TakeTop = Top + (bShowsScroll ? 158.0 : 130.0);
+    const double TakeTop = Top + (bShowsScroll ? 158.0 : 130.0 + RewardOffset);
     ChestTakeBounds = FBox2D(FVector2D(Left + Width - 105.0, TakeTop),
         FVector2D(Left + Width - 13.0, TakeTop + 25.0));
 
@@ -815,7 +818,8 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     };
 
     EquipmentPanel.DrawPanelFrame(*this, ChestPanelBounds);
-    Text(*Canvas, TEXT("공용 상자"), FVector2D(Left + 14.0, Top + 11.0), Font(13.0f, true), Ink);
+    const TCHAR* ChestTitle = bBossReward ? TEXT("흑기사 보상 상자") : TEXT("공용 상자");
+    Text(*Canvas, ChestTitle, FVector2D(Left + 14.0, Top + 11.0), Font(13.0f, true), Ink);
     const auto DrawChestRow = [&](const FBox2D& Bounds, const TCHAR* Name, int32 Remaining, bool bSelected)
     {
         Fill(Bounds, bSelected ? FColor(221, 207, 160) : FColor(236, 221, 181));
@@ -827,7 +831,10 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     };
     DrawChestRow(ChestPotionBounds, TEXT("HP 회복 물약"), Stock, bPotionSelected);
     DrawChestRow(ChestStaminaBounds, TEXT("SP 회복 물약"), StaminaStock, bStaminaSelected);
-    DrawChestRow(ChestSwordBounds, TEXT("한손검"), WeaponStock, bSwordSelected);
+    if (!bBossReward)
+    {
+        DrawChestRow(ChestSwordBounds, TEXT("한손검"), WeaponStock, bSwordSelected);
+    }
     if (bShowsScroll)
     {
         DrawChestRow(ChestScrollBounds, TEXT("무력 스크롤"), ScrollStock, bScrollSelected);
@@ -841,7 +848,7 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
             bProtectionSelected ? TEXT("수호") : TEXT("무력"), FCoopRPGStatProgress::PointsPerScroll)
         : bSlashSelected ? FString(TEXT("사용하면 2번 슬롯에 등록"))
         : FString(TEXT("아이템을 선택해 주세요."));
-    Text(*Canvas, Detail, FVector2D(Left + 15.0, Top + (bShowsScroll ? 142.0 : 112.0)), Body, Muted);
+    Text(*Canvas, Detail, FVector2D(Left + 15.0, Top + (bShowsScroll ? 142.0 : 112.0 + RewardOffset)), Body, Muted);
     const int32 OwnedCount = bSwordSelected ? (bOwnsSword ? 1 : 0) : bStaminaSelected ? BagStamina
         : bSlashSelected ? static_cast<int32>(Controller.HasSlashCapsule())
         : bScrollSelected || bProtectionSelected ? Controller.GetStatScrollCount(
@@ -856,7 +863,7 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     Centered(ChestTakeBounds, bAlreadyOwned ? TEXT("이미 보유")
         : bHasSelection && Remaining <= 0 ? TEXT("품절") : TEXT("가방에 담기"), Emphasis,
         bCanTake ? FLinearColor(FColor(255, 243, 208)) : Muted);
-    Text(*Canvas, TEXT("[G] 검 받기  [F] HP 물약  [Q] 닫기"),
+    Text(*Canvas, bBossReward ? TEXT("[F] HP 물약  [Q] 닫기") : TEXT("[G] 검 받기  [F] HP 물약  [Q] 닫기"),
         FVector2D(Left + 15.0, Top + 164.0 + FooterOffset), Font(10.0f), Muted);
 
     FString Display = FString::Printf(TEXT("Round=%s Stock=%d BagRecovery=%d Selected=%d X=%.0f Y=%.0f Width=%.0f WeaponStock=%d BagSword=%d StaminaStock=%d BagStamina=%d ScrollStock=%d BagScrolls=%d ProtectionStock=%d BagProtection=%d ProtectionRowY=%.0f TakeY=%.0f SlashStock=%d BagSlash=%d SlashRowY=%.0f"),
@@ -879,7 +886,7 @@ void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
     const auto* Chest = Controller.GetOpenedChest();
     const auto* Stone = State.GetEnemyLoot();
     const auto* Potion = State.GetEnemyPotion();
-    const bool bHasStone = State.GetTeamLootCount() > 0;
+    const bool bCanExtract = State.IsExtractionUnlocked();
     const bool bStoneOnGround = IsValid(Stone) && !Stone->IsClaimed();
     const bool bPotionOnGround = IsValid(Potion) && !Potion->IsClaimed();
     if (bLegacyStatus)
@@ -887,8 +894,9 @@ void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
         const int32 Remaining = FMath::CeilToInt(State.GetRoundRemainingSeconds());
         DrawRect(PanelBackground, PanelPad, PanelPad, 294.0f, IsValid(Chest) ? 115.0f : 65.0f);
         const TCHAR* Title = bBoss ? TEXT("BOSS") : TEXT("SKIRMISH");
-        DrawText(FString::Printf(TEXT("%s  |  %d:%02d"), Title, Remaining / 60, Remaining % 60),
-            PanelAccent, PanelTextX, PanelPad + 7.0f);
+        const FString Header = State.AreBossRewardsAvailable() ? FString(TEXT("BOSS  |  REWARDS"))
+            : FString::Printf(TEXT("%s  |  %d:%02d"), Title, Remaining / 60, Remaining % 60);
+        DrawText(Header, PanelAccent, PanelTextX, PanelPad + 7.0f);
         if (IsValid(Chest))
         {
             DrawText(FString::Printf(TEXT("[G] Take sword  ·  Weapons %d"), Chest->GetWeaponStock()),
@@ -897,7 +905,7 @@ void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
                 FLinearColor::White, PanelTextX, PanelPad + 54.0f);
             DrawText(TEXT("[Q] Close"), PanelAccent, PanelTextX, PanelPad + 80.0f);
         }
-        else if (const auto* Zone = State.GetExtractionZone(); bHasStone && IsValid(Zone))
+        else if (const auto* Zone = State.GetExtractionZone(); bCanExtract && IsValid(Zone))
         {
             const double Seconds = FMath::CeilToDouble(State.GetExtractionRemainingSeconds() * 10.0) / 10.0;
             const FString Hint = State.IsExtractionInProgress()
@@ -917,12 +925,18 @@ void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
             DrawText(Hint, PanelAccent, PanelTextX, PanelPad + 33.0f);
         }
     }
-    if (const auto* Zone = State.GetExtractionZone(); bHasStone && IsValid(Zone)
+    if (const auto* Zone = State.GetExtractionZone(); bCanExtract && IsValid(Zone)
         && !IsValid(Chest) && !State.IsExtractionInProgress())
     {
         DrawPortalGuide(*Zone);
     }
 
+    if (const auto* Reward = State.GetSharedChest(); State.AreBossRewardsAvailable()
+        && IsValid(Reward) && !IsValid(Chest))
+    {
+        DrawWorldLabel(Reward->GetActorLocation() + FVector(0.0, 0.0, 70.0), TEXT("[E] 흑기사 보상 상자"),
+            PanelAccent, FVector2D(0, -18));
+    }
     if (bStoneOnGround)
     {
         DrawLootDropLabel(Stone->GetActorLocation(), true);
@@ -1886,7 +1900,7 @@ void ACoopRPGLootHUD::DrawExpeditionResult(const ACoopRPGGameState& State, int32
     switch (Reason)
     {
     case ECoopRPGRoundEndReason::PuzzleSolved: Detail = TEXT("서로 다른 발판을 동시에 밟아 퍼즐을 풀었어요."); break;
-    case ECoopRPGRoundEndReason::BossDefeated: Detail = TEXT("흑기사를 처치하고 숲 원정을 마쳤어요."); break;
+    case ECoopRPGRoundEndReason::BossDefeated: Detail = TEXT("흑기사 결전에서 함께 탈출했어요."); break;
     case ECoopRPGRoundEndReason::Death: Detail = TEXT("파티원이 쓰러졌어요."); break;
     case ECoopRPGRoundEndReason::Timeout: Detail = TEXT("제한 시간이 끝났어요."); break;
     case ECoopRPGRoundEndReason::Disconnected: Detail = TEXT("파티원의 접속이 끊겼어요."); break;
