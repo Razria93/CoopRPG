@@ -147,12 +147,15 @@ public:
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
 
-    void PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVector& Location, float Yaw, int32 Slot, uint32 Swing, float ScaleMultiplier = 1.0f);
+    void PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVector& Location, float Yaw, int32 Slot, uint32 Swing);
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastMeleeSweepTrace(const FCoopRPGMeleeSweepTrace& Trace);
 
     void SetReadySlots(const FCoopRPGReadySlots& Slots);
+    void SetLobbyDepartureDeadline(double Deadline);
+    bool IsLobbyDepartureScheduled() const { return LobbyDepartureDeadline > 0.0; }
+    double GetLobbyDepartureRemainingSeconds() const;
     int32 RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated);
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);
@@ -227,6 +230,9 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_ReadySlots)
     FCoopRPGReadySlots ReadySlots;
+
+    UPROPERTY(Replicated)
+    double LobbyDepartureDeadline = 0.0;
 
     UPROPERTY(ReplicatedUsing = OnRep_PuzzleStatus)
     FCoopRPGPuzzleStatus PuzzleStatus;

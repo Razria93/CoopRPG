@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AbilitySystemInterface.h"
+#include "Engine/NetSerialization.h"
 #include "GameFramework/Character.h"
 #include "CoopRPGEnemy.generated.h"
 
@@ -43,6 +44,12 @@ struct FCoopRPGShieldWarning
 
     UPROPERTY()
     uint32 Sequence = 0;
+
+    UPROPERTY()
+    double StartedAt = 0.0;
+
+    UPROPERTY()
+    FVector_NetQuantize10 Origin = FVector::ZeroVector;
 };
 
 USTRUCT()
@@ -94,6 +101,7 @@ private:
 
     ACoopRPGCharacter* FindTarget(float Range, bool bMeasureAttackDistance = false) const;
     double GetAttackDistance(const ACoopRPGCharacter& Player) const;
+    double GetAttackDistanceOffset(const ACoopRPGCharacter& Player) const;
     float GetAttackRange() const;
     void SetShieldWarning(int32 TargetSlot, float FacingYaw, double EndsAt);
     void StopChasing();
@@ -115,6 +123,8 @@ private:
 
     void CreateGroundRing();
     void UpdateShieldPresentation(bool bRaised);
+    void UpdateCounterTelegraph();
+    void CreateCounterTelegraph(double Radius);
 
     UFUNCTION()
     void OnRep_ShieldEncounter();
@@ -146,12 +156,25 @@ private:
 
     UPROPERTY()
     TObjectPtr<UMaterialInterface> GroundRingMaterial;
+    UPROPERTY()
+    TObjectPtr<UMaterialInterface> CounterOcclusionMaterial;
 
     UPROPERTY(Transient)
     TObjectPtr<UDynamicMeshComponent> GroundRing;
 
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInstanceDynamic> GroundRingFrontMaterial;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UDynamicMeshComponent> CounterOutline;
+    UPROPERTY()
+    TObjectPtr<UDynamicMeshComponent> CounterOccludedOutline;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UDynamicMeshComponent> CounterFill;
+
+    double CounterTelegraphRadius = 0.0;
+    uint32 DisplayedCounterPattern = 0;
 
     UPROPERTY(EditInstanceOnly, Category = "Presentation")
     bool bShowFacingMarker = false;

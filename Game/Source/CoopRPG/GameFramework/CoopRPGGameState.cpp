@@ -19,6 +19,7 @@
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "DynamicMesh/MeshNormals.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -195,6 +196,7 @@ void ACoopRPGGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGGameState, RoundId);
     DOREPLIFETIME(ACoopRPGGameState, RoundStatus);
     DOREPLIFETIME(ACoopRPGGameState, ReadySlots);
+    DOREPLIFETIME(ACoopRPGGameState, LobbyDepartureDeadline);
     DOREPLIFETIME(ACoopRPGGameState, PuzzleStatus);
     DOREPLIFETIME(ACoopRPGGameState, ExtractionZone);
     DOREPLIFETIME(ACoopRPGGameState, EnemyPotion);
@@ -273,7 +275,7 @@ void ACoopRPGGameState::MulticastGameplayFeedback_Implementation(const FCoopRPGG
 
 
 void ACoopRPGGameState::PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVector& Location,
-    float Yaw, int32 Slot, uint32 Swing, float ScaleMultiplier)
+    float Yaw, int32 Slot, uint32 Swing)
 {
     if (Effect == ECoopRPGMeleeEffect::None || GetNetMode() == NM_DedicatedServer)
     {
@@ -299,7 +301,7 @@ void ACoopRPGGameState::PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVecto
     }
     if (Visual)
     {
-        Visual->SetVariableFloat(TEXT("User.Scale"), Assets.Scale * ScaleMultiplier);
+        Visual->SetVariableFloat(TEXT("User.Scale"), Assets.Scale);
         if (Effect == ECoopRPGMeleeEffect::MushroomHit)
         {
             Visual->SetVariableLinearColor(TEXT("User.PrimaryColor"), FLinearColor(1.65f, 0.86f, 0.30f));
@@ -416,6 +418,20 @@ void ACoopRPGGameState::SetReadySlots(const FCoopRPGReadySlots& Slots)
         ReadySlots = Slots;
         ForceNetUpdate();
     }
+}
+
+void ACoopRPGGameState::SetLobbyDepartureDeadline(double Deadline)
+{
+    if (HasAuthority() && LobbyDepartureDeadline != Deadline)
+    {
+        LobbyDepartureDeadline = Deadline;
+        ForceNetUpdate();
+    }
+}
+
+double ACoopRPGGameState::GetLobbyDepartureRemainingSeconds() const
+{
+    return FMath::Max(0.0, LobbyDepartureDeadline - GetServerWorldTimeSeconds());
 }
 
 int32 ACoopRPGGameState::RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated)

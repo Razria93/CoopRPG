@@ -8,6 +8,7 @@
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 #include "CoopRPGGameMode.h"
 #include "CoopRPGGameState.h"
+#include "CoopRPGPlayerState.h"
 #include "CoopRPGLootHUD.h"
 #include "CoopRPGGameViewportClient.h"
 
@@ -71,6 +72,10 @@ void ACoopRPGPlayerController::FlushPressedKeys()
 {
     const bool bHeldW = bManualInput && IsInputKeyDown(EKeys::W);
     Super::FlushPressedKeys();
+    if (auto* HUD = GetHUD<ACoopRPGLootHUD>())
+    {
+        HUD->ReleaseHudPointer();
+    }
     if (bManualInput)
     {
         bAwaitFocusClick = true;
@@ -84,6 +89,25 @@ void ACoopRPGPlayerController::FlushPressedKeys()
 
 bool ACoopRPGPlayerController::InputKey(const FInputKeyEventArgs& Params)
 {
+    if (Params.Key == EKeys::LeftMouseButton)
+    {
+        if (auto* HUD = GetHUD<ACoopRPGLootHUD>(); HUD && HUD->HandleHudPrimaryButton(*this, Params))
+        {
+            if (Params.Event == IE_Pressed || Params.Event == IE_DoubleClick)
+            {
+                bAwaitFocusClick = false;
+                bConsumeFocusClickRelease = false;
+            }
+            return true;
+        }
+    }
+    if (Params.Key == EKeys::MouseScrollUp || Params.Key == EKeys::MouseScrollDown || Params.Key == EKeys::MouseWheelAxis)
+    {
+        if (auto* HUD = GetHUD<ACoopRPGLootHUD>(); HUD && HUD->HandleHudWheel(*this, Params))
+        {
+            return true;
+        }
+    }
     if (bManualInput && Params.Key == EKeys::LeftMouseButton)
     {
         if (bAwaitFocusClick && (Params.Event == IE_Pressed || Params.Event == IE_DoubleClick))
@@ -138,8 +162,7 @@ void ACoopRPGPlayerController::RestoreTravelRecovery(int32 Count)
 {
     if (HasAuthority())
     {
-        RecoveryCount = FMath::Clamp(Count, 0, 1);
-        ForceNetUpdate();
+        SetRecoveryCount(FMath::Clamp(Count, 0, 1));
     }
 }
 
@@ -384,8 +407,7 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
     }
 
     // Both mutations run in this server RPC before replication or the next RPC.
-    ++RecoveryCount;
-    ForceNetUpdate();
+    SetRecoveryCount(RecoveryCount + 1);
     ClientGameplayFeedback({ECoopRPGFeedbackKind::RecoveryAcquired, GetPawn()});
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestGranted Chest=%s Round=%s Request=%u Stock=%d->%d Recovery=%d %s"),
         *GetNameSafe(Chest), *RoundId.ToString(), Request, StockBefore, Chest->GetRecoveryStock(), RecoveryCount,
@@ -440,8 +462,8 @@ void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId)
         return;
     }
 
-    const int32 CountBefore = RecoveryCount--;
-    ForceNetUpdate();
+    const int32 CountBefore = RecoveryCount;
+    SetRecoveryCount(CountBefore - 1);
     ClientGameplayFeedback({ECoopRPGFeedbackKind::RecoveryUsed, CurrentCharacter});
     State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::Recovery, CurrentCharacter, HealthAfter - HealthBefore});
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("RecoveryUsed Round=%s HP=%.2f->%.2f Recovery=%d->%d %s"),
@@ -491,8 +513,8 @@ void ACoopRPGPlayerController::ServerTakeEnemyLoot_Implementation(FGuid RoundId,
     const TCHAR* Failure = GetEnemyLootRejection(RoundId, DropId, Drop);
     if (!Failure && bPotion && Drop->TryClaim())
     {
-        const int32 Previous = RecoveryCount++;
-        ForceNetUpdate();
+        const int32 Previous = RecoveryCount;
+        SetRecoveryCount(Previous + 1);
         ClientGameplayFeedback({ECoopRPGFeedbackKind::RecoveryAcquired, GetPawn()});
         UE_LOG(LogCoopRPGEnemyLootRequest, Log, TEXT("EnemyPotionGranted Round=%s DropId=%s Recovery=%d->%d %s"),
             *RoundId.ToString(), *DropId.ToString(), Previous, RecoveryCount, *Context);
@@ -538,6 +560,17 @@ const TCHAR* ACoopRPGPlayerController::GetEnemyLootRejection(FGuid RoundId, FGui
         return TEXT("OutOfRange");
     }
     return Drop->IsClaimed() ? TEXT("AlreadyClaimed") : nullptr;
+}
+
+void ACoopRPGPlayerController::SetRecoveryCount(int32 Count)
+{
+    check(HasAuthority());
+    RecoveryCount = Count;
+    if (auto* PartyState = GetPlayerState<ACoopRPGPlayerState>())
+    {
+        PartyState->SetPartyRecoveryCount(Count);
+    }
+    ForceNetUpdate();
 }
 
 void ACoopRPGPlayerController::LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId) const

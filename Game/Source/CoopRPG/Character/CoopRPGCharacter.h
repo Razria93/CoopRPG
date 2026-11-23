@@ -16,6 +16,7 @@ class UMaterialInterface;
 class UStaticMeshComponent;
 enum class ECoopRPGHero : uint8;
 struct FInputActionValue;
+struct FOnAttributeChangeData;
 
 USTRUCT()
 struct FCoopRPGMeleePresentation
@@ -51,6 +52,7 @@ public:
 
     float GetHealth() const;
     float GetStamina() const;
+    int32 GetPartyStamina() const { return PartyStamina; }
     bool HasMeleeWeapon() const { return bHasMeleeWeapon; }
     void EquipMeleeWeapon();
     int32 GetDisplaySlot() const { return DisplaySlot; }
@@ -69,6 +71,7 @@ protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 private:
+    void UpdatePartyStamina(const FOnAttributeChangeData& Change);
     void Move(const FInputActionValue& Value);
     void Attack();
     void CancelAttack();
@@ -126,6 +129,10 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_DisplaySlot)
     int32 DisplaySlot = 0;
+
+    // Expedition HUD snapshot for observers. The GAS attribute is replicated to its owner.
+    UPROPERTY(Replicated)
+    int32 PartyStamina = INDEX_NONE;
 
     // The constructor asset finder keeps the material referenced.
     TObjectPtr<UMaterialInterface> HeroHitDarkenMaterial = nullptr;

@@ -29,7 +29,7 @@ namespace
     constexpr TCHAR ForestMapName[] = TEXT("L_ForestExpedition");
     constexpr TCHAR RoundOneMapName[] = TEXT("L_Round_01");
     constexpr double ResultDisplaySeconds = 3.0;
-    constexpr double LobbyDepartureSeconds = 1.0;
+    constexpr double LobbyDepartureSeconds = 3.0;
     constexpr int32 RoundCapacity = ACoopRPGGameState::RoundCapacity;
 
     bool UsesPlacedRoundActors(const FString& MapName)
@@ -125,12 +125,14 @@ void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
         if (!bAllReady && !bTravelAttempted)
         {
             NextTravelTime = 0.0;
+            State->SetLobbyDepartureDeadline(0.0);
             RoundPlayers.Reset();
         }
         else if (bAllReady && !bTravelAttempted && NextTravelTime <= 0.0 && State->GetRoundId().IsValid())
         {
             RoundPlayers = MoveTemp(ReadyPlayers);
             NextTravelTime = State->GetServerWorldTimeSeconds() + LobbyDepartureSeconds;
+            State->SetLobbyDepartureDeadline(NextTravelTime);
             UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("ExpeditionLobbyReady Round=%s ReadyPlayers=%d"),
                 *State->GetRoundId().ToString(), RoundPlayers.Num());
         }
@@ -689,6 +691,7 @@ void ACoopRPGGameMode::AdvanceRoundIfReady(ACoopRPGGameState& State, const FStri
             }
         }
         NextTravelTime = 0.0;
+        State.SetLobbyDepartureDeadline(0.0);
         RoundPlayers.Reset();
         bTravelAttempted = false;
         PublishReadySlots(State);

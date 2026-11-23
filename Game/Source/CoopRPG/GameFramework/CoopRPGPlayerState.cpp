@@ -7,6 +7,7 @@ void ACoopRPGPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGPlayerState, SelectedHero);
+    DOREPLIFETIME(ACoopRPGPlayerState, PartyRecoveryCount);
 }
 
 void ACoopRPGPlayerState::SetSelectedHero(ECoopRPGHero Hero)
@@ -15,6 +16,15 @@ void ACoopRPGPlayerState::SetSelectedHero(ECoopRPGHero Hero)
     {
         SelectedHero = Hero;
         OnRep_SelectedHero();
+        ForceNetUpdate();
+    }
+}
+
+void ACoopRPGPlayerState::SetPartyRecoveryCount(int32 Count)
+{
+    if (HasAuthority() && PartyRecoveryCount != Count)
+    {
+        PartyRecoveryCount = Count;
         ForceNetUpdate();
     }
 }

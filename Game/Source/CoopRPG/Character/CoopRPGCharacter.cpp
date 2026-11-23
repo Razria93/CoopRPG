@@ -6,6 +6,7 @@
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Debug/CoopRPGCombatProbeComponent.h"
+#include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
 #include "CoopRPG/GameFramework/CoopRPGGameplayFeedback.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 
@@ -173,6 +174,7 @@ void ACoopRPGCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGCharacter, bHasMeleeWeapon);
     DOREPLIFETIME(ACoopRPGCharacter, DisplaySlot);
+    DOREPLIFETIME_CONDITION(ACoopRPGCharacter, PartyStamina, COND_SkipOwner);
     DOREPLIFETIME(ACoopRPGCharacter, MeleePresentation);
 }
 
@@ -346,6 +348,12 @@ void ACoopRPGCharacter::BeginPlay()
     AbilitySystem->InitAbilityActorInfo(this, this);
     if (HasAuthority())
     {
+        if (CoopRPG::Expedition::IsExpedition(GetWorld()))
+        {
+            PartyStamina = FMath::CeilToInt(GetStamina());
+            AbilitySystem->GetGameplayAttributeValueChangeDelegate(UCoopRPGCombatAttributes::GetStaminaAttribute())
+                .AddUObject(this, &ThisClass::UpdatePartyStamina);
+        }
         AbilitySystem->GiveAbility(FGameplayAbilitySpec(UCoopRPGMeleeAbility::StaticClass()));
     }
 }
@@ -371,6 +379,16 @@ void ACoopRPGCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
         Input->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACoopRPGCharacter::Move);
         Input->BindAction(AttackAction, ETriggerEvent::Started, this, &ACoopRPGCharacter::Attack);
         PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ACoopRPGCharacter::CancelAttack);
+    }
+}
+
+void ACoopRPGCharacter::UpdatePartyStamina(const FOnAttributeChangeData& Change)
+{
+    const int32 DisplayValue = FMath::CeilToInt(Change.NewValue);
+    if (PartyStamina != DisplayValue)
+    {
+        PartyStamina = DisplayValue;
+        ForceNetUpdate();
     }
 }
 

@@ -22,6 +22,8 @@ public:
 
     ECoopRPGHero GetSelectedHero() const { return SelectedHero; }
     void SetSelectedHero(ECoopRPGHero Hero);
+    int32 GetPartyRecoveryCount() const { return PartyRecoveryCount; }
+    void SetPartyRecoveryCount(int32 Count);
 
 private:
     UFUNCTION()
@@ -30,4 +32,7 @@ private:
 private:
     UPROPERTY(ReplicatedUsing = OnRep_SelectedHero)
     ECoopRPGHero SelectedHero = ECoopRPGHero::Unassigned;
+
+    UPROPERTY(Replicated)
+    int32 PartyRecoveryCount = 0;
 };
