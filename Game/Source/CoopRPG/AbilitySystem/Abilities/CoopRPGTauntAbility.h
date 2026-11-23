@@ -16,7 +16,7 @@ public:
 
     static constexpr double RangeCm = 400.0;
     static constexpr double DurationSeconds = 4.0;
-    static constexpr double PulseSeconds = 0.48;
+    static constexpr double PulseSeconds = 0.72;
 
 protected:
     virtual bool CheckCost(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,

@@ -7,7 +7,6 @@
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGSlashAbility.h"
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGTauntAbility.h"
 #include "CoopRPG/Debug/Logging/CoopRPGTauntLog.h"
-#include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
@@ -234,20 +233,14 @@ void ACoopRPGCharacter::MulticastTauntPulse_Implementation(FVector_NetQuantize O
     }
     TauntPulseOrigin = Origin;
     TauntPulseStartedAt = GetWorld()->GetTimeSeconds();
-    static const FSoftObjectPath EffectPath(TEXT("/Game/ThirdParty/Effects/Taunt/MedievalRPGVFX/Niagara/Elements/Holy/NS_MRPG_Holy_Nova.NS_MRPG_Holy_Nova"));
+    static const FSoftObjectPath EffectPath(TEXT("/Game/ThirdParty/Effects/Taunt/WarCry/MedievalRPGVFX/Niagara/Combat/Melee/NS_MRPG_War_Cry.NS_MRPG_War_Cry"));
     auto* Effect = Cast<UNiagaraSystem>(EffectPath.TryLoad());
-    auto* Nova = Effect ? UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-        this, Effect, Origin, FRotator::ZeroRotator, FVector(0.16), true, false) : nullptr;
-    if (Nova)
-    {
-        Nova->SetVariableLinearColor(TEXT("User.PrimaryColor"), FLinearColor(0.11f, 0.49f, 1.0f));
-        Nova->SetVariableLinearColor(TEXT("User.SecondaryColor"), FLinearColor(0.28f, 0.79f, 1.0f));
-        Nova->SetVariableFloat(TEXT("User.Intensity"), 0.55f);
-        Nova->SetVariableBool(TEXT("User.RuneEnabled"), false);
-        Nova->SetCustomTimeDilation(1.4f);
-        Nova->Activate();
-    }
-    CoopRPG::Debug::TauntLog::Pulse(*this, Nova != nullptr);
+    // Calibrated radius of War Cry's visible ground wave at unit scale.
+    constexpr double WarCryGroundWaveRadiusCm = 615.0;
+    constexpr double WarCryScale = UCoopRPGTauntAbility::RangeCm / WarCryGroundWaveRadiusCm;
+    const auto* WarCry = Effect ? UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+        this, Effect, Origin, FRotator::ZeroRotator, FVector(WarCryScale)) : nullptr;
+    CoopRPG::Debug::TauntLog::Pulse(*this, WarCry != nullptr);
 }
 
 bool ACoopRPGCharacter::IsGuarding() const

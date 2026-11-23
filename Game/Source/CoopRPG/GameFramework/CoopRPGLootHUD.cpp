@@ -356,8 +356,20 @@ void ACoopRPGLootHUD::DrawHUD()
     const auto Attack = bShowEquipment && LocalHero ? CoopRPG::ExpeditionUI::ReadAttackHud(*State, *LocalHero,
         ExpeditionStage == 1 || ExpeditionStage == 3) : CoopRPG::ExpeditionUI::FAttackHudStatus{};
     WorldLabelBounds.Reset();
-    const bool bShowChestPanel = bShowEquipment && State->IsRoundPlaying()
-        && (ExpeditionStage == 1 || ExpeditionStage == 3) && IsValid(Controller->GetOpenedChest());
+    const bool bShowCombat = bShowEquipment && State->IsRoundPlaying()
+        && (ExpeditionStage == 1 || ExpeditionStage == 3);
+    if (bShowCombat)
+    {
+        for (TActorIterator<ACoopRPGCharacter> It(GetWorld()); It; ++It)
+        {
+            const double PulseAge = It->GetTauntPulseAge();
+            if (PulseAge >= 0.0 && PulseAge < UCoopRPGTauntAbility::PulseSeconds)
+            {
+                DrawTauntPulse(It->GetTauntPulseOrigin(), PulseAge);
+            }
+        }
+    }
+    const bool bShowChestPanel = bShowCombat && IsValid(Controller->GetOpenedChest());
     if (!bShowChestPanel)
     {
         SelectedChestItem = EChestControl::None;
@@ -992,11 +1004,6 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
     TArray<FNameplate, TInlineAllocator<8>> Plates;
     for (TActorIterator<ACoopRPGCharacter> It(GetWorld()); It; ++It)
     {
-        const double PulseAge = It->GetTauntPulseAge();
-        if (PulseAge >= 0.0 && PulseAge < UCoopRPGTauntAbility::PulseSeconds)
-        {
-            DrawTauntPulse(It->GetTauntPulseOrigin(), PulseAge);
-        }
         const int32 Slot = It->GetDisplaySlot();
         if (Slot < 1 || Slot > UE_ARRAY_COUNT(NameplatePlayerNames) || !It->GetPlayerState())
         {
@@ -1149,9 +1156,11 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
 
 void ACoopRPGLootHUD::DrawTauntPulse(const FVector& Origin, double Elapsed)
 {
-    const double Progress = FMath::Clamp(Elapsed / UCoopRPGTauntAbility::PulseSeconds, 0.0, 1.0);
-    const double Radius = UCoopRPGTauntAbility::RangeCm * FMath::Min(1.0, Progress * 1.4);
-    const FLinearColor Tint(0.12f, 0.65f, 0.97f, static_cast<float>(1.0 - Progress));
+    constexpr double FadeSeconds = 0.18;
+    const double TimeLeft = UCoopRPGTauntAbility::PulseSeconds - Elapsed;
+    constexpr double Radius = UCoopRPGTauntAbility::RangeCm;
+    FLinearColor Tint(FColor(196, 62, 30));
+    Tint.A = static_cast<float>(FMath::Clamp(TimeLeft / FadeSeconds, 0.0, 1.0));
     constexpr int32 Segments = 36;
     FVector Last = Project(Origin + FVector(Radius, 0.0, 0.0));
     for (int32 Segment = 1; Segment <= Segments; ++Segment)
@@ -1183,8 +1192,8 @@ void ACoopRPGLootHUD::DrawTauntMarker(const ACoopRPGEnemy& Enemy)
         return;
     }
 
-    DrawRect(FLinearColor(0.025f, 0.08f, 0.16f, 0.94f), Bounds.Min.X, Bounds.Min.Y, Bounds.GetSize().X, Bounds.GetSize().Y);
-    Text(*Canvas, TEXT("도발"), Position, MarkerFont, FLinearColor(FColor(152, 219, 255)));
+    DrawRect(FLinearColor(FColor(93, 34, 20, 240)), Bounds.Min.X, Bounds.Min.Y, Bounds.GetSize().X, Bounds.GetSize().Y);
+    Text(*Canvas, TEXT("도발"), Position, MarkerFont, FLinearColor(FColor(255, 215, 170)));
     WorldLabelBounds.Add(Bounds);
 }
 

@@ -990,6 +990,24 @@ UE 5.8.4 Development 전용 서버와 동일 PC의 A·B로 58/58을 통과했다
 
 도발 중 접속을 끊은 수호기사와 체력이 0이 된 수호기사 모두 서버에서 도발이 해제됐다. A 1440×810과 B 960×540에서 파동과 표시를 기록했다. 흑기사전에서 반격 대상 마커는 도발 표시보다 우선한다. 파동이 화면 가까이 퍼지는 순간에는 하단 HUD를 잠깐 가로지르는 장면이 있었다.
 
-최종 원본은 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-Final`, `Boss-Final`에 있다. 각 폴더의 `server.log`, `a.log`, `b.log`와 `result.json`을 대조했다. 잡몹 파동은 `Skirmish-Final/Review/mushrooms-a-pulse.png`, `mushrooms-b-pulse.png`에, 흑기사 반격 예고는 `Boss-Final/02-boss-guardian-warning-a.png`, `02-boss-guardian-warning-b.png`에 남겼다. `Holy Nova`와 의존 에셋 19개는 로컬 검증 패키지에 포함했다. 별도 PC 검증과 사용자 조작 검증은 남아 있다.
+Holy Nova를 사용한 이전 검증의 원본은 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-Final`, `Boss-Final`에 있다. 각 폴더의 `server.log`, `a.log`, `b.log`와 `result.json`을 대조했다. 잡몹 파동은 `Skirmish-Final/Review/mushrooms-a-pulse.png`, `mushrooms-b-pulse.png`에, 흑기사 반격 예고는 `Boss-Final/02-boss-guardian-warning-a.png`, `02-boss-guardian-warning-b.png`에 남겼다. `Holy Nova`와 의존 에셋 19개는 로컬 검증 패키지에 포함했다. 별도 PC 검증과 사용자 조작 검증은 남아 있다.
 
 **외부 FX 로드 실패 재현** · 최종 클라이언트 실행 파일의 시험용 사본에서 `Holy Nova` 조회 경로만 존재하지 않는 이름으로 바꿨다. 같은 패키지의 전용 서버와 A·B에서 `Niagara=0`, 범위 안 두 마리 도발, 기본 파란 파동을 원본 로그와 두 해상도 화면으로 확인했다. 결과와 화면은 `Artifacts/Validation/guardian-taunt/Skirmish-MissingEffect/`에, 시험용 사본의 해시와 조회 경로는 같은 위치의 상위 `PackageMissingEffect/verification-inputs.json`에 있다. 외부 에셋을 뺀 별도 Cook은 이번 검증 범위에 포함되지 않는다.
+
+### 11/23 · War Cry 에셋 교체
+
+MedievalRPGVFX의 `Combat/Melee/NS_MRPG_War_Cry`와 의존 에셋 16개를 로컬 패키지에 적용했다. 에셋의 기본 색상과 밝기를 사용하고, 재생 크기는 0.65배로 적용했다. 파란 범위선은 별도로 표시한다. 잡몹전에서 A 1440×810과 B 960×540 모두 War Cry와 파란 범위선을 확인했다. 섬광의 가장 밝은 구간은 실제 플레이 화면에서 흰빛과 금빛이 섞여 보였다. 흑기사전은 두 클라이언트의 `Niagara=1`과 기존 반격이 원래 대상에게 끝난 뒤 다음 반격부터 도발 대상이 적용되는 것을 로그로 확인했다.
+
+**근거** · 도발 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-WarCryRed/`와 `Boss-WarCryRed/`에 `server.log`, `a.log`, `b.log`, `result.json`이 있다. 잡몹전 프레임은 `Skirmish-WarCryRed/Review/mushrooms-a-war-cry.png`와 `mushrooms-b-war-cry.png`에 남겼다. 독립 에디터 빌드 로그는 상위 폴더의 `war-cry-red-editor.log`에 있다.
+
+### 11/23 · 도발 경계와 War Cry 파동 크기
+
+기존 파란 선은 4m까지 커지면서 먼저 사라져 War Cry의 바닥 파동과 경계가 어긋나 보였다. 범위선은 시전 순간부터 4m에 고정하고 0.72초 동안 표시한다. 하단 파티 카드와 자원 패널은 선을 덮도록 렌더링 순서를 바꿨다. War Cry의 재생 스케일은 서버의 판정 반경으로 계산한다.
+
+전용 서버의 잡몹전에서 한 번 시전해 두 마리 적용을 확인했다. A 1440×810과 B 960×540의 녹화에서 밝은 바닥 파동이 후반에 각각 고정 경계 반경의 약 99%, 98%까지 도달하는 프레임을 비교했다. 이는 같은 장면에서 바닥의 밝은 영역을 기준으로 계산한 화면 추정값이다. 옅은 잔광은 경계 바깥에도 보인다. 첫 시험은 프레임 수집이 한 장으로 끝나고 클라이언트 이벤트를 기다리다 종료했다. 한 번만 시전하는 재시험은 양쪽의 War Cry 수신과 녹화가 완료됐다.
+
+**근거** · 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-AlignedRetry/`에 서버·A·B 원본 로그와 `Review/a-aligned-24.png`, `Review/b-aligned-24.png`를 보관한다. 실행 패키지와 독립 에디터 빌드 로그는 `D:/CoopRPG-Validation/guardian-taunt-war-cry-alignment-20261123`에 있다.
+
+**색상 재검증** · 범위선은 짙은 주황색 `#C43E1E`, 적 위 도발 표시는 적갈색 `#5D2214` 바탕과 밝은 살구색 `#FFD7AA` 글씨로 바꿨다. 같은 전용 서버 실행 파일과 Cook 데이터를 재사용하고 새 클라이언트를 적용했다. 잡몹전 A 1440×810과 B 960×540에서 두 대상의 도발 표시와 War Cry의 밝은 파동 위에서 읽히는 경계를 확인했다. 스크린샷과 원본 로그는 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-WarmLabel/`에 있다.
+
+**11/24 사용자 조작 회차** · 서버는 수호기사 도발 5회와 발동당 SP 15 소모, 한 번에 버섯 2~3마리 적용을 기록했다. A·B에서 각각 War Cry 재생 5회를 확인했다. 이 기록은 사용자 조작 중 재생을 대조한 결과다. 원본은 `Artifacts/Validation/guardian-taunt/PackageWarCryWarm/manual-20261123-235957-110/`에 있다.
