@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
 #include "CoopRPGGameplayFeedback.h"
+#include "CoopRPGLobbyStorage.h"
 #include "CoopRPGGameState.generated.h"
 
 class ACoopRPGEnemy;
@@ -140,6 +141,8 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     void InitializeLobby();
+    const FCoopRPGStorageStock& GetSharedStorage() const { return SharedStorage; }
+    void UpdateSharedStorage(const FCoopRPGStorageStock& Stock);
     void InitializePuzzle(const FVector& PlateA, const FVector& PlateB);
     void InitializeLootRound(ACoopRPGSharedChest* Chest, ACoopRPGExtractionZone* Zone);
     void SetRoundPlaying(bool bPlaying);
@@ -240,6 +243,9 @@ private:
 
     UPROPERTY(Replicated)
     double PuzzleRewardDeadline = 0.0;
+
+    UPROPERTY(Replicated)
+    FCoopRPGStorageStock SharedStorage;
 
     UPROPERTY(ReplicatedUsing = OnRep_PuzzleStatus)
     FCoopRPGPuzzleStatus PuzzleStatus;

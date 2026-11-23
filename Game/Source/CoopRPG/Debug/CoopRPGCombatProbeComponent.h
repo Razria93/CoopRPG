@@ -22,6 +22,7 @@ public:
     void Prepare(float Stamina);
     void RequestActivation();
     void RequestSlashValidation(FName Action);
+    void RequestShopValidation(FName Scenario);
     void Snapshot(const FString& Label);
     void SetVitals(float TargetHealth, float AttackerHealth);
     void ConfirmTwice();

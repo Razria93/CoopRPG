@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "CoopRPGGameplayFeedback.h"
+#include "CoopRPGLobbyStorage.h"
 #include "CoopRPGRecoveryInventory.h"
 #include "CoopRPGExpeditionSupplies.h"
 #include "CoopRPGPuzzleReward.h"
@@ -54,6 +55,18 @@ public:
         const FCoopRPGStatProgress& Stats, const FCoopRPGExpeditionSupplies& Supplies, const FCoopRPGSlashProgress& Slash, bool bPowerReward);
     void RestoreWaitingExpeditionSupplies(const FCoopRPGExpeditionSupplies& Supplies);
     void InitializeStageInventory(FGuid RoundId);
+    void LoadSessionGold(FGuid RoundId);
+    void AwardBossGold(FGuid RoundId);
+    int32 GetSessionGold() const { return SessionGold; }
+    void RequestShopTrade(ECoopRPGStorageItem Item, bool bBuy);
+    const FString& GetShopFeedback() const { return ShopFeedback; }
+    bool IsShopTradePending() const { return bShopTradePending; }
+    void LoadPersonalStorage();
+    const FCoopRPGStorageStock& GetPersonalStorage() const { return PersonalStorage; }
+    const FString& GetStorageFeedback() const { return StorageFeedback; }
+    void ClearStorageFeedback() { StorageFeedback.Reset(); }
+    int32 GetStorageBagCount(ECoopRPGStorageItem Item) const;
+    void RequestStorageTransfer(ECoopRPGStorageItem Item, bool bPersonal, bool bDeposit);
     FCoopRPGRecoverySnapshot GetTravelRecovery(bool bRetry) const;
     FIntPoint GetStageRecoverySupplies() const { return StageRecoverySupplies; }
     FIntPoint GetStageRecoveryUsesRemaining() const { return StageRecoveryUsesRemaining; }
@@ -118,6 +131,20 @@ private:
     void ServerSetSwordEquipped(FGuid RoundId, bool bEquipped);
 
     UFUNCTION(Server, Reliable)
+    void ServerTransferStorage(FGuid RoundId, ECoopRPGStorageItem Item, bool bPersonal, bool bDeposit);
+
+    UFUNCTION(Client, Reliable)
+    void ClientStorageFeedback(const FString& Message);
+
+    void AdjustStorageBag(ECoopRPGStorageItem Item, int32 Delta);
+
+    UFUNCTION(Server, Reliable)
+    void ServerShopTrade(FGuid RoundId, uint32 Request, ECoopRPGStorageItem Item, bool bBuy);
+
+    UFUNCTION(Client, Reliable)
+    void ClientFinishShopTrade(uint32 Request, const FString& Message);
+
+    UFUNCTION(Server, Reliable)
     void ServerSetShieldEquipped(FGuid RoundId, bool bEquipped);
 
     UFUNCTION(Server, Reliable)
@@ -164,10 +191,10 @@ private:
     void OnRep_RecoveryCount();
 
     UFUNCTION()
-    void OnRep_PuzzleReward();
+    void OnRep_StageRecoverySupplies();
 
     UFUNCTION()
-    void OnRep_StageRecoverySupplies();
+    void OnRep_PuzzleReward();
 
 private:
     UPROPERTY(ReplicatedUsing = OnRep_OpenedChest)
@@ -189,6 +216,18 @@ private:
     UPROPERTY(ReplicatedUsing = OnRep_StageRecoverySupplies)
     FIntPoint StageRecoverySupplies = FIntPoint::ZeroValue;
 
+    UPROPERTY(Replicated)
+    FCoopRPGStorageStock PersonalStorage;
+
+    FString StorageFeedback;
+
+    UPROPERTY(Replicated)
+    int32 SessionGold = 0;
+
+    uint32 NextShopRequest = 0;
+    uint32 LastShopRequest = 0;
+    bool bShopTradePending = false;
+    FString ShopFeedback;
     FGuid StageInventoryRound;
     FCoopRPGRecoverySnapshot EntryRecovery;
     FCoopRPGSwordSnapshot EntrySword;
