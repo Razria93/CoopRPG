@@ -10,6 +10,7 @@ struct FCoopRPGExpeditionSupplies
 
     bool HasSword() const { return OriginRound.IsValid(); }
 
+public:
     UPROPERTY()
     FGuid OriginRound;
 
