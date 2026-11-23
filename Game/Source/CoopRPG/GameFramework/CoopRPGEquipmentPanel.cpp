@@ -1158,6 +1158,7 @@ void FCoopRPGEquipmentPanel::DrawSkills(AHUD& HUD, UCanvas& Surface, const ACoop
     const auto* Hero = Cast<ACoopRPGCharacter>(Controller.GetPawn());
     const bool bCombatMap = CoopRPG::Expedition::IsSkirmish(Controller.GetWorld()) || CoopRPG::Expedition::IsBoss(Controller.GetWorld());
     const auto Slash = State && Hero ? ReadAttackHud(*State, *Hero, bCombatMap, true) : FAttackHudStatus{};
+    const auto Taunt = State && Hero ? ReadTauntHud(*State, *Hero, bCombatMap) : FAttackHudStatus{};
     const bool bActiveList = SkillGroup == 0;
     const int32 First = FirstSkillRows[SkillGroup];
     const int32 RemainingTenths = Attack.GetRemainingTenths();
@@ -1168,7 +1169,8 @@ void FCoopRPGEquipmentPanel::DrawSkills(AHUD& HUD, UCanvas& Surface, const ACoop
         const double Y = List.Min.Y + Index * SkillRowPitch;
         const FBox2D Bounds(FVector2D(Left, Y), FVector2D(Right, Y + SkillRowHeight));
         const bool bSlashRow = bActiveList && Row == 1 && Controller.HasSlashRegistered();
-        const bool bAttackRow = bActiveList && (Row == 0 || bSlashRow);
+        const bool bTauntRow = bActiveList && Row == 2 && Taunt.State != EAttackHudState::Unassigned;
+        const bool bAttackRow = bActiveList && (Row == 0 || bSlashRow || bTauntRow);
         DrawPanelBox(HUD, Bounds, bAttackRow ? Color(250, 237, 202) : Color(240, 226, 189), Border);
         const double MidY = Bounds.GetCenter().Y;
         const FVector2D Icon(Left + RowInset, MidY - IconSide * 0.5);
@@ -1190,20 +1192,27 @@ void FCoopRPGEquipmentPanel::DrawSkills(AHUD& HUD, UCanvas& Surface, const ACoop
             continue;
         }
 
-        const auto& SlotStatus = bSlashRow ? Slash : Attack;
+        const auto& SlotStatus = bTauntRow ? Taunt : bSlashRow ? Slash : Attack;
         const bool bReady = SlotStatus.State == EAttackHudState::Ready;
         const bool bCooling = SlotStatus.State == EAttackHudState::Cooling;
-        Dashboard.DrawBasicAttackGlyph(HUD, Surface, IconBounds, SlotStatus, bSlashRow);
+        if (bTauntRow)
+        {
+            DrawTauntGlyph(Surface, IconBounds, SlotStatus);
+        }
+        else
+        {
+            Dashboard.DrawBasicAttackGlyph(HUD, Surface, IconBounds, SlotStatus, bSlashRow);
+        }
 
-        const FString Name = Fit(Surface, bSlashRow ? TEXT("한손검 슬래시") : TEXT("기본 공격"), RowFont, TextWidth);
-        const FString Hint = Fit(Surface, bSlashRow ? TEXT("최대 3명 · SP 25") : TEXT("무기를 휘둘러 공격"), HintFont, TextWidth);
+        const FString Name = Fit(Surface, bTauntRow ? TEXT("도발") : bSlashRow ? TEXT("한손검 슬래시") : TEXT("기본 공격"), RowFont, TextWidth);
+        const FString Hint = Fit(Surface, bTauntRow ? TEXT("주변 적 · SP 15") : bSlashRow ? TEXT("최대 3명 · SP 25") : TEXT("무기를 휘둘러 공격"), HintFont, TextWidth);
         constexpr double LineGap = 4.0;
         const double NameHeight = Measure(Surface, Name, RowFont).Y;
         const double HintHeight = Measure(Surface, Hint, HintFont).Y;
         DrawPanelLabel(Surface, Name, TextLeft, MidY - (HintHeight + LineGap) * 0.5, RowFont, Ink);
         DrawPanelLabel(Surface, Hint, TextLeft, MidY + (NameHeight + LineGap) * 0.5, HintFont, Muted);
         const double ChipOffset = (ChipHeight + ChipGap) * 0.5;
-        Chip(bSlashRow ? TEXT("슬롯 2") : TEXT("슬롯 1"), MidY - ChipOffset, Color(237, 226, 194), Muted);
+        Chip(bTauntRow ? TEXT("슬롯 3") : bSlashRow ? TEXT("슬롯 2") : TEXT("슬롯 1"), MidY - ChipOffset, Color(237, 226, 194), Muted);
         const FString Status = bCooling ? FString::Printf(TEXT("쿨다운 %.1f초"), SlotStatus.GetRemainingTenths() / 10.0)
             : FString(bReady ? TEXT("사용 가능") : AttackHudLabel(SlotStatus.State));
         Chip(Status, MidY + ChipOffset, bReady ? Color(219, 232, 211) : Color(239, 216, 203),

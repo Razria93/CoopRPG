@@ -71,6 +71,7 @@ private:
 
     void PreparePlayerGuardLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character);
     void PrepareSlashLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character);
+    void PrepareTauntLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Guardian);
     void PrepareSkirmishLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character);
     void PlaceMeleeTestWall(const FVector& Location);
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);

@@ -2,6 +2,7 @@
 
 #include "AbilitySystemInterface.h"
 #include "CoreMinimal.h"
+#include "Engine/NetSerialization.h"
 #include "GameFramework/Character.h"
 #include "CoopRPGCharacter.generated.h"
 
@@ -59,6 +60,12 @@ public:
     bool HasMeleeWeapon() const { return bHasMeleeWeapon; }
     void SetMeleeWeaponEquipped(bool bEquipped);
     bool HasShieldEquipped() const { return bShieldEquipped; }
+    bool IsGuardian() const;
+    FVector GetTauntPulseOrigin() const { return TauntPulseOrigin; }
+    double GetTauntPulseAge() const;
+
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastTauntPulse(FVector_NetQuantize Origin);
     bool IsGuarding() const;
     void SetShieldEquipped(bool bEquipped);
     void ReleaseGuardInput();
@@ -86,6 +93,10 @@ private:
     void Attack();
     void CancelAttack();
     void UseSlash();
+    void UseTaunt();
+
+    FVector TauntPulseOrigin = FVector::ZeroVector;
+    double TauntPulseStartedAt = -100.0;
     void PressGuardInput();
     void SetGuarding(bool bGuarding);
 

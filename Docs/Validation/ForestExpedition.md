@@ -973,3 +973,23 @@ UE 5.8.4 Development 전용 서버와 동일 PC의 A·B로 58/58을 통과했다
 **근거** · 로컬 `Artifacts/Worktrees/mvp3-expedition-test/Artifacts/Validation/equipment-loading/` 아래 `validation-inputs.json`과 `Package/executables.json`에 소스·실행 파일 식별 정보가 있다. `PackagedAB-full/ExpeditionAB/`에 `result.json`, 서버·A·B 원본 로그 및 `00-lobby-defaults-*.png`, `06-lobby-personal-kept-*.png`를 남겼다.
 
 커밋 전 같은 패키지로 다시 실행해 로비와 첫 잡몹전의 기본 장비, 시간 초과 후 같은 맵의 새 회차에서 양쪽 기본 장비가 다시 표시되는 것을 확인했다. 서버와 A·B 로그·화면은 같은 위치의 `PackagedAB-commit-retry-2/ExpeditionAB/`에 남겼다.
+
+<a id="guardian-taunt-verification"></a>
+## 11/23 · 수호기사 도발과 흑기사 반격 대상 유지
+
+`feat/guardian-taunt`의 코드로 Windows 전용 서버와 클라이언트 A·B를 한 PC에서 실행했다. 역할·위치는 검증용 배치로 고정하고 3번 스킬, 가드, 기본 공격은 클라이언트의 실제 입력으로 실행했다. 행동 검증 패키지에는 별도 브랜치의 직업 기본 장비 변경을 임시 적용했다. 독립 도발 워크트리의 에디터 빌드는 별도로 확인했다.
+
+| 조건 | 확인한 결과 |
+|---|---|
+| 버섯 4마리 | 사거리와 가림 조건을 통과한 두 마리만 도발됐다. 범위 밖과 벽 뒤의 적은 제외됐다. |
+| 전사, 빈 범위, SP 부족, 쿨다운 | 전사와 빈 범위 요청은 서버에서 거절됐다. SP 부족 상태의 클라이언트 입력은 실제 발동으로 이어지지 않았다. 쿨다운 중에는 재발동과 추가 소모가 없었다. |
+| 방패 가드 중 발동 | 가드를 유지하면서 도발했고 SP가 100에서 85로 줄었다. 두 클라이언트에서 바닥 파동과 도발 상태가 표시됐다. |
+| 도발 만료와 같은 맵 재도전 | 4초 뒤 적이 기존 대상 선택으로 돌아왔다. 시간 초과 뒤 같은 맵의 새 회차에서는 쿨다운을 이월하지 않았다. |
+| 흑기사 반격 중 도발 | 진행 중이던 반격은 기존 P1 대상·방향으로 끝났다. 이후 반격은 P2 수호기사를 향했고, 그동안 P1이 후방에서 적중시켰다. 도발 만료 뒤에는 다시 가까운 P1을 선택했다. |
+| 흑기사 반격 전 도발 | 이미 시작된 공격이 없으면 다음 반격부터 수호기사를 대상으로 선택했다. |
+
+도발 중 접속을 끊은 수호기사와 체력이 0이 된 수호기사 모두 서버에서 도발이 해제됐다. A 1440×810과 B 960×540에서 파동과 표시를 기록했다. 흑기사전에서 반격 대상 마커는 도발 표시보다 우선한다. 파동이 화면 가까이 퍼지는 순간에는 하단 HUD를 잠깐 가로지르는 장면이 있었다.
+
+최종 원본은 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-Final`, `Boss-Final`에 있다. 각 폴더의 `server.log`, `a.log`, `b.log`와 `result.json`을 대조했다. 잡몹 파동은 `Skirmish-Final/Review/mushrooms-a-pulse.png`, `mushrooms-b-pulse.png`에, 흑기사 반격 예고는 `Boss-Final/02-boss-guardian-warning-a.png`, `02-boss-guardian-warning-b.png`에 남겼다. `Holy Nova`와 의존 에셋 19개는 로컬 검증 패키지에 포함했다. 별도 PC 검증과 사용자 조작 검증은 남아 있다.
+
+**외부 FX 로드 실패 재현** · 최종 클라이언트 실행 파일의 시험용 사본에서 `Holy Nova` 조회 경로만 존재하지 않는 이름으로 바꿨다. 같은 패키지의 전용 서버와 A·B에서 `Niagara=0`, 범위 안 두 마리 도발, 기본 파란 파동을 원본 로그와 두 해상도 화면으로 확인했다. 결과와 화면은 `Artifacts/Validation/guardian-taunt/Skirmish-MissingEffect/`에, 시험용 사본의 해시와 조회 경로는 같은 위치의 상위 `PackageMissingEffect/verification-inputs.json`에 있다. 외부 에셋을 뺀 별도 Cook은 이번 검증 범위에 포함되지 않는다.

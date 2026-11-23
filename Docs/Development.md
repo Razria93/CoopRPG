@@ -315,6 +315,13 @@ Win64 패키지의 서버와 A·B에서 첫 로비·원정 완주·두 번째 �
 
 **근거** · [장비 규칙](Project.md#expedition-default-equipment) · [A·B 화면과 원본 로그](Validation/ForestExpedition.md#expedition-default-equipment-verification)
 
+<a id="guardian-taunt-implementation"></a>
+### 11/23 · 수호기사 도발
+
+수호기사가 방패 장착 상태에서 3번 슬롯으로 도발한다. 서버가 거리·가림·전투 상태를 판정한 뒤 대상이 있으면 SP와 쿨다운을 적용한다. 적이 평소 선택한 대상, 도발 대상, 이미 시작된 공격의 대상을 별도로 관리한다. 흑기사의 반격 예고에서 확정한 대상과 방향은 그 공격을 마칠 때까지 유지한다.
+
+A·B는 파란 바닥 파동과 적의 도발 표시로 발동을 확인할 수 있다. 반격 대상 마커와 이름표가 겹치면 기존 표시가 우선한다. 첫 패키지에서는 흰 파티클이 바닥 범위선을 덮었다. 파티클 크기·밝기·색을 조정해 바닥 파동이 먼저 읽히도록 했다. [규칙](Project.md#guardian-taunt) · [2인 패키지 확인](Validation/ForestExpedition.md#guardian-taunt-verification)
+
 <a id="gates"></a>
 ## 중간 목표의 최초 기한과 실제 판정
 

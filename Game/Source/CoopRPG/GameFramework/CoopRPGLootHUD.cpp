@@ -9,6 +9,7 @@
 #include "CoopRPGPlayerController.h"
 #include "CoopRPGPlayerState.h"
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
+#include "CoopRPG/AbilitySystem/Abilities/CoopRPGTauntAbility.h"
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGRecoveryEffect.h"
@@ -41,6 +42,19 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGChestHUD, Log, All);
 
 namespace CoopRPG::ExpeditionUI
 {
+    static void ReadCooldown(const UAbilitySystemComponent& Source, FGameplayTag Tag, FAttackHudStatus& Status)
+    {
+        const auto Query = FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(Tag));
+        for (const auto& Timing : Source.GetActiveEffectsTimeRemainingAndDuration(Query))
+        {
+            if (Timing.Key > Status.Remaining && Timing.Value > 0.0f)
+            {
+                Status.Remaining = Timing.Key;
+                Status.Duration = Timing.Value;
+            }
+        }
+    }
+
     FAttackHudStatus ReadAttackHud(const ACoopRPGGameState& State, const ACoopRPGCharacter& Hero, bool bCombatStage, bool bSlash)
     {
         const auto* Source = Hero.GetAbilitySystemComponent();
@@ -83,17 +97,61 @@ namespace CoopRPG::ExpeditionUI
 
         if (Result.State == EAttackHudState::Cooling)
         {
-            const auto Query = FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(FGameplayTagContainer(CooldownTag));
-            for (const auto& Timing : Source->GetActiveEffectsTimeRemainingAndDuration(Query))
-            {
-                if (Timing.Key > Result.Remaining && Timing.Value > 0.0f)
-                {
-                    Result.Remaining = Timing.Key;
-                    Result.Duration = Timing.Value;
-                }
-            }
+            ReadCooldown(*Source, CooldownTag, Result);
         }
         return Result;
+    }
+
+    FAttackHudStatus ReadTauntHud(const ACoopRPGGameState& State, const ACoopRPGCharacter& Hero, bool bCombatStage)
+    {
+        const auto* Source = Hero.GetAbilitySystemComponent();
+        if (!Hero.IsGuardian() || !Source)
+        {
+            return {EAttackHudState::Unassigned};
+        }
+        if (!bCombatStage || !State.IsRoundPlaying())
+        {
+            return {EAttackHudState::Waiting};
+        }
+        if (Hero.GetHealth() <= 0.0f || Hero.IsMeleeWindupActive())
+        {
+            return {EAttackHudState::Down};
+        }
+        if (!Hero.HasShieldEquipped())
+        {
+            return {EAttackHudState::Unarmed};
+        }
+
+        const FGameplayTag Cooldown = UCoopRPGTauntCooldown::GetCooldownTag();
+        if (Source->HasMatchingGameplayTag(Cooldown))
+        {
+            FAttackHudStatus Status{EAttackHudState::Cooling};
+            ReadCooldown(*Source, Cooldown, Status);
+            return Status;
+        }
+        return {Hero.GetStamina() < UCoopRPGTauntCost::Stamina ? EAttackHudState::LowStamina : EAttackHudState::Ready};
+    }
+
+    void DrawTauntGlyph(UCanvas& Canvas, const FBox2D& Bounds, const FAttackHudStatus& Status)
+    {
+        const FVector2D Center = Bounds.GetCenter();
+        const double Unit = Bounds.GetSize().X * 0.20;
+        const FVector2D Vertices[] = {{-1.0, -0.65}, {0.0, -1.0}, {1.0, -0.65}, {0.82, 0.40}, {0.0, 1.04}, {-0.82, 0.40}};
+        const bool bAvailable = Status.State == EAttackHudState::Ready || Status.State == EAttackHudState::Cooling;
+        const FLinearColor Tint(bAvailable ? FColor(155, 216, 255) : FColor(255, 169, 161));
+        for (int32 Index = 0; Index < UE_ARRAY_COUNT(Vertices); ++Index)
+        {
+            const FVector2D From = Center + Vertices[Index] * Unit;
+            const FVector2D To = Center + Vertices[(Index + 1) % UE_ARRAY_COUNT(Vertices)] * Unit;
+            FCanvasLineItem Edge(From, To);
+            Edge.SetColor(Tint);
+            Edge.LineThickness = 2.0f;
+            Canvas.DrawItem(Edge);
+        }
+        if (Status.State == EAttackHudState::Cooling)
+        {
+            DrawCooldownSweep(Canvas, Bounds.Min, Bounds.GetSize().X, Status.GetElapsedFraction());
+        }
     }
 
     const TCHAR* AttackHudLabel(EAttackHudState State)
@@ -934,6 +992,11 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
     TArray<FNameplate, TInlineAllocator<8>> Plates;
     for (TActorIterator<ACoopRPGCharacter> It(GetWorld()); It; ++It)
     {
+        const double PulseAge = It->GetTauntPulseAge();
+        if (PulseAge >= 0.0 && PulseAge < UCoopRPGTauntAbility::PulseSeconds)
+        {
+            DrawTauntPulse(It->GetTauntPulseOrigin(), PulseAge);
+        }
         const int32 Slot = It->GetDisplaySlot();
         if (Slot < 1 || Slot > UE_ARRAY_COUNT(NameplatePlayerNames) || !It->GetPlayerState())
         {
@@ -951,7 +1014,9 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
             Player->GetHealth() / UCoopRPGCombatAttributes::MaxHealth, Player == LocalHero ? 0 : 2,
             FVector::DistSquared2D(Player->GetActorLocation(), ViewOrigin)});
     }
+    const auto* GameState = GetWorld()->GetGameState<ACoopRPGGameState>();
     int32 CounterTargetSlot = 0;
+    TArray<const ACoopRPGEnemy*, TInlineAllocator<4>> TauntMarkers;
     if (Stage == 1 || Stage == 3)
     {
         for (TActorIterator<ACoopRPGEnemy> It(GetWorld()); It; ++It)
@@ -960,6 +1025,10 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
             if (Enemy->IsDead())
             {
                 continue;
+            }
+            if (GameState && Enemy->IsTaunted(GameState->GetServerWorldTimeSeconds()))
+            {
+                TauntMarkers.Add(Enemy);
             }
             const int32 TargetSlot = Enemy->IsShieldEncounter() && Enemy->IsShieldRaised()
                 ? Enemy->GetShieldWarning().TargetSlot : 0;
@@ -1068,6 +1137,55 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
             break;
         }
     }
+    for (const FBox2D& Bounds : Placed)
+    {
+        WorldLabelBounds.Add(Bounds);
+    }
+    for (const ACoopRPGEnemy* Enemy : TauntMarkers)
+    {
+        DrawTauntMarker(*Enemy);
+    }
+}
+
+void ACoopRPGLootHUD::DrawTauntPulse(const FVector& Origin, double Elapsed)
+{
+    const double Progress = FMath::Clamp(Elapsed / UCoopRPGTauntAbility::PulseSeconds, 0.0, 1.0);
+    const double Radius = UCoopRPGTauntAbility::RangeCm * FMath::Min(1.0, Progress * 1.4);
+    const FLinearColor Tint(0.12f, 0.65f, 0.97f, static_cast<float>(1.0 - Progress));
+    constexpr int32 Segments = 36;
+    FVector Last = Project(Origin + FVector(Radius, 0.0, 0.0));
+    for (int32 Segment = 1; Segment <= Segments; ++Segment)
+    {
+        const double Angle = UE_TWO_PI * Segment / Segments;
+        const FVector Screen = Project(Origin + Radius * FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0));
+        if (Last.Z > 0.0 && Screen.Z > 0.0)
+        {
+            DrawLine(Last.X, Last.Y, Screen.X, Screen.Y, Tint, 2.5f);
+        }
+        Last = Screen;
+    }
+}
+
+void ACoopRPGLootHUD::DrawTauntMarker(const ACoopRPGEnemy& Enemy)
+{
+    using namespace CoopRPG::ExpeditionUI;
+    const auto MarkerFont = Font(9.0f, true);
+    const FVector Head = Enemy.GetActorLocation()
+        + FVector(0.0, 0.0, Enemy.GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 16.0);
+    const FVector Screen = Project(Head);
+    const FVector2D Size = Measure(*Canvas, TEXT("도발"), MarkerFont);
+    const FVector2D Position(Screen.X - Size.X * 0.5, Screen.Y - Size.Y);
+    const FBox2D Bounds(Position - FVector2D(4.0, 2.0), Position + Size + FVector2D(4.0, 2.0));
+    if (Screen.Z <= 0.0 || Bounds.Min.X < 4.0 || Bounds.Max.X > Canvas->ClipX - 4.0 || Bounds.Min.Y < 4.0
+        || Bounds.Max.Y > Canvas->ClipY - 4.0
+        || WorldLabelBounds.ContainsByPredicate([&Bounds](const FBox2D& Other) { return Bounds.Intersect(Other); }))
+    {
+        return;
+    }
+
+    DrawRect(FLinearColor(0.025f, 0.08f, 0.16f, 0.94f), Bounds.Min.X, Bounds.Min.Y, Bounds.GetSize().X, Bounds.GetSize().Y);
+    Text(*Canvas, TEXT("도발"), Position, MarkerFont, FLinearColor(FColor(152, 219, 255)));
+    WorldLabelBounds.Add(Bounds);
 }
 
 void ACoopRPGLootHUD::DrawCounterTargetMarker(const ACoopRPGCharacter& Target)
@@ -1315,7 +1433,10 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
     const float Health = Hero.GetHealth();
     const float Stamina = Hero.GetStamina();
     const EAttackHudState Status = Attack.State;
-    const auto Slash = ReadAttackHud(State, Hero, CoopRPG::Expedition::IsSkirmish(GetWorld()) || CoopRPG::Expedition::IsBoss(GetWorld()), true);
+    const bool bCombatMap = CoopRPG::Expedition::IsSkirmish(GetWorld()) || CoopRPG::Expedition::IsBoss(GetWorld());
+    const auto Slash = ReadAttackHud(State, Hero, bCombatMap, true);
+    const auto Taunt = ReadTauntHud(State, Hero, bCombatMap);
+    const bool bShowTaunt = Taunt.State != EAttackHudState::Unassigned;
     const bool bSlashAssigned = Slash.State != EAttackHudState::Unassigned;
 
     const bool bWide = Canvas->ClipX >= 1200.0;
@@ -1328,7 +1449,8 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
     const FVector2D Panel(Canvas->ClipX - Margin - Width, Canvas->ClipY - Margin - PanelHeight);
     const double SlotY = Panel.Y - SlotSide - 29.0;
     const double SlotRight = Panel.X + Width - 1.0;
-    const FVector2D EmptySlot(SlotRight - SlotSide, SlotY);
+    const FVector2D TauntSlot(SlotRight - SlotSide, SlotY);
+    const FVector2D EmptySlot(TauntSlot.X - (bShowTaunt ? SlotGap + SlotSide : 0.0), SlotY);
     const FVector2D AttackSlot(EmptySlot.X - SlotGap - SlotSide, SlotY);
     WorldLabelBounds.Emplace(Panel, Panel + FVector2D(Width, PanelHeight));
     WorldLabelBounds.Emplace(FVector2D(AttackSlot.X, SlotY), FVector2D(SlotRight, Panel.Y));
@@ -1382,6 +1504,13 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
         Text(*Canvas, TEXT("—"), EmptySlot + FVector2D((SlotSide - DashSize.X) * 0.5, (SlotSide - DashSize.Y) * 0.5), TrackFont, Paper);
     }
 
+    if (bShowTaunt)
+    {
+        ExpeditionDashboard.DrawSkillSlot(*this, TauntSlot, SlotSide);
+        DrawTauntGlyph(*Canvas, FBox2D(TauntSlot, TauntSlot + FVector2D(SlotSide)), Taunt);
+        Text(*Canvas, TEXT("3"), TauntSlot + FVector2D(5.0, 4.0), LabelFont, Paper);
+    }
+
     const auto DrawRemaining = [&](FVector2D SlotPosition, const FAttackHudStatus& SlotStatus)
     {
         if (SlotStatus.State != EAttackHudState::Cooling || SlotStatus.GetRemainingTenths() <= 0)
@@ -1408,6 +1537,12 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
     DrawCaption(AttackSlot, TEXT("기본 공격"), bDisabled ? DisabledInk : Paper);
     const bool bSlashDisabled = bSlashAssigned && Slash.State != EAttackHudState::Ready && Slash.State != EAttackHudState::Cooling;
     DrawCaption(EmptySlot, bSlashAssigned ? TEXT("슬래시") : TEXT("미배정"), bSlashDisabled ? DisabledInk : Paper);
+    if (bShowTaunt)
+    {
+        DrawRemaining(TauntSlot, Taunt);
+        DrawCaption(TauntSlot, TEXT("도발"), Taunt.State == EAttackHudState::Ready || Taunt.State == EAttackHudState::Cooling
+            ? Paper : DisabledInk);
+    }
     const FIntPoint SlashSample(static_cast<int32>(Slash.State), Slash.GetRemainingTenths());
     if (SlashSample != LastLocalSlashSample || LastLocalCombatRound != State.GetRoundId())
     {

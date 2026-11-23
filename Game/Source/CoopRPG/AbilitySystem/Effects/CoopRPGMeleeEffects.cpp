@@ -7,6 +7,7 @@
 
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Cooldown_Melee, "Cooldown.CoopRPG.Melee");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Cooldown_Slash, "Cooldown.CoopRPG.Slash");
+UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Cooldown_Taunt, "Cooldown.CoopRPG.Taunt");
 UE_DEFINE_GAMEPLAY_TAG_STATIC(TAG_Data_MeleeDamage, "Data.CoopRPG.MeleeDamage");
 
 UCoopRPGMeleeDamage::UCoopRPGMeleeDamage()
@@ -75,4 +76,30 @@ UCoopRPGSlashCooldown::UCoopRPGSlashCooldown()
 FGameplayTag UCoopRPGSlashCooldown::GetCooldownTag()
 {
     return TAG_Cooldown_Slash.GetTag();
+}
+
+UCoopRPGTauntCost::UCoopRPGTauntCost()
+{
+    DurationPolicy = EGameplayEffectDurationType::Instant;
+    FGameplayModifierInfo& Cost = Modifiers.AddDefaulted_GetRef();
+    Cost.Attribute = UCoopRPGCombatAttributes::GetStaminaAttribute();
+    Cost.ModifierOp = EGameplayModOp::Additive;
+    Cost.ModifierMagnitude = FScalableFloat(-Stamina);
+}
+
+UCoopRPGTauntCooldown::UCoopRPGTauntCooldown()
+{
+    DurationPolicy = EGameplayEffectDurationType::HasDuration;
+    DurationMagnitude = FScalableFloat(Seconds);
+
+    auto* Tags = CreateDefaultSubobject<UTargetTagsGameplayEffectComponent>(TEXT("CooldownTags"));
+    FInheritedTagContainer Changes;
+    Changes.AddTag(GetCooldownTag());
+    Tags->SetAndApplyTargetTagChanges(Changes);
+    GEComponents.Add(Tags);
+}
+
+FGameplayTag UCoopRPGTauntCooldown::GetCooldownTag()
+{
+    return TAG_Cooldown_Taunt.GetTag();
 }

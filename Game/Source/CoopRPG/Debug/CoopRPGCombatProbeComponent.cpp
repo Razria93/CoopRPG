@@ -487,6 +487,16 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
         return;
     }
     const FString LayoutName = Layout.ToString();
+    if (LayoutName.StartsWith(TEXT("taunt")))
+    {
+        auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+        auto* Character = Cast<ACoopRPGCharacter>(GetOwner());
+        if (Mode && Character)
+        {
+            PrepareTauntLayout(Layout, *Mode, *Character);
+        }
+        return;
+    }
     if (LayoutName.StartsWith(TEXT("wave")))
     {
         auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
@@ -574,6 +584,7 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
     if (bEnemyCounter)
     {
         Enemy->Target = Character;
+        Enemy->AttackTarget = Character;
         Enemy->SetActorTickEnabled(true);
     }
 
@@ -840,6 +851,98 @@ void UCoopRPGCombatProbeComponent::PrepareSlashLayout(
     }
     UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
         *Layout.ToString(), Character.GetDisplaySlot(), Character.GetActorRotation().Yaw);
+}
+
+void UCoopRPGCombatProbeComponent::PrepareTauntLayout(
+    FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Guardian)
+{
+    if (!Guardian.IsGuardian() || (Layout != TEXT("tauntMixed") && Layout != TEXT("tauntEmpty")
+        && Layout != TEXT("tauntBoss") && Layout != TEXT("tauntLow") && Layout != TEXT("tauntFull")))
+    {
+        return;
+    }
+
+    if (Layout == TEXT("tauntLow") || Layout == TEXT("tauntFull"))
+    {
+        Guardian.GetAbilitySystemComponent()->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetStaminaAttribute(),
+            Layout == TEXT("tauntLow") ? 10.0f : 100.0f);
+        Guardian.ForceNetUpdate();
+        UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
+            *Layout.ToString(), Guardian.GetDisplaySlot(), Guardian.GetActorRotation().Yaw);
+        return;
+    }
+
+    ACoopRPGCharacter* Warrior = nullptr;
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        auto* Hero = It->IsValid() ? Cast<ACoopRPGCharacter>(It->Get()->GetPawn()) : nullptr;
+        if (Hero && Hero != &Guardian)
+        {
+            Warrior = Hero;
+            break;
+        }
+    }
+    if (!Warrior)
+    {
+        return;
+    }
+
+    const auto Place = [](ACharacter& Character, FVector Position, float Yaw)
+    {
+        Character.GetCharacterMovement()->StopMovementImmediately();
+        Position.Z = Character.GetActorLocation().Z;
+        Character.TeleportTo(Position, FRotator(0.0, Yaw, 0.0), false, true);
+        Character.ForceNetUpdate();
+    };
+    if (AActor* Previous = MeleeTestObstacle.Get())
+    {
+        Previous->Destroy();
+    }
+    if (Layout == TEXT("tauntBoss"))
+    {
+        auto* Boss = Cast<ACoopRPGEnemy>(Mode.GetMeleeTarget());
+        if (!Boss || !Boss->IsBlackKnight())
+        {
+            return;
+        }
+        Boss->StopCombat();
+        Place(*Boss, FVector(850.0, 0.0, 0.0), 180.0f);
+        Place(*Warrior, FVector(716.0, 0.0, 0.0), 0.0f);
+        Place(Guardian, FVector(1014.0, 0.0, 0.0), 180.0f);
+        Boss->NextActionTime = GetWorld()->GetTimeSeconds() + 0.65;
+        Boss->SetActorTickEnabled(true);
+    }
+    else if (Mode.IsSkirmishEncounter())
+    {
+        const FVector Origin(620.0, 0.0, 0.0);
+        const bool bMixed = Layout == TEXT("tauntMixed");
+        Place(Guardian, Origin, 0.0f);
+        Place(*Warrior, Origin + FVector(155.0, 0.0, 0.0), 0.0f);
+        const FVector Positions[] = {{245.0, 48.0, 0.0}, {245.0, -65.0, 0.0},
+            {590.0, -200.0, 0.0}, {-285.0, 150.0, 0.0}};
+        int32 Index = 0;
+        for (ACoopRPGEnemy* Enemy : Mode.GetSkirmishEnemies())
+        {
+            if (!IsValid(Enemy) || Enemy->IsDead() || Index >= UE_ARRAY_COUNT(Positions))
+            {
+                continue;
+            }
+            Enemy->StopCombat();
+            const FVector Offset = bMixed ? Positions[Index] : FVector(590.0, 84.0 * Index - 120.0, 0.0);
+            Place(*Enemy, Origin + Offset, 180.0f);
+            Enemy->Target = Warrior;
+            Enemy->SetActorTickEnabled(bMixed && Index < 2);
+            UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("SlashTestEnemy Layout=%s Player=%d Rank=%d Target=%s HP=%.2f"),
+                *Layout.ToString(), Guardian.GetDisplaySlot(), Index + 1, *Enemy->GetName(), Enemy->GetHealth());
+            ++Index;
+        }
+        if (bMixed)
+        {
+            PlaceMeleeTestWall(Origin + FVector(-135.0, 72.0, 90.15));
+        }
+    }
+    UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
+            *Layout.ToString(), Guardian.GetDisplaySlot(), Guardian.GetActorRotation().Yaw);
 }
 
 void UCoopRPGCombatProbeComponent::PrepareSkirmishLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character)
