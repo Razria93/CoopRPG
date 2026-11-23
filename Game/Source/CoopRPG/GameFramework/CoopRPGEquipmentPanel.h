@@ -11,6 +11,7 @@ class AHUD;
 class UCanvas;
 class UTexture2D;
 struct FInputKeyEventArgs;
+enum class ECoopRPGScrollStat : uint8;
 
 class FCoopRPGEquipmentPanel
 {
@@ -21,16 +22,19 @@ public:
     void Draw(AHUD& HUD, UCanvas& Surface, ACoopRPGPlayerController& Controller, const FVector2D& ViewSize,
         const CoopRPG::ExpeditionUI::FAttackHudStatus& Attack, const FCoopRPGExpeditionDashboard& Dashboard);
     FBox2D GetVisibleBounds() const;
+    void DrawPanelFrame(AHUD& HUD, const FBox2D& Bounds) const;
     void Hide();
-    bool HandlePrimaryButton(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
+    bool HandlePrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     bool HandleWheel(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     void ReleasePointer();
 
 private:
-    enum class EInventoryItem : uint8 { None, Potion, Sword };
+    enum class EInventoryItem : uint8 { None, Potion, StaminaPotion, Sword, MartialPowerScroll, ProtectionScroll, SlashCapsule };
+    using FInventoryItems = TArray<EInventoryItem, TInlineAllocator<6>>;
 
-    static EInventoryItem GetInventoryItem(int32 Slot, int32 PotionSlot, int32 SwordSlot);
-    void UpdateInventorySelection(int32 PotionSlot, int32 SwordSlot);
+    static bool IsStatScroll(EInventoryItem Item);
+    static ECoopRPGScrollStat ToScrollStat(EInventoryItem Item);
+    void UpdateInventorySelection(const FInventoryItems& Items);
 
     FBox2D GetTabBounds(int32 Index) const;
     FBox2D GetPanelBounds() const;
@@ -38,10 +42,10 @@ private:
     void DrawRegion(AHUD& HUD, const FBox2D& Bounds, int32 Row, float SourceX, float SourceWidth) const;
 
     void DrawStats(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller);
-    void DrawPanelFrame(AHUD& HUD, const FBox2D& Bounds) const;
     void DrawAtlas(AHUD& HUD, const FBox2D& Bounds, const FBox2D& Source) const;
     void DrawInventory(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller);
     FBox2D GetInventoryGridBounds() const;
+    FBox2D GetInventoryActionBounds() const;
     FBox2D GetInventorySlotBounds(int32 VisibleIndex) const;
     void DrawEquipment(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller);
     void DrawItemIcon(AHUD& HUD, int32 IconIndex, FVector2D Position, double Size, FLinearColor Tint) const;
@@ -52,6 +56,8 @@ private:
     FBox2D GetSkillListBounds() const;
     void ResetSkillsView();
     FBox2D GetEquipmentListBounds() const;
+    FBox2D GetEquipmentActionBounds(double RowY) const;
+    bool IsShieldActionAt(const FVector2D& Pointer) const;
     bool IsScrollableTab() const;
     FIntPoint GetScrollRowCounts() const;
     int32 GetFirstScrollRow() const;
@@ -76,6 +82,8 @@ private:
     int32 SelectedInventorySlot = INDEX_NONE;
     EInventoryItem SelectedInventoryItem = EInventoryItem::None;
     int32 PressedInventorySlot = INDEX_NONE;
+    EInventoryItem PressedActionItem = EInventoryItem::None;
+    TOptional<bool> PressedInventoryAction;
     int32 FirstEquipmentRow = 0;
     int32 SkillGroup = 0;
     int32 PressedSkillGroup = INDEX_NONE;
@@ -90,4 +98,7 @@ private:
     bool bVisible = false;
     bool bOwnsPrimaryButton = false;
     TOptional<bool> LastDisplayedWeaponState;
+    TOptional<bool> PressedShieldAction;
+    bool bLastDisplayedShield = false;
+    bool bLastDisplayedGuard = false;
 };

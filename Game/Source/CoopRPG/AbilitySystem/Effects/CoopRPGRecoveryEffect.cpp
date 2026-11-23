@@ -11,3 +11,13 @@ UCoopRPGRecoveryEffect::UCoopRPGRecoveryEffect()
     Healing.ModifierOp = EGameplayModOp::Additive;
     Healing.ModifierMagnitude = FScalableFloat(HealthRestored);
 }
+
+UCoopRPGStaminaRecoveryEffect::UCoopRPGStaminaRecoveryEffect()
+{
+    DurationPolicy = EGameplayEffectDurationType::Instant;
+
+    FGameplayModifierInfo& Recovery = Modifiers.AddDefaulted_GetRef();
+    Recovery.Attribute = UCoopRPGCombatAttributes::GetStaminaAttribute();
+    Recovery.ModifierOp = EGameplayModOp::Additive;
+    Recovery.ModifierMagnitude = FScalableFloat(StaminaRestored);
+}

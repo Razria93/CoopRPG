@@ -1,6 +1,7 @@
 #include "CoopRPGCombatProbeComponent.h"
 
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
+#include "CoopRPG/AbilitySystem/Abilities/CoopRPGSlashAbility.h"
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
@@ -102,6 +103,16 @@ namespace
             if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World))
             {
                 Probe->RequestActivation();
+            }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs SlashRequestCommand(TEXT("Coop.Test.SlashRequest"),
+        TEXT("Coop.Test.SlashRequest capsule|cast|take: exercise duplicate capsule requests and authoritative activation checks."),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World); Probe && Args.Num() == 1)
+            {
+                Probe->RequestSlashValidation(FName(*Args[0]));
             }
         }));
 
@@ -228,6 +239,34 @@ void UCoopRPGCombatProbeComponent::RequestActivation()
         UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("TestActivationRequest Actor=%s ClientPrecheck=Skipped ServerChecks=Enabled %s"),
             *GetNameSafe(GetOwner()), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
         Source->CallServerTryActivateAbility(Spec->Handle, true, FPredictionKey());
+    }
+}
+
+void UCoopRPGCombatProbeComponent::RequestSlashValidation(FName Action)
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const auto* Hero = Cast<ACoopRPGCharacter>(GetOwner());
+    auto* Player = Hero ? Hero->GetController<ACoopRPGPlayerController>() : nullptr;
+    if (!IsProbeEnabled(GetWorld()) || !Player || Player->HasAuthority() || !State)
+    {
+        return;
+    }
+    if (Action == TEXT("capsule"))
+    {
+        Player->ServerUseSlashCapsule(State->GetRoundId());
+        Player->ServerUseSlashCapsule(State->GetRoundId());
+    }
+    else if (Action == TEXT("take"))
+    {
+        Player->TakeSlashCapsule();
+    }
+    else if (Action == TEXT("cast"))
+    {
+        auto* Source = GetSource(this);
+        if (const auto* Spec = Source ? Source->FindAbilitySpecFromClass(UCoopRPGSlashAbility::StaticClass()) : nullptr)
+        {
+            Source->CallServerTryActivateAbility(Spec->Handle, true, FPredictionKey());
+        }
     }
 }
 
@@ -423,6 +462,26 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
         }
         return;
     }
+    if (LayoutName.StartsWith(TEXT("slash")))
+    {
+        auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+        auto* Character = Cast<ACoopRPGCharacter>(GetOwner());
+        if (Mode && Mode->IsSkirmishEncounter() && Character)
+        {
+            PrepareSlashLayout(Layout, *Mode, *Character);
+        }
+        return;
+    }
+    if (LayoutName.StartsWith(TEXT("guard")))
+    {
+        auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+        auto* Character = Cast<ACoopRPGCharacter>(GetOwner());
+        if (Mode && Mode->IsSkirmishEncounter() && Character)
+        {
+            PreparePlayerGuardLayout(Layout, *Mode, *Character);
+        }
+        return;
+    }
     const bool bShieldLayout = LayoutName.StartsWith(TEXT("shield"));
     const bool bCounterLayout = LayoutName.StartsWith(TEXT("counter"));
     int32 Angle = 0;
@@ -503,81 +562,6 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
     Enemy->ForceNetUpdate();
     UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
         *Layout.ToString(), Character->GetDisplaySlot(), Facing.Yaw);
-}
-
-void UCoopRPGCombatProbeComponent::PrepareSkirmishLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character)
-{
-    const bool bLine = Layout == TEXT("waveLine") || Layout == TEXT("waveWall") || Layout == TEXT("waveReverse");
-    const bool bReverse = Layout == TEXT("waveReverse");
-    int32 Slot = 0;
-    if (!bLine && (!LexTryParseString(Slot, *Layout.ToString().Mid(4)) || Slot < 1 || Slot > 4))
-    {
-        return;
-    }
-    if (AActor* Previous = MeleeTestObstacle.Get())
-    {
-        Previous->Destroy();
-    }
-
-    FVector Position;
-    bool bPlaced = false;
-    for (ACoopRPGEnemy* Enemy : Mode.GetSkirmishEnemies())
-    {
-        if (!IsValid(Enemy) || Enemy->IsDead())
-        {
-            continue;
-        }
-        Enemy->StopCombat();
-        Enemy->SetActorTickEnabled(false);
-        Enemy->GetCharacterMovement()->StopMovementImmediately();
-        const bool bFirst = Enemy->ActorHasTag(TEXT("SkirmishMushroom1"));
-        const bool bSecond = Enemy->ActorHasTag(TEXT("SkirmishMushroom2"));
-        if (bLine && (bFirst || bSecond))
-        {
-            const FVector EnemyPosition(bFirst ? 1050.0 : 1106.0, 0.0, Enemy->GetActorLocation().Z);
-            Enemy->TeleportTo(EnemyPosition, FRotator(0.0, 180.0, 0.0), false, true);
-            Enemy->ForceNetUpdate();
-        }
-        if (!bLine && Enemy->ActorHasTag(FName(*FString::Printf(TEXT("SkirmishMushroom%d"), Slot))))
-        {
-            Position = Enemy->GetActorLocation() - FVector(110.0, 0.0, 0.0);
-            bPlaced = true;
-        }
-    }
-    if (bLine)
-    {
-        Position = FVector(bReverse ? 1220.0 : 939.0, 0.0, 90.15);
-        bPlaced = true;
-    }
-    if (!bPlaced)
-    {
-        return;
-    }
-    Position.Z = 90.15;
-    Character.GetCharacterMovement()->StopMovementImmediately();
-    Character.TeleportTo(Position, FRotator(0.0, bReverse ? 180.0 : 0.0, 0.0), false, true);
-    Character.ForceNetUpdate();
-    if (Layout == TEXT("waveWall"))
-    {
-        PlaceMeleeTestWall(FVector(995.0, 0.0, 90.15));
-    }
-    UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
-        *Layout.ToString(), Character.GetDisplaySlot(), Character.GetActorRotation().Yaw);
-}
-
-void UCoopRPGCombatProbeComponent::PlaceMeleeTestWall(const FVector& Location)
-{
-    AActor* Obstacle = GetWorld()->SpawnActor<AActor>();
-    auto* Wall = NewObject<UBoxComponent>(Obstacle);
-    Obstacle->AddInstanceComponent(Wall);
-    Obstacle->SetRootComponent(Wall);
-    Wall->SetBoxExtent(FVector(4.0, 90.0, 95.0));
-    Wall->SetCollisionObjectType(ECC_WorldStatic);
-    Wall->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    Wall->SetCollisionResponseToAllChannels(ECR_Block);
-    Wall->RegisterComponent();
-    Obstacle->SetActorLocation(Location);
-    MeleeTestObstacle = Obstacle;
 }
 
 void UCoopRPGCombatProbeComponent::ServerPositionForEnemyLoot_Implementation(bool bNear)
@@ -712,6 +696,178 @@ void UCoopRPGCombatProbeComponent::OnPeerLogout(AGameModeBase* Mode, AController
     }
 }
 #endif
+
+void UCoopRPGCombatProbeComponent::PreparePlayerGuardLayout(
+    FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character)
+{
+    const bool bPause = Layout == TEXT("guardPause");
+    int32 Angle = 0;
+    if (!bPause && (!LexTryParseString(Angle, *Layout.ToString().Mid(5)) || FMath::Abs(Angle) > 180))
+    {
+        return;
+    }
+
+    ACoopRPGEnemy* Attacker = nullptr;
+    for (ACoopRPGEnemy* Enemy : Mode.GetSkirmishEnemies())
+    {
+        if (IsValid(Enemy) && !Enemy->IsDead())
+        {
+            Enemy->StopCombat();
+            Enemy->SetActorTickEnabled(false);
+            Enemy->GetCharacterMovement()->StopMovementImmediately();
+            if (!Attacker)
+            {
+                Attacker = Enemy;
+            }
+        }
+    }
+    if (!bPause && Attacker)
+    {
+        const double Side = Character.GetDisplaySlot() == 1 ? -1.0 : 1.0;
+        const FVector PlayerPosition(770.0, Side * 150.0, 90.15);
+        const FVector EnemyPosition(PlayerPosition.X + 103.0, PlayerPosition.Y, Attacker->GetActorLocation().Z);
+        Attacker->TeleportTo(EnemyPosition, FRotator(0.0, 180.0, 0.0), false, true);
+        Character.GetCharacterMovement()->StopMovementImmediately();
+        Character.TeleportTo(PlayerPosition, FRotator(0.0, Angle, 0.0), false, true);
+        Attacker->Target = &Character;
+        Attacker->NextActionTime = GetWorld()->GetTimeSeconds() + 0.35;
+        Attacker->SetActorTickEnabled(true);
+        Character.ForceNetUpdate();
+        Attacker->ForceNetUpdate();
+    }
+    UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
+        *Layout.ToString(), Character.GetDisplaySlot(), Character.GetActorRotation().Yaw);
+}
+
+void UCoopRPGCombatProbeComponent::PrepareSlashLayout(
+    FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character)
+{
+    const bool bFour = Layout == TEXT("slashFour");
+    const bool bMix = Layout == TEXT("slashMix");
+    const bool bSetStamina = Layout == TEXT("slashSP24") || Layout == TEXT("slashSP25");
+    if (!bFour && !bMix && !bSetStamina && Layout != TEXT("slashFreeze"))
+    {
+        return;
+    }
+    if (bSetStamina)
+    {
+        const float Stamina = Layout == TEXT("slashSP24") ? 24.0f : 25.0f;
+        Character.GetAbilitySystemComponent()->SetNumericAttributeBase(UCoopRPGCombatAttributes::GetStaminaAttribute(), Stamina);
+        Character.ForceNetUpdate();
+    }
+    else
+    {
+        const FVector Origin(925.0, 0.0, 90.15);
+        const FVector Four[] = {{106.0, -36.0, 0.0}, {124.0, 43.0, 0.0}, {173.0, -72.0, 0.0}, {209.0, 69.0, 0.0}};
+        const FVector Mix[] = {{115.0, -43.0, 0.0}, {35.0, 160.0, 0.0}, {-138.0, 26.0, 0.0}, {280.0, 50.0, 0.0}};
+        int32 Index = 0;
+        for (ACoopRPGEnemy* Enemy : Mode.GetSkirmishEnemies())
+        {
+            if (!IsValid(Enemy) || Enemy->IsDead())
+            {
+                continue;
+            }
+            Enemy->StopCombat();
+            Enemy->SetActorTickEnabled(false);
+            Enemy->GetCharacterMovement()->StopMovementImmediately();
+            if ((bFour || bMix) && Index < UE_ARRAY_COUNT(Four))
+            {
+                FVector Position = Origin + (bFour ? Four[Index] : Mix[Index]);
+                Position.Z = Enemy->GetActorLocation().Z;
+                Enemy->TeleportTo(Position, FRotator(0.0, 180.0, 0.0), false, true);
+                Enemy->GetAbilitySystemComponent()->SetNumericAttributeBase(
+                    UCoopRPGCombatAttributes::GetHealthAttribute(), Enemy->GetMaxHealth());
+                Enemy->ForceNetUpdate();
+                UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("SlashTestEnemy Layout=%s Player=%d Rank=%d Target=%s HP=%.2f"),
+                    *Layout.ToString(), Character.GetDisplaySlot(), Index + 1, *Enemy->GetName(), Enemy->GetHealth());
+                ++Index;
+            }
+        }
+        if (bFour || bMix)
+        {
+            Character.GetCharacterMovement()->StopMovementImmediately();
+            Character.TeleportTo(Origin, FRotator::ZeroRotator, false, true);
+            Character.ForceNetUpdate();
+        }
+    }
+    UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
+        *Layout.ToString(), Character.GetDisplaySlot(), Character.GetActorRotation().Yaw);
+}
+
+void UCoopRPGCombatProbeComponent::PrepareSkirmishLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character)
+{
+    const bool bLine = Layout == TEXT("waveLine") || Layout == TEXT("waveWall") || Layout == TEXT("waveReverse");
+    const bool bReverse = Layout == TEXT("waveReverse");
+    int32 Slot = 0;
+    if (!bLine && (!LexTryParseString(Slot, *Layout.ToString().Mid(4)) || Slot < 1 || Slot > 4))
+    {
+        return;
+    }
+    if (AActor* Previous = MeleeTestObstacle.Get())
+    {
+        Previous->Destroy();
+    }
+
+    FVector Position;
+    bool bPlaced = false;
+    for (ACoopRPGEnemy* Enemy : Mode.GetSkirmishEnemies())
+    {
+        if (!IsValid(Enemy) || Enemy->IsDead())
+        {
+            continue;
+        }
+        Enemy->StopCombat();
+        Enemy->SetActorTickEnabled(false);
+        Enemy->GetCharacterMovement()->StopMovementImmediately();
+        const bool bFirst = Enemy->ActorHasTag(TEXT("SkirmishMushroom1"));
+        const bool bSecond = Enemy->ActorHasTag(TEXT("SkirmishMushroom2"));
+        if (bLine && (bFirst || bSecond))
+        {
+            const FVector EnemyPosition(bFirst ? 1050.0 : 1106.0, 0.0, Enemy->GetActorLocation().Z);
+            Enemy->TeleportTo(EnemyPosition, FRotator(0.0, 180.0, 0.0), false, true);
+            Enemy->ForceNetUpdate();
+        }
+        if (!bLine && Enemy->ActorHasTag(FName(*FString::Printf(TEXT("SkirmishMushroom%d"), Slot))))
+        {
+            Position = Enemy->GetActorLocation() - FVector(110.0, 0.0, 0.0);
+            bPlaced = true;
+        }
+    }
+    if (bLine)
+    {
+        Position = FVector(bReverse ? 1220.0 : 939.0, 0.0, 90.15);
+        bPlaced = true;
+    }
+    if (!bPlaced)
+    {
+        return;
+    }
+    Position.Z = 90.15;
+    Character.GetCharacterMovement()->StopMovementImmediately();
+    Character.TeleportTo(Position, FRotator(0.0, bReverse ? 180.0 : 0.0, 0.0), false, true);
+    Character.ForceNetUpdate();
+    if (Layout == TEXT("waveWall"))
+    {
+        PlaceMeleeTestWall(FVector(995.0, 0.0, 90.15));
+    }
+    UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d Yaw=%.1f"),
+        *Layout.ToString(), Character.GetDisplaySlot(), Character.GetActorRotation().Yaw);
+}
+
+void UCoopRPGCombatProbeComponent::PlaceMeleeTestWall(const FVector& Location)
+{
+    AActor* Obstacle = GetWorld()->SpawnActor<AActor>();
+    auto* Wall = NewObject<UBoxComponent>(Obstacle);
+    Obstacle->AddInstanceComponent(Wall);
+    Obstacle->SetRootComponent(Wall);
+    Wall->SetBoxExtent(FVector(4.0, 90.0, 95.0));
+    Wall->SetCollisionObjectType(ECC_WorldStatic);
+    Wall->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    Wall->SetCollisionResponseToAllChannels(ECR_Block);
+    Wall->RegisterComponent();
+    Obstacle->SetActorLocation(Location);
+    MeleeTestObstacle = Obstacle;
+}
 
 void UCoopRPGCombatProbeComponent::OnCooldownChanged(FGameplayTag Tag, int32 Count)
 {

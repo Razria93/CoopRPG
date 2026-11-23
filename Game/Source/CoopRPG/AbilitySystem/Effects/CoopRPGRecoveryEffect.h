@@ -14,3 +14,15 @@ public:
 public:
     static constexpr float HealthRestored = 30.0f;
 };
+
+UCLASS()
+class COOPRPG_API UCoopRPGStaminaRecoveryEffect : public UGameplayEffect
+{
+    GENERATED_BODY()
+
+public:
+    UCoopRPGStaminaRecoveryEffect();
+
+public:
+    static constexpr float StaminaRestored = 30.0f;
+};

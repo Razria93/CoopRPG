@@ -21,6 +21,7 @@ public:
 
     void Prepare(float Stamina);
     void RequestActivation();
+    void RequestSlashValidation(FName Action);
     void Snapshot(const FString& Label);
     void SetVitals(float TargetHealth, float AttackerHealth);
     void ConfirmTwice();
@@ -67,6 +68,8 @@ private:
     void OnPeerLogout(AGameModeBase* Mode, AController* Exiting);
 #endif
 
+    void PreparePlayerGuardLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character);
+    void PrepareSlashLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character);
     void PrepareSkirmishLayout(FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character);
     void PlaceMeleeTestWall(const FVector& Location);
     void OnCooldownChanged(FGameplayTag Tag, int32 Count);

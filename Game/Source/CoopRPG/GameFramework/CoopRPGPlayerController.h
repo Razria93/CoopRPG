@@ -3,6 +3,10 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "CoopRPGGameplayFeedback.h"
+#include "CoopRPGRecoveryInventory.h"
+#include "CoopRPGStatProgress.h"
+#include "CoopRPGSlashProgress.h"
+#include "CoopRPGSwordInventory.h"
 #include "CoopRPGPlayerController.generated.h"
 
 class ACoopRPGEnemyLoot;
@@ -14,7 +18,11 @@ UENUM()
 enum class ECoopRPGChestItem : uint8
 {
     Recovery,
-    MeleeWeapon
+    MeleeWeapon,
+    StaminaRecovery,
+    MartialPowerScroll,
+    ProtectionScroll,
+    SlashCapsule
 };
 
 UCLASS()
@@ -34,9 +42,37 @@ public:
 
     bool IsRoundReady() const { return bRoundReady; }
     void ResetLobbyReady();
-    void RestoreTravelRecovery(int32 Count);
+    void RestoreTravelInventory(const FCoopRPGRecoverySnapshot& Recovery, const FCoopRPGSwordSnapshot& Sword,
+        const FCoopRPGStatProgress& Stats, bool bShieldEquipped, const FCoopRPGSlashProgress& Slash);
+    void InitializeStageInventory(FGuid RoundId);
+    ECoopRPGSwordOwnership GetSwordOwnership() const { return SwordOwnership; }
+    FCoopRPGSwordSnapshot GetTravelSword(bool bRetry) const;
+    void RequestSwordEquipped(bool bEquipped);
+    bool CanChangeShield() const;
+    bool GetTravelShieldEquipped(bool bRetry) const;
+    void RequestShieldEquipped(bool bEquipped);
+    FCoopRPGRecoverySnapshot GetTravelRecovery(bool bRetry) const;
+    FIntPoint GetStageRecoverySupplies() const { return StageRecoverySupplies; }
+    FIntPoint GetStageRecoveryUsesRemaining() const { return StageRecoveryUsesRemaining; }
+    bool IsRecoveryRegistered(bool bStamina) const;
+    int32 GetMartialPower() const { return StatProgress.MartialPower.Level; }
+    int32 GetProtection() const { return StatProgress.Protection.Level; }
+    int32 GetStatScrollCount(ECoopRPGScrollStat Stat) const;
+    const FCoopRPGStatProgress& GetTravelStats(bool bRetry) const;
+    void RequestRecoveryRegistration(bool bStamina, bool bRegistered);
+    void TakeStatScroll(ECoopRPGScrollStat Stat);
+    void TakeSlashCapsule();
+    void RequestUseSlashCapsule();
+    bool HasSlashCapsule() const { return SlashProgress.bHasCapsule; }
+    bool HasSlashRegistered() const { return SlashProgress.bRegistered; }
+    const FCoopRPGSlashProgress& GetTravelSlash(bool bRetry) const { return bRetry ? EntrySlash : SlashProgress; }
+    void RequestUseStatScroll(ECoopRPGScrollStat Stat);
     ACoopRPGSharedChest* GetOpenedChest() const { return OpenedChest.Get(); }
     int32 GetRecoveryCount() const { return RecoveryCount; }
+    int32 GetStaminaRecoveryCount() const { return StaminaRecoveryCount; }
+    void TakeRecoveryItem();
+    void TakeStaminaRecoveryItem();
+    void TakeMeleeWeapon();
 
 protected:
     virtual void SetupInputComponent() override;
@@ -52,9 +88,9 @@ private:
     void OpenSharedChest();
     void CloseSharedChest();
     void CloseOpenedChest(FGuid RoundId, const TCHAR* Reason);
-    void TakeRecoveryItem();
-    void TakeMeleeWeapon();
     void UseRecoveryItem();
+    void UseStaminaRecoveryItem();
+    void RequestRecoveryUse(bool bStamina);
     void RequestChestItem(ECoopRPGChestItem Item);
 
     UFUNCTION(Server, Reliable)
@@ -67,7 +103,22 @@ private:
     void ServerTakeChestItem(ACoopRPGSharedChest* Chest, FGuid RoundId, uint32 Request, ECoopRPGChestItem Item);
 
     UFUNCTION(Server, Reliable)
-    void ServerUseRecovery(FGuid RoundId);
+    void ServerSetSwordEquipped(FGuid RoundId, bool bEquipped);
+
+    UFUNCTION(Server, Reliable)
+    void ServerSetShieldEquipped(FGuid RoundId, bool bEquipped);
+
+    UFUNCTION(Server, Reliable)
+    void ServerUseRecovery(FGuid RoundId, bool bStamina);
+
+    UFUNCTION(Server, Reliable)
+    void ServerSetRecoveryRegistration(FGuid RoundId, bool bStamina, bool bRegistered);
+
+    UFUNCTION(Server, Reliable)
+    void ServerUseStatScroll(FGuid RoundId, ECoopRPGScrollStat Stat, int32 ExpectedScrollCount);
+
+    UFUNCTION(Server, Reliable)
+    void ServerUseSlashCapsule(FGuid RoundId);
 
     UFUNCTION(Client, Unreliable)
     void ClientGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
@@ -83,7 +134,7 @@ private:
 
     void SetRecoveryCount(int32 Count);
 
-    void LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId) const;
+    void LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId, bool bStamina) const;
 
     const TCHAR* GetChestRejection(const ACoopRPGSharedChest* Chest, FGuid RoundId) const;
     void LogChestRejection(const TCHAR* Action, const TCHAR* Reason,
@@ -95,12 +146,46 @@ private:
     UFUNCTION()
     void OnRep_RecoveryCount();
 
+    UFUNCTION()
+    void OnRep_StageRecoverySupplies();
+
 private:
     UPROPERTY(ReplicatedUsing = OnRep_OpenedChest)
     TObjectPtr<ACoopRPGSharedChest> OpenedChest;
 
     UPROPERTY(ReplicatedUsing = OnRep_RecoveryCount)
     int32 RecoveryCount = 0;
+
+    UPROPERTY(Replicated)
+    int32 StaminaRecoveryCount = 0;
+
+    UPROPERTY(Replicated)
+    FCoopRPGRecoveryRegistration RecoveryRegistration;
+
+    UPROPERTY(Replicated)
+    FIntPoint StageRecoveryUsesRemaining = FIntPoint::ZeroValue;
+
+    // Personal potions travel separately from the HP/SP supplies for this stage.
+    UPROPERTY(ReplicatedUsing = OnRep_StageRecoverySupplies)
+    FIntPoint StageRecoverySupplies = FIntPoint::ZeroValue;
+
+    FGuid StageInventoryRound;
+    FCoopRPGRecoverySnapshot EntryRecovery;
+    FCoopRPGSwordSnapshot EntrySword;
+    bool bEntryShieldEquipped = false;
+
+    UPROPERTY(Replicated)
+    ECoopRPGSwordOwnership SwordOwnership = ECoopRPGSwordOwnership::None;
+
+    UPROPERTY(Replicated)
+    FCoopRPGStatProgress StatProgress;
+
+    FCoopRPGStatProgress EntryStats;
+
+    UPROPERTY(Replicated)
+    FCoopRPGSlashProgress SlashProgress;
+
+    FCoopRPGSlashProgress EntrySlash;
 
     UPROPERTY(Replicated)
     bool bRoundReady = false;

@@ -22,7 +22,7 @@ enum class ECoopRPGDashboardLabel : uint8
 {
     Lobby, Skirmish, Puzzle, Boss, Expedition, Ready, OpenChest, ChestActions, Mushrooms, Plates, Knight,
     Stone, Portal, WaitForPartner, Countdown, Start, Defeat, StoneGranted, CountStarted, CountReset,
-    More, Fold, ReadyYes, ReadyWait, ReadyMissing, Objective, StoneAppeared, CloseChest, Departure
+    More, Fold, ReadyYes, ReadyWait, ReadyMissing, Objective, StoneAppeared, CloseChest, Departure, EquipSword
 };
 
 namespace
@@ -70,7 +70,7 @@ namespace
         const auto* Pawn = Cast<ACoopRPGCharacter>(Controller.GetPawn());
         if (!IsValid(Pawn) || !Pawn->HasMeleeWeapon())
         {
-            return ELabel::OpenChest;
+            return Controller.GetSwordOwnership() != ECoopRPGSwordOwnership::None ? ELabel::EquipSword : ELabel::OpenChest;
         }
         return Stage == 3 ? ELabel::Knight : ELabel::Mushrooms;
     }
@@ -124,6 +124,8 @@ namespace
                 : TArray<FString>{TEXT("가운데 상자에서 [E] 키를 눌러"), TEXT("장비와 물약을 챙겨 주세요.")};
         case ELabel::ChestActions:
             return {bBossActive ? TEXT("상자에서 장비와 물약을 챙기세요.") : TEXT("열어 둔 상자에서 장비와 물약을 챙겨 주세요.")};
+        case ELabel::EquipSword:
+            return {TEXT("인벤토리에서 한손검을 장착해 주세요.")};
         case ELabel::Mushrooms:
             return {TEXT("전투 준비를 마쳤어요. 버섯을 모두 처치해 주세요.")};
         case ELabel::Stone:
@@ -392,7 +394,7 @@ void FCoopRPGExpeditionDashboard::DrawAttackIcon(AHUD& HUD, FVector2D Position, 
 }
 
 void FCoopRPGExpeditionDashboard::DrawBasicAttackGlyph(AHUD& HUD, UCanvas& Canvas, const FBox2D& Slot,
-    const CoopRPG::ExpeditionUI::FAttackHudStatus& Attack) const
+    const CoopRPG::ExpeditionUI::FAttackHudStatus& Attack, bool bSlash) const
 {
     using namespace CoopRPG::ExpeditionUI;
     if (!Skin.IsValid())
@@ -402,6 +404,12 @@ void FCoopRPGExpeditionDashboard::DrawBasicAttackGlyph(AHUD& HUD, UCanvas& Canva
 
     const double Side = Slot.GetSize().X;
     const double IconSide = FMath::RoundToDouble(Side * 0.60);
+    if (bSlash)
+    {
+        const double Inset = FMath::RoundToDouble(Side * 0.14);
+        HUD.DrawRect(FLinearColor(FColor(49, 72, 93)), Slot.Min.X + Inset, Slot.Min.Y + Inset,
+            Side - Inset * 2.0, Side - Inset * 2.0);
+    }
     const bool bCooling = Attack.State == EAttackHudState::Cooling;
     DrawAttackIcon(HUD, Slot.GetCenter() - FVector2D(IconSide * 0.5), IconSide,
         Attack.State != EAttackHudState::Ready && !bCooling);

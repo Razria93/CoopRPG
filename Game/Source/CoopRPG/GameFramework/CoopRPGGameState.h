@@ -147,7 +147,9 @@ public:
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
 
-    void PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVector& Location, float Yaw, int32 Slot, uint32 Swing);
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastSlashFeedback(const TArray<FCoopRPGGameplayFeedback>& Events);
+    void PlayMeleeEffect(ECoopRPGMeleeEffect Effect, const FVector& Location, float Yaw, int32 Slot, uint32 Swing, float ScaleMultiplier = 1.0f);
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastMeleeSweepTrace(const FCoopRPGMeleeSweepTrace& Trace);

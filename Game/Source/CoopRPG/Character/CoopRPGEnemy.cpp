@@ -7,6 +7,7 @@
 #include "CoopRPG/Character/CoopRPGLocomotionAnimInstance.h"
 #include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
+#include "CoopRPG/GameFramework/CoopRPGPlayerController.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 
 #include "AbilitySystemComponent.h"
@@ -577,6 +578,18 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
     const FGameplayEffectSpecHandle Damage = AbilitySystem->MakeOutgoingSpec(UCoopRPGMeleeDamage::StaticClass(), 1.0f,
         AbilitySystem->MakeEffectContext());
     check(Damage.IsValid());
+    const bool bGuarding = Player->IsGuarding();
+    const double GuardAngle = Player->GetGuardAngle(GetActorLocation());
+    const bool bGuarded = bGuarding
+        && GuardAngle <= ACoopRPGCharacter::GuardHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
+    const auto* DefendingController = Player->GetController<ACoopRPGPlayerController>();
+    const int32 Protection = DefendingController ? DefendingController->GetProtection() : 0;
+    constexpr float ProtectionReductionPerPoint = 0.10f;
+    constexpr float MinGuardDamageScale = 0.20f;
+    const float DamageScale = bGuarded
+        ? FMath::Max(MinGuardDamageScale, ACoopRPGCharacter::GuardDamageMultiplier - ProtectionReductionPerPoint * Protection)
+        : 1.0f;
+    UCoopRPGMeleeDamage::SetDamage(*Damage.Data.Get(), UCoopRPGMeleeDamage::BaseDamage * DamageScale);
     const float HealthBefore = Player->GetHealth();
     AbilitySystem->ApplyGameplayEffectSpecToTarget(*Damage.Data.Get(), Player->GetAbilitySystemComponent());
     if (const float DamageAmount = HealthBefore - Player->GetHealth(); DamageAmount > 0.0f)
@@ -586,9 +599,9 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
             State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::Damage, Player, DamageAmount, 0});
         }
     }
-    UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackHit Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f HP=%.2f->%.2f %s"),
+    UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackHit Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f HP=%.2f->%.2f Guard=%d GuardAngle=%.2f Guarded=%d DamageScale=%.2f Protection=%d %s"),
         *GetName(), *GetNameSafe(Player), GetTargetPlayerId(Player), Distance, GetAttackRange(),
-        HealthBefore, Player->GetHealth(), *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+        HealthBefore, Player->GetHealth(), bGuarding, GuardAngle, bGuarded, DamageScale, Protection, *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGEnemy::HandleHealthChanged(const FOnAttributeChangeData& Change)

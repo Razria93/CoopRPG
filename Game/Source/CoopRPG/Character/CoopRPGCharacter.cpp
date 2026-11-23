@@ -4,6 +4,7 @@
 
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
+#include "CoopRPG/AbilitySystem/Abilities/CoopRPGSlashAbility.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Debug/CoopRPGCombatProbeComponent.h"
 #include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
@@ -138,6 +139,11 @@ ACoopRPGCharacter::ACoopRPGCharacter()
     HeroWeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     HeroWeaponMesh->SetVisibility(false);
 
+    HeroShieldMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeroShield"));
+    HeroShieldMesh->SetupAttachment(GetMesh());
+    HeroShieldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    HeroShieldMesh->SetVisibility(false);
+
     auto* CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(GetRootComponent());
     CameraBoom->SetUsingAbsoluteRotation(true);
@@ -173,6 +179,8 @@ void ACoopRPGCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGCharacter, bHasMeleeWeapon);
+    DOREPLIFETIME(ACoopRPGCharacter, bShieldEquipped);
+    DOREPLIFETIME(ACoopRPGCharacter, bGuarding);
     DOREPLIFETIME(ACoopRPGCharacter, DisplaySlot);
     DOREPLIFETIME_CONDITION(ACoopRPGCharacter, PartyStamina, COND_SkipOwner);
     DOREPLIFETIME(ACoopRPGCharacter, MeleePresentation);
@@ -188,14 +196,60 @@ float ACoopRPGCharacter::GetStamina() const
     return CombatAttributes->GetStamina();
 }
 
-void ACoopRPGCharacter::EquipMeleeWeapon()
+void ACoopRPGCharacter::SetMeleeWeaponEquipped(bool bEquipped)
 {
-    if (HasAuthority() && !bHasMeleeWeapon)
+    if (HasAuthority() && bHasMeleeWeapon != bEquipped)
     {
-        bHasMeleeWeapon = true;
+        bHasMeleeWeapon = bEquipped;
+        if (!bEquipped)
+        {
+            ServerCancelAttack_Implementation();
+        }
         RefreshWeaponVisibility();
         ForceNetUpdate();
     }
+}
+
+bool ACoopRPGCharacter::IsGuarding() const
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    return bGuarding && bShieldEquipped && GetHealth() > 0.0f && State && State->IsRoundPlaying();
+}
+
+void ACoopRPGCharacter::SetShieldEquipped(bool bEquipped)
+{
+    if (!HasAuthority() || bShieldEquipped == bEquipped)
+    {
+        return;
+    }
+    bShieldEquipped = bEquipped;
+    bGuarding = bEquipped && bGuarding;
+    OnRep_ShieldState();
+    ForceNetUpdate();
+}
+
+void ACoopRPGCharacter::ReleaseGuardInput()
+{
+    if (bGuardKeyHeld)
+    {
+        bGuardKeyHeld = false;
+        ServerSetGuarding(FGuid(), false);
+    }
+}
+
+void ACoopRPGCharacter::ClearGuard()
+{
+    if (HasAuthority())
+    {
+        SetGuarding(false);
+    }
+}
+
+double ACoopRPGCharacter::GetGuardAngle(const FVector& SourcePosition) const
+{
+    const FVector Offset = (SourcePosition - GetActorLocation()).GetSafeNormal2D();
+    const double Dot = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), Offset);
+    return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Dot, -1.0, 1.0)));
 }
 
 void ACoopRPGCharacter::SetDisplaySlot(int32 Slot)
@@ -270,6 +324,7 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
         }
         SetPresentationTint(GetWorldTimerManager().IsTimerActive(HitFlashTimer));
         ConfigureHeroWeapon(Identity->GetSelectedHero());
+        ConfigureHeroShield(Identity->GetSelectedHero());
         OnRep_MeleePresentation();
     }
     BodyMesh->SetVisibility(!HeroMesh);
@@ -285,7 +340,7 @@ float ACoopRPGCharacter::GetMeleeWindup() const
     return GetHeroAttackProfile(Identity ? Identity->GetSelectedHero() : ECoopRPGHero::Unassigned).ContactTime;
 }
 
-uint32 ACoopRPGCharacter::StartMeleePresentation(float FacingYaw, float Windup)
+uint32 ACoopRPGCharacter::StartMeleePresentation(float FacingYaw, float Windup, bool bSlash)
 {
     check(HasAuthority());
     ++MeleePresentation.Sequence;
@@ -294,6 +349,7 @@ uint32 ACoopRPGCharacter::StartMeleePresentation(float FacingYaw, float Windup)
     MeleePresentation.FacingYaw = FacingYaw;
     MeleePresentation.Windup = Windup;
     MeleePresentation.bCancelled = false;
+    MeleePresentation.bSlash = bSlash;
     GetCharacterMovement()->bOrientRotationToMovement = false;
     bMeleeFacingLocked = true;
     if (GetNetMode() != NM_DedicatedServer)
@@ -355,6 +411,10 @@ void ACoopRPGCharacter::BeginPlay()
                 .AddUObject(this, &ThisClass::UpdatePartyStamina);
         }
         AbilitySystem->GiveAbility(FGameplayAbilitySpec(UCoopRPGMeleeAbility::StaticClass()));
+        if (CoopRPG::Expedition::IsSkirmish(GetWorld()) || CoopRPG::Expedition::IsBoss(GetWorld()))
+        {
+            AbilitySystem->GiveAbility(FGameplayAbilitySpec(UCoopRPGSlashAbility::StaticClass()));
+        }
     }
 }
 
@@ -367,6 +427,7 @@ void ACoopRPGCharacter::OnPlayerStateChanged(APlayerState* NewPlayerState, APlay
 void ACoopRPGCharacter::NotifyControllerChanged()
 {
     Super::NotifyControllerChanged();
+    ClearGuard();
     AbilitySystem->InitAbilityActorInfo(this, this);
 }
 
@@ -379,6 +440,9 @@ void ACoopRPGCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
         Input->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACoopRPGCharacter::Move);
         Input->BindAction(AttackAction, ETriggerEvent::Started, this, &ACoopRPGCharacter::Attack);
         PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ACoopRPGCharacter::CancelAttack);
+        PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACoopRPGCharacter::UseSlash);
+        PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &ACoopRPGCharacter::PressGuardInput);
+        PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &ACoopRPGCharacter::ReleaseGuardInput);
     }
 }
 
@@ -420,6 +484,63 @@ void ACoopRPGCharacter::CancelAttack()
     ServerCancelAttack();
 }
 
+void ACoopRPGCharacter::UseSlash()
+{
+    AbilitySystem->TryActivateAbilityByClass(UCoopRPGSlashAbility::StaticClass());
+}
+
+void ACoopRPGCharacter::PressGuardInput()
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!bGuardKeyHeld && State && State->IsRoundPlaying())
+    {
+        bGuardKeyHeld = true;
+        ServerSetGuarding(State->GetRoundId(), true);
+    }
+}
+
+void ACoopRPGCharacter::SetGuarding(bool bActive)
+{
+    if (bGuarding != bActive)
+    {
+        bGuarding = bActive;
+        OnRep_ShieldState();
+        ForceNetUpdate();
+    }
+}
+
+void ACoopRPGCharacter::ServerSetGuarding_Implementation(FGuid RoundId, bool bRequested)
+{
+    if (!bRequested)
+    {
+        SetGuarding(false);
+        return;
+    }
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (!bShieldEquipped || GetHealth() <= 0.0f || bMeleeFacingLocked || !RoundId.IsValid()
+        || !State || State->GetRoundId() != RoundId || !State->IsRoundPlaying())
+    {
+        UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerGuardRejected Slot=%d Equipped=%d Round=%s %s"),
+            GetDisplaySlot(), bShieldEquipped, *RoundId.ToString(),
+            *CoopRPG::Debug::DescribePlayerRequestContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+        return;
+    }
+    SetGuarding(true);
+}
+
+void ACoopRPGCharacter::OnRep_ShieldState()
+{
+    HeroShieldMesh->SetVisibility(bShieldEquipped && HeroShieldMesh->GetStaticMesh() != nullptr);
+    if (bShieldEquipped || GetDisplaySlot() > 0)
+    {
+        UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerShieldState Slot=%d Equipped=%d Guard=%d Visible=%d Mesh=%s Socket=%s %s"),
+            GetDisplaySlot(), bShieldEquipped, bGuarding, HeroShieldMesh->IsVisible(),
+            *GetNameSafe(HeroShieldMesh->GetStaticMesh()), *HeroShieldMesh->GetAttachSocketName().ToString(),
+            *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
+    }
+}
+
 void ACoopRPGCharacter::ServerCancelAttack_Implementation()
 {
     if (GetNetConnection())
@@ -432,6 +553,11 @@ void ACoopRPGCharacter::ServerCancelAttack_Implementation()
         Spec && Spec->IsActive())
     {
         AbilitySystem->CancelAbilityHandle(Spec->Handle);
+    }
+    else if (const FGameplayAbilitySpec* Slash = AbilitySystem->FindAbilitySpecFromClass(UCoopRPGSlashAbility::StaticClass());
+        Slash && Slash->IsActive())
+    {
+        AbilitySystem->CancelAbilityHandle(Slash->Handle);
     }
     else
     {
@@ -531,9 +657,9 @@ void ACoopRPGCharacter::OnRep_MeleePresentation()
         HeroAttackClip, UCoopRPGHeroAnimInstance::MeleeSlot, 0.045f, 0.08f, 1.0f, 1, -1.0f, ClipOffset);
     if (LocalMeleeMontage.IsValid())
     {
-        UE_LOG(LogCoopRPGMeleeMotion, Log, TEXT("MeleeMotionStarted Slot=%d Swing=%u Clip=%s Offset=%.3f Windup=%.3f Yaw=%.1f ServerElapsed=%.3f %s"),
+        UE_LOG(LogCoopRPGMeleeMotion, Log, TEXT("MeleeMotionStarted Slot=%d Swing=%u Clip=%s Offset=%.3f Windup=%.3f Yaw=%.1f ServerElapsed=%.3f Slash=%d %s"),
             DisplaySlot, MeleePresentation.Sequence, *GetNameSafe(HeroAttackClip), ClipOffset, MeleePresentation.Windup,
-            MeleePresentation.FacingYaw, Elapsed,
+            MeleePresentation.FacingYaw, Elapsed, MeleePresentation.bSlash,
             *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
 
         const float SwingTime = FMath::Max(MeleePresentation.Windup - SwingEffectsLeadSeconds, 0.0f);
@@ -565,7 +691,7 @@ void ACoopRPGCharacter::PlayMeleeSwingEffects()
         && !MeleePresentation.bCancelled && PresentedMeleeSequence == MeleePresentation.Sequence)
     {
         State->PlayMeleeEffect(ECoopRPGMeleeEffect::SwordSwing, HeroWeaponMesh->GetComponentLocation(),
-            MeleePresentation.FacingYaw, DisplaySlot, PresentedMeleeSequence);
+            MeleePresentation.FacingYaw, DisplaySlot, PresentedMeleeSequence, MeleePresentation.bSlash ? 1.8f : 1.0f);
     }
 }
 
@@ -701,6 +827,28 @@ void ACoopRPGCharacter::RefreshWeaponVisibility()
             HeroWeaponMesh->GetRelativeLocation().X, HeroWeaponMesh->GetRelativeRotation().Roll,
             *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
     }
+}
+
+void ACoopRPGCharacter::ConfigureHeroShield(ECoopRPGHero Hero)
+{
+    HeroShieldMesh->SetStaticMesh(nullptr);
+    const bool bAdventurer = Hero == ECoopRPGHero::Adventurer;
+    const FName Socket = bAdventurer ? FName(TEXT("Shield")) : FName(TEXT("ShieldSocket"));
+    if (GetMesh()->DoesSocketExist(Socket))
+    {
+        const TCHAR* ShieldPath = bAdventurer
+            ? TEXT("/Game/ThirdParty/RPGHeroSquad/Mesh/Weapon/SM_RPGHero_Shield01_Polyart.SM_RPGHero_Shield01_Polyart")
+            : TEXT("/Game/ThirdParty/RPGHeroSquad/Mesh/Weapon/SM_AnimalHero_Shield01_Polyart.SM_AnimalHero_Shield01_Polyart");
+        UStaticMesh* Shield = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(ShieldPath)).LoadSynchronous();
+        if (Shield && HeroShieldMesh->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetIncludingScale, Socket))
+        {
+            HeroShieldMesh->SetStaticMesh(Shield);
+            const FVector Grip = bAdventurer ? FVector(0.0, 0.0, 6.1316) : FVector(-0.512, 0.0, 0.0);
+            const FRotator Rotation = bAdventurer ? FRotator::ZeroRotator : FRotator(90.0, 90.0, 180.0);
+            HeroShieldMesh->SetRelativeTransform(FTransform(Rotation, Grip));
+        }
+    }
+    OnRep_ShieldState();
 }
 
 void ACoopRPGCharacter::SetPresentationTint(bool bDarkened)

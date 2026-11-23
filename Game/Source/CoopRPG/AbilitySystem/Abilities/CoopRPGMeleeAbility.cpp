@@ -4,6 +4,7 @@
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Character/CoopRPGEnemy.h"
+#include "CoopRPG/GameFramework/CoopRPGPlayerController.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGGameMode.h"
 #include "CoopRPG/GameFramework/CoopRPGGameplayFeedback.h"
@@ -212,6 +213,13 @@ void UCoopRPGMeleeAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     if (Source->GetNumericAttribute(UCoopRPGCombatAttributes::GetHealthAttribute()) <= 0.0f)
     {
         LogFailedCheck(ActorInfo, TEXT("AttackerDead"), ANSI_TO_TCHAR(__FUNCTION__));
+        EndAbility(Handle, ActorInfo, ActivationInfo, false, true);
+        return;
+    }
+
+    if (Attacker->IsGuarding() || Attacker->IsMeleeWindupActive())
+    {
+        LogFailedCheck(ActorInfo, Attacker->IsGuarding() ? TEXT("Guarding") : TEXT("Busy"), ANSI_TO_TCHAR(__FUNCTION__));
         EndAbility(Handle, ActorInfo, ActivationInfo, false, true);
         return;
     }
@@ -437,6 +445,11 @@ void UCoopRPGMeleeAbility::ResolveHit()
     const float HealthBefore = TargetASC->GetNumericAttribute(HealthAttribute);
     const FGameplayEffectSpecHandle Damage = MakeOutgoingGameplayEffectSpec(UCoopRPGMeleeDamage::StaticClass());
     check(Damage.IsValid());
+    const auto* AttackingPawn = Cast<APawn>(Attacker);
+    const auto* Player = AttackingPawn ? AttackingPawn->GetController<ACoopRPGPlayerController>() : nullptr;
+    const int32 MartialPower = Player ? Player->GetMartialPower() : 0;
+    UCoopRPGMeleeDamage::SetDamage(*Damage.Data.Get(), UCoopRPGMeleeDamage::BaseDamage
+        + MartialPower * FCoopRPGStatProgress::DamagePerMartialPower);
     Source->ApplyGameplayEffectSpecToTarget(*Damage.Data.Get(), TargetASC);
     if (const float DamageAmount = HealthBefore - TargetASC->GetNumericAttribute(HealthAttribute); State && DamageAmount > 0.0f)
     {

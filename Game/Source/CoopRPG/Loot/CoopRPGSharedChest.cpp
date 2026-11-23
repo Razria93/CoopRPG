@@ -1,5 +1,7 @@
 #include "CoopRPGSharedChest.h"
 
+#include "CoopRPG/GameFramework/CoopRPGStatProgress.h"
+
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 #include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
@@ -66,18 +68,37 @@ void ACoopRPGSharedChest::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGSharedChest, RecoveryStock);
+    DOREPLIFETIME(ACoopRPGSharedChest, StaminaRecoveryStock);
     DOREPLIFETIME(ACoopRPGSharedChest, WeaponStock);
+    DOREPLIFETIME(ACoopRPGSharedChest, MartialPowerScrollStock);
+    DOREPLIFETIME(ACoopRPGSharedChest, ProtectionScrollStock);
+    DOREPLIFETIME(ACoopRPGSharedChest, SlashCapsuleStock);
     DOREPLIFETIME(ACoopRPGSharedChest, FirstOpenedAt);
 }
 
-bool ACoopRPGSharedChest::TryTakeRecovery()
+bool ACoopRPGSharedChest::TryTakeRecovery(bool bStamina)
 {
-    return TryTakeStock(RecoveryStock);
+    return TryTakeStock(bStamina ? StaminaRecoveryStock : RecoveryStock);
 }
 
 bool ACoopRPGSharedChest::TryTakeWeapon()
 {
     return TryTakeStock(WeaponStock);
+}
+
+int32 ACoopRPGSharedChest::GetStatScrollStock(ECoopRPGScrollStat Stat) const
+{
+    return Stat == ECoopRPGScrollStat::Protection ? ProtectionScrollStock : MartialPowerScrollStock;
+}
+
+bool ACoopRPGSharedChest::TryTakeStatScroll(ECoopRPGScrollStat Stat)
+{
+    return TryTakeStock(Stat == ECoopRPGScrollStat::Protection ? ProtectionScrollStock : MartialPowerScrollStock);
+}
+
+bool ACoopRPGSharedChest::TryTakeSlashCapsule()
+{
+    return TryTakeStock(SlashCapsuleStock);
 }
 
 void ACoopRPGSharedChest::RecordFirstOpen()
