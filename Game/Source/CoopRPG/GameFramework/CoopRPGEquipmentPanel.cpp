@@ -234,7 +234,13 @@ bool FCoopRPGEquipmentPanel::HandlePrimaryButton(ACoopRPGPlayerController& Contr
                     TabNames[Tab], ActiveTab == Tab ? 1 : 0,
                     *CoopRPG::Debug::DescribeLogContext(Controller.GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
             }
-            else if (bHasPointer && ActiveTab == EquipmentTab && PressedShieldAction.IsSet() && IsShieldActionAt(Pointer))
+            else if (bHasPointer && ActiveTab == EquipmentTab && PressedSupplySwordAction.IsSet()
+                && IsEquipmentActionAt(Pointer, 0))
+            {
+                Controller.RequestSupplySwordEquipped(PressedSupplySwordAction.GetValue());
+            }
+            else if (bHasPointer && ActiveTab == EquipmentTab && PressedShieldAction.IsSet()
+                && IsEquipmentActionAt(Pointer, 1))
             {
                 Controller.RequestShieldEquipped(PressedShieldAction.GetValue());
             }
@@ -298,10 +304,7 @@ bool FCoopRPGEquipmentPanel::HandlePrimaryButton(ACoopRPGPlayerController& Contr
                 PressedActionItem = SelectedInventoryItem;
                 if (SelectedInventoryItem == EInventoryItem::Sword)
                 {
-                    if (const auto* Hero = Cast<ACoopRPGCharacter>(Controller.GetPawn()))
-                    {
-                        PressedInventoryAction = !Hero->HasMeleeWeapon();
-                    }
+                    PressedInventoryAction = !Controller.IsPersonalSwordEquipped();
                 }
                 else if (SelectedInventoryItem == EInventoryItem::SlashCapsule)
                 {
@@ -328,9 +331,17 @@ bool FCoopRPGEquipmentPanel::HandlePrimaryButton(ACoopRPGPlayerController& Contr
                 }
             }
         }
-        if (ActiveTab == EquipmentTab && IsShieldActionAt(Pointer) && Controller.CanChangeShield())
+        if (ActiveTab == EquipmentTab)
         {
-            PressedShieldAction = !CastChecked<ACoopRPGCharacter>(Controller.GetPawn())->HasShieldEquipped();
+            const auto& Supplies = Controller.GetExpeditionSupplies();
+            if (Supplies.HasSword() && IsEquipmentActionAt(Pointer, 0))
+            {
+                PressedSupplySwordAction = !Supplies.bSwordEquipped;
+            }
+            else if (Controller.CanChangeShield() && IsEquipmentActionAt(Pointer, 1))
+            {
+                PressedShieldAction = !Supplies.bShieldEquipped;
+            }
         }
         if (ActiveTab == SkillsTab)
         {
@@ -375,6 +386,7 @@ void FCoopRPGEquipmentPanel::ReleasePointer()
     PressedActionItem = EInventoryItem::None;
     PressedInventoryAction.Reset();
     PressedShieldAction.Reset();
+    PressedSupplySwordAction.Reset();
     PressedSkillGroup = INDEX_NONE;
     ScrollDragOffset.Reset();
 }
@@ -521,7 +533,7 @@ void FCoopRPGEquipmentPanel::DrawInventory(AHUD& HUD, UCanvas& Surface, const AC
     const auto SwordOwnership = Controller.GetSwordOwnership();
     const bool bHasSword = SwordOwnership != ECoopRPGSwordOwnership::None;
     const bool bSwordBound = SwordOwnership == ECoopRPGSwordOwnership::Bound;
-    const bool bSwordEquipped = IsValid(Hero) && Hero->HasMeleeWeapon();
+    const bool bSwordEquipped = Controller.IsPersonalSwordEquipped();
     const bool bHasStone = State->GetTeamLootCount() > 0;
     FInventoryItems Items;
     // An empty registered stack remains selectable so its slot can be unregistered.
@@ -749,6 +761,7 @@ void FCoopRPGEquipmentPanel::DrawEquipment(AHUD& HUD, UCanvas& Surface, const AC
     const bool bShieldEquipped = IsValid(Hero) && Hero->HasShieldEquipped();
     const bool bGuarding = IsValid(Hero) && Hero->IsGuarding();
     const bool bCanChangeShield = Controller.CanChangeShield();
+    const auto& Supplies = Controller.GetExpeditionSupplies();
     const FBox2D Panel = GetPanelBounds();
     const FBox2D List = GetEquipmentListBounds();
     const double Left = List.Min.X;
@@ -789,20 +802,35 @@ void FCoopRPGEquipmentPanel::DrawEquipment(AHUD& HUD, UCanvas& Surface, const AC
         if (bNamed)
         {
             DrawPanelLabel(Surface, bWeapon ? TEXT("무기") : TEXT("방패"), Left + 49.0, Y + 13.0, HintFont, Muted);
-            const TCHAR* Item = bShield && bGuarding ? TEXT("가드 중")
-                : bArmed ? (bWeapon ? TEXT("한손검") : TEXT("보급 방패")) : TEXT("미장착");
+            const TCHAR* Item = TEXT("미장착");
+            if (bWeapon && bArmed)
+            {
+                Item = Supplies.bSwordEquipped ? TEXT("보급 한손검") : TEXT("한손검");
+            }
+            else if (bShield && bArmed)
+            {
+                Item = bGuarding ? TEXT("가드 중") : TEXT("보급 방패 [Shift]");
+            }
             DrawPanelLabel(Surface, Item, Left + 49.0, Y + 29.0, ItemFont, Ink);
         }
         else
         {
             DrawPanelLabel(Surface, TEXT("빈 슬롯"), Left + 49.0, Y + 21.0, HintFont, Muted);
         }
-        if ((bWeapon && bArmed) || (bShield && (bCanChangeShield || bShieldEquipped)))
+        if ((bWeapon && (bArmed || Supplies.HasSword())) || (bShield && (bCanChangeShield || bShieldEquipped)))
         {
             const FBox2D Badge = GetEquipmentActionBounds(Y);
             DrawPanelBox(HUD, Badge, Color(219, 232, 211), Color(146, 167, 126));
-            const FStringView Label(bShield && bCanChangeShield
-                ? (bShieldEquipped ? TEXT("장착 해제") : TEXT("장착")) : TEXT("장착 중"));
+            const TCHAR* Action = TEXT("장착 중");
+            if (bWeapon && Supplies.HasSword())
+            {
+                Action = Supplies.bSwordEquipped ? TEXT("장착 해제") : TEXT("보급 장착");
+            }
+            else if (bShield && bCanChangeShield)
+            {
+                Action = bShieldEquipped ? TEXT("장착 해제") : TEXT("장착");
+            }
+            const FStringView Label(Action);
             DrawPanelLabel(Surface, Label, Badge.GetCenter().X - Measure(Surface, Label, HintFont).X * 0.5f,
                 Badge.GetCenter().Y, HintFont, Color(55, 87, 66));
         }
@@ -810,16 +838,23 @@ void FCoopRPGEquipmentPanel::DrawEquipment(AHUD& HUD, UCanvas& Surface, const AC
     DrawScrollTrack(HUD);
 
     if (!LastDisplayedWeaponState.IsSet() || LastDisplayedWeaponState.GetValue() != bEquipped
-        || LastDisplayedEquipmentRow != FirstEquipmentRow || bLastDisplayedShield != bShieldEquipped || bLastDisplayedGuard != bGuarding)
+        || LastDisplayedEquipmentRow != FirstEquipmentRow || bLastDisplayedShield != bShieldEquipped || bLastDisplayedGuard != bGuarding
+        || bLastDisplayedSupplySword != Supplies.HasSword() || bLastDisplayedEquippedSupplySword != Supplies.bSwordEquipped
+        || bLastDisplayedIssuedShield != Supplies.bHasShield)
     {
         LastDisplayedWeaponState = bEquipped;
         LastDisplayedEquipmentRow = FirstEquipmentRow;
         bLastDisplayedShield = bShieldEquipped;
         bLastDisplayedGuard = bGuarding;
+        bLastDisplayedSupplySword = Supplies.HasSword();
+        bLastDisplayedEquippedSupplySword = Supplies.bSwordEquipped;
+        bLastDisplayedIssuedShield = Supplies.bHasShield;
+        const FVector2D SupplyAction = GetEquipmentActionBounds(List.Min.Y - FirstEquipmentRow * EquipmentRowPitch).GetCenter();
         const FVector2D ShieldAction = GetEquipmentActionBounds(List.Min.Y + (1 - FirstEquipmentRow) * EquipmentRowPitch).GetCenter();
-        UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("EquipmentPanelState Equipped=%d Shield=%d First=%d Visible=%d Slots=%d X=%.0f Y=%.0f Width=%.0f Height=%.0f Guard=%d ShieldActionX=%.0f ShieldActionY=%.0f %s"),
+        UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("EquipmentPanelState Equipped=%d Shield=%d First=%d Visible=%d Slots=%d X=%.0f Y=%.0f Width=%.0f Height=%.0f Guard=%d ShieldActionX=%.0f ShieldActionY=%.0f SupplySword=%d SupplyEquipped=%d IssuedShield=%d SupplyActionX=%.0f SupplyActionY=%.0f %s"),
             bEquipped, bShieldEquipped, FirstEquipmentRow + 1, VisibleEquipmentRows, EquipmentRows, Panel.Min.X, Panel.Min.Y,
-            Panel.GetSize().X, Panel.GetSize().Y, bGuarding, ShieldAction.X, ShieldAction.Y,
+            Panel.GetSize().X, Panel.GetSize().Y, bGuarding, ShieldAction.X, ShieldAction.Y, Supplies.HasSword(), Supplies.bSwordEquipped, Supplies.bHasShield,
+            SupplyAction.X, SupplyAction.Y,
             *CoopRPG::Debug::DescribeLogContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }
@@ -1003,9 +1038,9 @@ FBox2D FCoopRPGEquipmentPanel::GetEquipmentActionBounds(double RowY) const
     return FBox2D(FVector2D(Right - 76.0, RowY + 11.0), FVector2D(Right - 9.0, RowY + 32.0));
 }
 
-bool FCoopRPGEquipmentPanel::IsShieldActionAt(const FVector2D& Pointer) const
+bool FCoopRPGEquipmentPanel::IsEquipmentActionAt(const FVector2D& Pointer, int32 Slot) const
 {
-    const int32 VisibleRow = 1 - FirstEquipmentRow;
+    const int32 VisibleRow = Slot - FirstEquipmentRow;
     return VisibleRow >= 0 && VisibleRow < VisibleEquipmentRows
         && GetEquipmentActionBounds(GetEquipmentListBounds().Min.Y + VisibleRow * EquipmentRowPitch).IsInsideOrOn(Pointer);
 }

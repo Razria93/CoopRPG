@@ -268,6 +268,7 @@ namespace
 void ACoopRPGLootHUD::DrawHUD()
 {
     Super::DrawHUD();
+    PuzzleRewardPanelBounds = FBox2D(ForceInit);
     ChestPanelBounds = FBox2D(ForceInit);
     const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
     if (Viewport && Viewport->HasConnectionNotice())
@@ -556,7 +557,8 @@ bool ACoopRPGLootHUD::HandleHudPrimaryButton(ACoopRPGPlayerController& Controlle
         ExpeditionDashboard.Hide();
         ChestPanelBounds = FBox2D(ForceInit);
     }
-    return HandleChestPrimaryButton(Controller, Input)
+    return HandlePuzzleRewardPrimaryButton(Controller, Input)
+        || HandleChestPrimaryButton(Controller, Input)
         || EquipmentPanel.HandlePrimaryButton(Controller, Input)
         || ExpeditionDashboard.HandlePrimaryButton(Controller, Input);
 }
@@ -571,6 +573,8 @@ void ACoopRPGLootHUD::ReleaseHudPointer()
 {
     EquipmentPanel.ReleasePointer();
     ExpeditionDashboard.ReleasePointer();
+    bOwnsPuzzleRewardPointer = false;
+    PressedPuzzleReward = ECoopRPGPuzzleReward::None;
     bOwnsChestPointer = false;
     PressedChestControl = EChestControl::None;
 }
@@ -1618,6 +1622,110 @@ void ACoopRPGLootHUD::DrawRoundWaiting(const ACoopRPGGameState& State,
     DrawText(Hint, FLinearColor::White, PanelTextX, PanelPad + 94.0f);
 }
 
+bool ACoopRPGLootHUD::HandlePuzzleRewardPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
+{
+    FVector2D Pointer = FVector2D::ZeroVector;
+    const bool bInside = PuzzleRewardPanelBounds.bIsValid && Controller.GetMousePosition(Pointer.X, Pointer.Y)
+        && PuzzleRewardPanelBounds.IsInsideOrOn(Pointer);
+    ECoopRPGPuzzleReward Card = ECoopRPGPuzzleReward::None;
+    if (bInside && Controller.GetPuzzleReward() == ECoopRPGPuzzleReward::None)
+    {
+        if (PuzzleRewardCardBounds[0].IsInsideOrOn(Pointer))
+        {
+            Card = ECoopRPGPuzzleReward::ExpeditionPower;
+        }
+        else if (PuzzleRewardCardBounds[1].IsInsideOrOn(Pointer))
+        {
+            Card = ECoopRPGPuzzleReward::HealthPotionCapacity;
+        }
+    }
+    if (bOwnsPuzzleRewardPointer)
+    {
+        if (Input.Event == IE_Released)
+        {
+            const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+            if (State && Card != ECoopRPGPuzzleReward::None && Card == PressedPuzzleReward)
+            {
+                Controller.ServerSelectPuzzleReward(State->GetRoundId(), Card);
+            }
+            bOwnsPuzzleRewardPointer = false;
+            PressedPuzzleReward = ECoopRPGPuzzleReward::None;
+        }
+        return true;
+    }
+    if (bInside && (Input.Event == IE_Pressed || Input.Event == IE_DoubleClick))
+    {
+        bOwnsPuzzleRewardPointer = true;
+        PressedPuzzleReward = Card;
+        return true;
+    }
+    return false;
+}
+
+void ACoopRPGLootHUD::DrawPuzzleRewards(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller)
+{
+    using namespace CoopRPG::ExpeditionUI;
+    constexpr double Height = 216.0;
+    constexpr double Padding = 18.0;
+    constexpr double Gap = 12.0;
+    constexpr double CardHeight = 88.0;
+    const double Width = FMath::Min(520.0, Canvas->ClipX - 2.0 * Padding);
+    const FVector2D Panel((Canvas->ClipX - Width) * 0.5, FMath::Max(12.0, (Canvas->ClipY - Height) * 0.5));
+    PuzzleRewardPanelBounds = FBox2D(Panel, Panel + FVector2D(Width, Height));
+    ExpeditionDashboard.DrawPanel(*this, Panel, FVector2D(Width, Height));
+
+    const FLinearColor Ink(FColor(61, 41, 25));
+    const FLinearColor Accent(FColor(34, 99, 54));
+    const auto Title = Font(19.0f, true);
+    const auto Body = Font(13.5f);
+    const auto CardTitle = Font(16.0f, true);
+    const auto CardCaption = Font(12.0f);
+    const auto DrawCentered = [&](const FString& Value, const FVector2D& Area, double Span, const FSlateFontInfo& Style,
+        const FLinearColor& Color)
+    {
+        const FString Label = Fit(*Canvas, Value, Style, Span - 16.0);
+        Text(*Canvas, Label, Area + FVector2D((Span - Measure(*Canvas, Label, Style).X) * 0.5, 0.0), Style, Color);
+    };
+
+    const ECoopRPGPuzzleReward Choice = Controller.GetPuzzleReward();
+    const int32 Remaining = FMath::Max(0, FMath::CeilToInt(State.GetPuzzleRewardDeadline() - State.GetServerWorldTimeSeconds()));
+    DrawCentered(TEXT("쌍둥이 발판 · 퍼즐 보상"), Panel + FVector2D(0.0, 18.0), Width, Title, Accent);
+    const FString Summary = FString::Printf(TEXT("퍼즐 성공 · 팀 점수 %d점"), State.GetTeamScore());
+    DrawCentered(Summary, Panel + FVector2D(0.0, 47.0), Width, Body, Ink);
+
+    const double CardWidth = (Width - 2.0 * Padding - Gap) * 0.5;
+    const ECoopRPGPuzzleReward Cards[] = {ECoopRPGPuzzleReward::ExpeditionPower, ECoopRPGPuzzleReward::HealthPotionCapacity};
+    for (int32 Index = 0; Index < UE_ARRAY_COUNT(Cards); ++Index)
+    {
+        const FVector2D Position = Panel + FVector2D(Padding + Index * (CardWidth + Gap), 76.0);
+        PuzzleRewardCardBounds[Index] = FBox2D(Position, Position + FVector2D(CardWidth, CardHeight));
+        ExpeditionDashboard.DrawDarkPanel(*this, Position, FVector2D(CardWidth, CardHeight));
+        const FLinearColor White(FColor(249, 235, 196));
+        const FLinearColor Highlight(FColor(190, 237, 140));
+        const bool bBuff = Cards[Index] == ECoopRPGPuzzleReward::ExpeditionPower;
+        const bool bSelected = Choice == Cards[Index];
+        DrawCentered(bBuff ? TEXT("일시 버프") : TEXT("패시브"), Position + FVector2D(0.0, 10.0), CardWidth,
+            CardCaption, bSelected ? Highlight : White);
+        DrawCentered(bBuff ? TEXT("무력 +1") : TEXT("HP 물약 사용 한도 +1"), Position + FVector2D(0.0, 30.0), CardWidth,
+            CardTitle, bSelected ? Highlight : White);
+        const TCHAR* Duration = bBuff ? TEXT("이번 원정 종료까지") : TEXT("세션 종료까지");
+        const FString Detail = bSelected ? FString::Printf(TEXT("확정 · %s"), Duration) : FString(Duration);
+        DrawCentered(Detail, Position + FVector2D(0.0, 58.0), CardWidth, CardCaption, bSelected ? Highlight : White);
+    }
+    const FString Status = Choice == ECoopRPGPuzzleReward::None
+        ? FString::Printf(TEXT("카드 1장 선택 · %d초 후 패시브 자동 확정"), Remaining)
+        : FString(TEXT("보상 확정 · 파티원 보상 확정 후 출발합니다."));
+    DrawCentered(Status, Panel + FVector2D(0.0, 177.0), Width, Body, Ink);
+
+    if (LastPresentedPuzzleRewardsRound != State.GetRoundId())
+    {
+        LastPresentedPuzzleRewardsRound = State.GetRoundId();
+        UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("PuzzleRewardPanel Round=%s BuffX=%.0f PassiveX=%.0f CardY=%.0f"),
+            *State.GetRoundId().ToString(), PuzzleRewardCardBounds[0].GetCenter().X, PuzzleRewardCardBounds[1].GetCenter().X,
+            PuzzleRewardCardBounds[0].GetCenter().Y);
+    }
+}
+
 void ACoopRPGLootHUD::DrawExpeditionResult(const ACoopRPGGameState& State, int32 Stage)
 {
     using namespace CoopRPG::ExpeditionUI;
@@ -1649,6 +1757,10 @@ void ACoopRPGLootHUD::DrawExpeditionResult(const ACoopRPGGameState& State, int32
     else if (bRetry)
     {
         Next = TEXT("잠시 후 같은 스테이지에 다시 도전해요.");
+    }
+    else if (bFinished && !State.GetRoundTravelDestination().IsEmpty())
+    {
+        Next = TEXT("잠시 후 원정 대기소로 돌아가요.");
     }
     else if (!State.GetRoundTravelDestination().IsEmpty())
     {
@@ -1706,7 +1818,16 @@ void ACoopRPGLootHUD::DrawRoundResult(const ACoopRPGGameState& State,
     if ((CoopRPG::Expedition::IsSkirmish(World) || CoopRPG::Expedition::IsPuzzle(World)
         || CoopRPG::Expedition::IsBoss(World)) && ExpeditionDashboard.Prepare())
     {
-        DrawExpeditionResult(State, Stage);
+        const auto& Slots = State.GetReadySlots();
+        if (State.GetRoundEndReason() == ECoopRPGRoundEndReason::PuzzleSolved && State.GetPuzzleRewardDeadline() > 0.0
+            && Slots.PlayerOne != ECoopRPGReadyStatus::Disconnected && Slots.PlayerTwo != ECoopRPGReadyStatus::Disconnected)
+        {
+            DrawPuzzleRewards(State, Controller);
+        }
+        else
+        {
+            DrawExpeditionResult(State, Stage);
+        }
         Controller.AcknowledgeRoundResult(State.GetRoundId());
         return;
     }
@@ -1770,8 +1891,15 @@ void ACoopRPGLootHUD::DrawRoundResult(const ACoopRPGGameState& State,
     }
     else if (!State.GetRoundTravelDestination().IsEmpty())
     {
-        NextAction = Reason == ECoopRPGRoundEndReason::PuzzleSolved
-            ? TEXT("Entering the boss stage ...") : TEXT("Next stage loads automatically.");
+        if (Reason == ECoopRPGRoundEndReason::BossDefeated)
+        {
+            NextAction = TEXT("Returning to the expedition lobby ...");
+        }
+        else
+        {
+            NextAction = Reason == ECoopRPGRoundEndReason::PuzzleSolved
+                ? TEXT("Entering the boss stage ...") : TEXT("Next stage loads automatically.");
+        }
     }
     else if (Reason == ECoopRPGRoundEndReason::BossDefeated)
     {
@@ -1827,7 +1955,6 @@ void ACoopRPGLootHUD::DrawExtractionStatus(const ACoopRPGGameState& State, float
     DrawWorldLabel(Zone->GetActorLocation() + FVector(0.0f, 0.0f, 12.0f), Label,
         Color == LockedColor ? FLinearColor(0.75f, 0.79f, 0.86f) : Color, FVector2D(0.0, -8.0));
 }
-
 
 void ACoopRPGLootHUD::DrawPortalGuide(const ACoopRPGExtractionZone& Zone)
 {

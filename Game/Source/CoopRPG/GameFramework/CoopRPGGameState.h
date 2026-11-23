@@ -156,6 +156,8 @@ public:
 
     void SetReadySlots(const FCoopRPGReadySlots& Slots);
     void SetLobbyDepartureDeadline(double Deadline);
+    void SetPuzzleRewardDeadline(double Deadline);
+    double GetPuzzleRewardDeadline() const { return PuzzleRewardDeadline; }
     bool IsLobbyDepartureScheduled() const { return LobbyDepartureDeadline > 0.0; }
     double GetLobbyDepartureRemainingSeconds() const;
     int32 RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated);
@@ -235,6 +237,9 @@ private:
 
     UPROPERTY(Replicated)
     double LobbyDepartureDeadline = 0.0;
+
+    UPROPERTY(Replicated)
+    double PuzzleRewardDeadline = 0.0;
 
     UPROPERTY(ReplicatedUsing = OnRep_PuzzleStatus)
     FCoopRPGPuzzleStatus PuzzleStatus;

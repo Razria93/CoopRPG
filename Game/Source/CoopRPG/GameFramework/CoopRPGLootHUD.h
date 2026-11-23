@@ -5,6 +5,7 @@
 #include "CoopRPGEquipmentPanel.h"
 #include "CoopRPGExpeditionDashboard.h"
 #include "CoopRPGGameplayFeedback.h"
+#include "CoopRPGPuzzleReward.h"
 #include "CoopRPGLootHUD.generated.h"
 
 class ACoopRPGCharacter;
@@ -57,6 +58,8 @@ private:
         int32 AttackTargetSlot = INDEX_NONE, int32 MaxHealth = 100);
 
     void DrawRoundWaiting(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, int32 Stage);
+    bool HandlePuzzleRewardPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
+    void DrawPuzzleRewards(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller);
     void DrawExpeditionResult(const ACoopRPGGameState& State, int32 Stage);
     void DrawRoundResult(const ACoopRPGGameState& State, ACoopRPGPlayerController& Controller, int32 Stage);
     void DrawExtractionStatus(const ACoopRPGGameState& State, float HintY);
@@ -77,6 +80,11 @@ private:
     EChestControl SelectedChestItem = EChestControl::None;
     bool bOwnsChestPointer = false;
     EChestControl PressedChestControl = EChestControl::None;
+    FBox2D PuzzleRewardPanelBounds{ForceInit};
+    FBox2D PuzzleRewardCardBounds[2] = {FBox2D(ForceInit), FBox2D(ForceInit)};
+    ECoopRPGPuzzleReward PressedPuzzleReward = ECoopRPGPuzzleReward::None;
+    bool bOwnsPuzzleRewardPointer = false;
+    FGuid LastPresentedPuzzleRewardsRound;
     FGuid LastPresentedExpeditionResult;
     FGuid LastPresentedPartyRound;
     TOptional<FIntVector4> PartyCardValues[2];
