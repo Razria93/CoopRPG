@@ -496,7 +496,7 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
         {
             if (auto* CoopPlayer = Cast<ACoopRPGPlayerController>(Player))
             {
-                CoopPlayer->RestoreTravelInventory(Arrival.Recovery, Arrival.Sword, Arrival.Stats, Arrival.Supplies,
+                CoopPlayer->RestoreTravelInventory(Arrival.Recovery, Arrival.Sword, Arrival.Stats,
                     Arrival.Slash, Arrival.bExpeditionPowerReward);
                 const TCHAR* Stage = bExpeditionLobby ? TEXT("Lobby")
                     : bExpeditionBoss ? TEXT("Boss") : bExpeditionPuzzle ? TEXT("Puzzle") : TEXT("Skirmish");
@@ -504,11 +504,11 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
                     Stage, SlotIndex + 1, CoopPlayer->GetRecoveryCount());
             }
         }
-        if (const auto* WaitingSupplies = WaitingPlayerSupplies.Find(UniqueId))
+        if (const auto* WaitingSword = WaitingPlayerSwords.Find(UniqueId))
         {
             if (auto* CoopPlayer = Cast<ACoopRPGPlayerController>(Player))
             {
-                CoopPlayer->RestoreWaitingExpeditionSupplies(*WaitingSupplies);
+                CoopPlayer->RestoreSword(*WaitingSword);
             }
         }
         const FString Label = UGameplayStatics::ParseOption(Options, TEXT("CoopValidationLabel"));
@@ -541,9 +541,9 @@ void ACoopRPGGameMode::Logout(AController* Exiting)
     const auto* Player = Cast<ACoopRPGPlayerController>(Exiting);
     const auto* Identity = Player ? Player->GetPlayerState<ACoopRPGPlayerState>() : nullptr;
     if (State && !State->IsRoundPlaying() && !State->HasRoundResult() && Identity && Identity->GetUniqueId().IsValid()
-        && Player->GetExpeditionSupplies().HasSword())
+        && CoopRPG::Expedition::IsExpedition(GetWorld()))
     {
-        WaitingPlayerSupplies.Add(Identity->GetUniqueId(), Player->GetTravelExpeditionSupplies(true));
+        WaitingPlayerSwords.Add(Identity->GetUniqueId(), Player->GetTravelSword(!bExpeditionLobby));
     }
     Super::Logout(Exiting);
     UpdateLootRoundPhase(Exiting);
@@ -566,10 +566,10 @@ void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
                     if (CoopRPG::Expedition::IsExpedition(GetWorld()))
                     {
                         Controller->LoadSessionGold(State->GetRoundId());
+                        Controller->ApplyExpeditionEquipment();
                     }
                     if (bExpeditionLobby)
                     {
-                        Character->SetMeleeWeaponEquipped(Controller->GetTravelSword(true).bEquipped);
                         Controller->LoadPersonalStorage();
                     }
                     else if (CoopRPG::Expedition::IsExpedition(GetWorld()))
@@ -702,17 +702,9 @@ bool ACoopRPGGameMode::ReserveRoundTravelSeats(const ACoopRPGGameState& State, c
             : FCoopRPGSwordSnapshot{};
         const FCoopRPGStatProgress Stats = bCarryInventory ? Player->GetTravelStats(bRetryStage)
             : FCoopRPGStatProgress{};
-        const FCoopRPGExpeditionSupplies CarriedEquipment = bCarryExpeditionState ? Player->GetTravelExpeditionSupplies(bRetryStage)
-            : FCoopRPGExpeditionSupplies{};
         const FCoopRPGSlashProgress Slash = bCarryInventory ? Player->GetTravelSlash(bRetryStage) : FCoopRPGSlashProgress{};
-        Participants.Add({ConnectionId, Carried, Sword, Stats, CarriedEquipment, Slash,
+        Participants.Add({ConnectionId, Carried, Sword, Stats, Slash,
             bCarryExpeditionState && Player->HasExpeditionPowerReward()});
-        if (bReturnToLobby && Player->GetExpeditionSupplies().HasSword())
-        {
-            UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("ExpeditionSuppliesRecovered Round=%s Slot=%d Origin=%s Sword=1 Shield=%d"),
-                *State.GetRoundId().ToString(), Participants.Num(), *Player->GetExpeditionSupplies().OriginRound.ToString(),
-                Player->GetExpeditionSupplies().bHasShield);
-        }
         if (bReturnToLobby || bStartExpedition)
         {
             UE_LOG(LogCoopRPGRoundTravel, Log,

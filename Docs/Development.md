@@ -306,6 +306,15 @@ A·B에서 두 명이 들어오면 문양과 외곽선이 흰색, 한 명이 내
 
 **근거** · [이동·재도전과 A·B 로그](Validation/ForestExpedition.md#expedition-loading-runtime)
 
+<a id="expedition-default-equipment-implementation"></a>
+### 11/23 · 직업 장비를 슬롯 기본값으로 적용
+
+원정마다 장비를 지급하고 회수하는 흐름을 직업별 슬롯 기본값으로 바꾸기로 했다. 로비에서도 현재 장착한 장비를 표시한다. 전용 서버가 스폰 시 역할과 개인 한손검의 장착 여부로 손 장비를 결정한다. 기본 장비는 인벤토리를 만들지 않으며, 장비창은 기본 한손검·개인 한손검·기본 방패를 구분한다. 맵 이동과 재도전에서는 개인 한손검의 소유·귀속과 장착 선택만 이동 정보에 담는다.
+
+Win64 패키지의 서버와 A·B에서 첫 로비·원정 완주·두 번째 원정·재도전을 확인했다. 다음은 수호기사의 서버 도발과 대상 전환을 검증한다.
+
+**근거** · [장비 규칙](Project.md#expedition-default-equipment) · [A·B 화면과 원본 로그](Validation/ForestExpedition.md#expedition-default-equipment-verification)
+
 <a id="gates"></a>
 ## 중간 목표의 최초 기한과 실제 판정
 

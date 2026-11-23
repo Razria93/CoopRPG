@@ -58,6 +58,15 @@
 
 맵 전환, 같은 맵 재도전, 로비 복귀에 목적지 안내를 표시한다. 각 클라이언트가 새 카메라를 준비하면 화면을 걷고 기존 준비 안내로 이어간다. 1440×810과 960×540에서 정상 이동과 재도전, 지연 및 접속 실패를 검증했다. [채택 경위와 구현](Development.md#expedition-loading-implementation) · [검증 범위](Validation/ForestExpedition.md#expedition-loading-runtime)
 
+## 3차 MVP 후속 보완 · 2026-11-23
+
+<a id="expedition-default-equipment-work"></a>
+### 직업 기본 장비
+
+**로컬 패키지 검증 완료.** 전사 한손검과 수호기사 한손검·방패를 슬롯 기본값으로 연결했다. 로비 장착, 개인 검 최초 장착·귀속과 해제, 같은 스테이지 재도전, 보스 처치 뒤 로비 복귀와 다음 원정에서 장착 선택을 확인했다. [게임 규칙](Project.md#expedition-default-equipment) · [시험 결과](Validation/ForestExpedition.md#expedition-default-equipment-verification)
+
+**다음 · 수호기사 도발.** 서버에서 도발 대상·지속·기존 어그로 복귀 조건을 확정하고, 기존 FX 중 범위를 읽을 수 있는 것을 고른다. 두 클라이언트에서 도발 전·중·종료 후 대상 전환을 대조한다.
+
 <a id="phase2-current"></a>
 ## 2차 MVP 현행 작업 · 2026-11-18
 

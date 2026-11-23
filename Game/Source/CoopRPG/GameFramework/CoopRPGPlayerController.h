@@ -5,7 +5,6 @@
 #include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGLobbyStorage.h"
 #include "CoopRPGRecoveryInventory.h"
-#include "CoopRPGExpeditionSupplies.h"
 #include "CoopRPGPuzzleReward.h"
 #include "CoopRPGStatProgress.h"
 #include "CoopRPGSlashProgress.h"
@@ -52,8 +51,9 @@ public:
     bool IsRoundReady() const { return bRoundReady; }
     void ResetLobbyReady();
     void RestoreTravelInventory(const FCoopRPGRecoverySnapshot& Recovery, const FCoopRPGSwordSnapshot& Sword,
-        const FCoopRPGStatProgress& Stats, const FCoopRPGExpeditionSupplies& Supplies, const FCoopRPGSlashProgress& Slash, bool bPowerReward);
-    void RestoreWaitingExpeditionSupplies(const FCoopRPGExpeditionSupplies& Supplies);
+        const FCoopRPGStatProgress& Stats, const FCoopRPGSlashProgress& Slash, bool bPowerReward);
+    void RestoreSword(const FCoopRPGSwordSnapshot& Sword);
+    void ApplyExpeditionEquipment();
     void InitializeStageInventory(FGuid RoundId);
     void LoadSessionGold(FGuid RoundId);
     void AwardBossGold(FGuid RoundId);
@@ -78,12 +78,7 @@ public:
     ECoopRPGSwordOwnership GetSwordOwnership() const { return SwordOwnership; }
     FCoopRPGSwordSnapshot GetTravelSword(bool bRetry) const;
     void RequestSwordEquipped(bool bEquipped);
-    bool CanChangeShield() const;
     bool IsPersonalSwordEquipped() const;
-    const FCoopRPGExpeditionSupplies& GetExpeditionSupplies() const { return ExpeditionSupplies; }
-    const FCoopRPGExpeditionSupplies& GetTravelExpeditionSupplies(bool bRetry) const;
-    void RequestSupplySwordEquipped(bool bEquipped);
-    void RequestShieldEquipped(bool bEquipped);
     ACoopRPGSharedChest* GetOpenedChest() const { return OpenedChest.Get(); }
     int32 GetRecoveryCount() const { return RecoveryCount; }
     int32 GetStaminaRecoveryCount() const { return StaminaRecoveryCount; }
@@ -143,14 +138,6 @@ private:
 
     UFUNCTION(Client, Reliable)
     void ClientFinishShopTrade(uint32 Request, const FString& Message);
-
-    UFUNCTION(Server, Reliable)
-    void ServerSetShieldEquipped(FGuid RoundId, bool bEquipped);
-
-    UFUNCTION(Server, Reliable)
-    void ServerSetSupplySwordEquipped(FGuid RoundId, bool bEquipped);
-
-    bool CanChangeStageEquipment() const;
 
     UFUNCTION(Server, Reliable)
     void ServerUseRecovery(FGuid RoundId, bool bStamina);
@@ -231,13 +218,12 @@ private:
     FGuid StageInventoryRound;
     FCoopRPGRecoverySnapshot EntryRecovery;
     FCoopRPGSwordSnapshot EntrySword;
-    FCoopRPGExpeditionSupplies EntryExpeditionSupplies;
-
-    UPROPERTY(Replicated)
-    FCoopRPGExpeditionSupplies ExpeditionSupplies;
 
     UPROPERTY(Replicated)
     ECoopRPGSwordOwnership SwordOwnership = ECoopRPGSwordOwnership::None;
+
+    UPROPERTY(Replicated)
+    bool bPersonalSwordEquipped = false;
 
     UPROPERTY(Replicated)
     FCoopRPGStatProgress StatProgress;

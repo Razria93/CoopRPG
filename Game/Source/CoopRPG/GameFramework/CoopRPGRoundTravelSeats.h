@@ -4,7 +4,6 @@
 #include "GameFramework/OnlineReplStructs.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "CoopRPGRecoveryInventory.h"
-#include "CoopRPGExpeditionSupplies.h"
 #include "CoopRPGStatProgress.h"
 #include "CoopRPGSlashProgress.h"
 #include "CoopRPGSwordInventory.h"
@@ -16,7 +15,6 @@ struct FCoopRPGRoundTravelParticipant
     FCoopRPGRecoverySnapshot Recovery;
     FCoopRPGSwordSnapshot Sword;
     FCoopRPGStatProgress Stats;
-    FCoopRPGExpeditionSupplies Supplies;
     FCoopRPGSlashProgress Slash;
     bool bExpeditionPowerReward = false;
 };
