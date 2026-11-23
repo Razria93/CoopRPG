@@ -9,7 +9,8 @@ class COOPRPG_API UCoopRPGRecoveryEffect : public UGameplayEffect
     GENERATED_BODY()
 
 public:
-    static constexpr float HealthRestored = 30.0f;
-
     UCoopRPGRecoveryEffect();
+
+public:
+    static constexpr float HealthRestored = 30.0f;
 };

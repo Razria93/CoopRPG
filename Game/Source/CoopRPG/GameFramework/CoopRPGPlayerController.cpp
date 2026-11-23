@@ -166,17 +166,6 @@ void ACoopRPGPlayerController::RestoreTravelRecovery(int32 Count)
     }
 }
 
-void ACoopRPGPlayerController::SetRecoveryCount(int32 Count)
-{
-    check(HasAuthority());
-    RecoveryCount = Count;
-    if (auto* PartyState = GetPlayerState<ACoopRPGPlayerState>())
-    {
-        PartyState->SetPartyRecoveryCount(Count);
-    }
-    ForceNetUpdate();
-}
-
 void ACoopRPGPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
@@ -571,6 +560,17 @@ const TCHAR* ACoopRPGPlayerController::GetEnemyLootRejection(FGuid RoundId, FGui
         return TEXT("OutOfRange");
     }
     return Drop->IsClaimed() ? TEXT("AlreadyClaimed") : nullptr;
+}
+
+void ACoopRPGPlayerController::SetRecoveryCount(int32 Count)
+{
+    check(HasAuthority());
+    RecoveryCount = Count;
+    if (auto* PartyState = GetPlayerState<ACoopRPGPlayerState>())
+    {
+        PartyState->SetPartyRecoveryCount(Count);
+    }
+    ForceNetUpdate();
 }
 
 void ACoopRPGPlayerController::LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId) const

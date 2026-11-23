@@ -251,30 +251,6 @@ namespace
     }
 }
 
-bool ACoopRPGLootHUD::HandleHudPrimaryButton(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
-{
-    const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
-    if (Viewport && Viewport->HasConnectionNotice())
-    {
-        EquipmentPanel.Hide();
-        ExpeditionDashboard.Hide();
-    }
-    return EquipmentPanel.HandlePrimaryButton(Controller, Input)
-        || ExpeditionDashboard.HandlePrimaryButton(Controller, Input);
-}
-
-bool ACoopRPGLootHUD::HandleHudWheel(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
-{
-    const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
-    return (!Viewport || !Viewport->HasConnectionNotice()) && EquipmentPanel.HandleWheel(Controller, Input);
-}
-
-void ACoopRPGLootHUD::ReleaseHudPointer()
-{
-    EquipmentPanel.ReleasePointer();
-    ExpeditionDashboard.ReleasePointer();
-}
-
 void ACoopRPGLootHUD::DrawHUD()
 {
     Super::DrawHUD();
@@ -534,6 +510,30 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
     UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("GameplayFeedback Kind=%s Subject=%s Slot=%d Amount=%.2f AttackerSlot=%d %s"),
         *UEnum::GetValueAsString(Feedback.Kind), *GetNameSafe(Subject), Player ? Player->GetDisplaySlot() : 0,
         Feedback.Amount, Feedback.AttackerSlot, *CoopRPG::Debug::DescribeLogContext(GetOwningPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+bool ACoopRPGLootHUD::HandleHudPrimaryButton(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
+{
+    const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
+    if (Viewport && Viewport->HasConnectionNotice())
+    {
+        EquipmentPanel.Hide();
+        ExpeditionDashboard.Hide();
+    }
+    return EquipmentPanel.HandlePrimaryButton(Controller, Input)
+        || ExpeditionDashboard.HandlePrimaryButton(Controller, Input);
+}
+
+bool ACoopRPGLootHUD::HandleHudWheel(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
+{
+    const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
+    return (!Viewport || !Viewport->HasConnectionNotice()) && EquipmentPanel.HandleWheel(Controller, Input);
+}
+
+void ACoopRPGLootHUD::ReleaseHudPointer()
+{
+    EquipmentPanel.ReleasePointer();
+    ExpeditionDashboard.ReleasePointer();
 }
 
 void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,

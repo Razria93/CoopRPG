@@ -205,20 +205,6 @@ void ACoopRPGGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGGameState, SkirmishDefeats);
 }
 
-void ACoopRPGGameState::SetLobbyDepartureDeadline(double Deadline)
-{
-    if (HasAuthority() && LobbyDepartureDeadline != Deadline)
-    {
-        LobbyDepartureDeadline = Deadline;
-        ForceNetUpdate();
-    }
-}
-
-double ACoopRPGGameState::GetLobbyDepartureRemainingSeconds() const
-{
-    return FMath::Max(0.0, LobbyDepartureDeadline - GetServerWorldTimeSeconds());
-}
-
 void ACoopRPGGameState::InitializeLobby()
 {
     if (HasAuthority() && !RoundId.IsValid())
@@ -432,6 +418,20 @@ void ACoopRPGGameState::SetReadySlots(const FCoopRPGReadySlots& Slots)
         ReadySlots = Slots;
         ForceNetUpdate();
     }
+}
+
+void ACoopRPGGameState::SetLobbyDepartureDeadline(double Deadline)
+{
+    if (HasAuthority() && LobbyDepartureDeadline != Deadline)
+    {
+        LobbyDepartureDeadline = Deadline;
+        ForceNetUpdate();
+    }
+}
+
+double ACoopRPGGameState::GetLobbyDepartureRemainingSeconds() const
+{
+    return FMath::Max(0.0, LobbyDepartureDeadline - GetServerWorldTimeSeconds());
 }
 
 int32 ACoopRPGGameState::RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated)
