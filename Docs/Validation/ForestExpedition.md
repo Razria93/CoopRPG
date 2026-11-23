@@ -932,3 +932,26 @@ UE 5.8.4 Development 전용 서버와 동일 PC의 A·B로 58/58을 통과했다
 자동 시험은 클라이언트 입력과 시험용 배치·시간 제어를 사용했다. 첫 사망 → 같은 맵 재도전 → 3.008초 공동 탈출과 양쪽 1점은 [사용자 조작 회차](#expedition-four-mushrooms-manual)의 원본 로그에 있다.
 
 **로컬 근거** · `Artifacts/Validation/expedition-commits/`의 `One/Forest/`, `TwoFresh/Full02/`, `Three/Full/`, `Three/Retry/`에 원본 로그·판정·화면을 보관했다. 각 단계의 `Package/build-identity.json`에 실행 파일·쿠킹 콘텐츠·맵 해시를 남겼다.
+<a id="expedition-loading-runtime"></a>
+## 11/23 · 숲 원정 이동 화면과 카메라 전환
+
+`origin/main`의 `29815c6`에서 분기한 `feat/expedition-loading-screen` 작업 트리로 시험했다. UE 5.8.4의 Development 에디터 빌드가 통과했다. 첫 컴파일에서 뷰포트의 `World` 멤버를 지역 변수가 가리는 오류가 나와 `CurrentWorld`로 고친 뒤 재빌드했다.
+
+같은 PC에서 동일 Win64 Development 패키지로 전용 서버 1개와 클라이언트 A 1440×810·B 960×540을 실행했다. 정상 회차에는 시험용 시간·전투 배치 명령을 사용했고, 공격·습득·발판·준비 입력과 서버 권한의 전환은 실제 플레이 경로를 사용했다.
+
+| 상황 | 전용 서버와 양쪽 클라이언트에서 확인한 결과 |
+|---|---|
+| 로비 → 버섯 군락 | 두 명이 준비한 뒤 `스테이지 1 · 버섯 군락`이 표시됐다. A가 가림을 해제한 뒤에도 B는 자기 카메라가 준비될 때까지 화면을 유지했다. 해제 로그의 간격은 약 9.2초였다. |
+| 시간 초과 → 같은 버섯 군락 | 실패 결과 뒤 `버섯 군락 재도전`을 표시했다. 새 Round ID를 받은 뒤 양쪽 자기 카메라가 잡혀 화면이 풀렸다. |
+| 버섯 군락 → 쌍둥이 발판 | 버섯 4마리 처치·마법석 획득·공동 탈출 뒤 `스테이지 2 · 쌍둥이 발판`을 표시했다. B 수신 지연을 450ms로 설정했고, 가림 표시 로그는 B가 484ms 늦었다. 양쪽 모두 각자의 카메라 준비 로그 뒤 `Reason=CameraReady`로 화면을 해제했다. |
+| 쌍둥이 발판 → 흑기사 결전 | 발판 2개와 양쪽 보상 확정 뒤 `스테이지 3 · 흑기사 결전`을 표시했다. 두 클라이언트에서 보스 맵 카메라와 준비 HUD가 나타났다. |
+| 흑기사 결전 → 로비 | 흑기사 처치와 성공 결과 뒤 `원정 대기소로 복귀`를 표시했다. 같은 세션의 로비로 한 번 이동했고 양쪽이 준비 대기로 돌아왔다. |
+| 재도전 도중 서버 종료 | 이동 화면이 양쪽에 나타난 뒤 시험 서버를 종료했다. 엔진의 20초 접속 시간 초과 뒤 두 클라이언트 모두 `Reason=ConnectionFailed`로 화면을 닫고 접속 실패 안내를 표시했다. |
+
+두 해상도의 창 녹화에서 가림이 처음 풀린 프레임을 직접 대조했다. 정상 이동 다섯 경로의 첫 공개 프레임은 해당 목적지의 캐릭터 카메라와 준비 HUD였다. 재도전 중 연결이 끊긴 경우에는 양쪽에 접속 실패 안내가 표시됐다. `Review/`에 전환별 PNG와 원본 시각 기준 WebP를 남겼고, 전체 시각 판정은 캡처가 수집한 프레임 범위에 한한다.
+
+**로컬 근거** · 원래 로딩 워크트리의 `Artifacts/Validation/expedition-loading/29815c6/`에 빌드 로그와 `Package/executables.json`의 SHA-256, 정상 `PackagedAB/RetryToLobby/` 및 로비 출발·실패 `PackagedAB-interrupted/Interrupted/`의 `server.log`, `a.log`, `b.log`와 창 녹화를 보관한다. 별도 PC 환경은 이번 회차에서 시험하지 않았다.
+
+**로컬 커밋 전 재검증** · `66f770c` 기준 로딩 소스의 diff가 장비 변경과 함께 시험한 스냅샷과 SHA-256까지 일치했다. 같은 패키지로 재실행해 로비 출발, 시간 초과·0점, 새 회차의 같은 버섯 군락 진입, 양쪽 새 카메라 준비 뒤 가림 해제를 확인했다. 실행 결과와 원본 로그는 통합 검증 워크트리의 `Artifacts/Validation/equipment-loading/PackagedAB-commit-retry-2/ExpeditionAB/`에 있다.
+
+[개발 기록](../Development.md#expedition-loading-implementation)

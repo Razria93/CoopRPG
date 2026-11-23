@@ -53,6 +53,11 @@
 | 11/24 23:59 | 공식 접수 마감·예비일                         | 접수 오류 대응. 신규 기능 시간으로 선사용하지 않음                           |
 
 <a id="next-work"></a>
+<a id="expedition-loading-screen"></a>
+## 3차 MVP 후속 · 숲 원정 맵 전환 화면
+
+맵 전환, 같은 맵 재도전, 로비 복귀에 목적지 안내를 표시한다. 각 클라이언트가 새 카메라를 준비하면 화면을 걷고 기존 준비 안내로 이어간다. 1440×810과 960×540에서 정상 이동과 재도전, 지연 및 접속 실패를 검증했다. [채택 경위와 구현](Development.md#expedition-loading-implementation) · [검증 범위](Validation/ForestExpedition.md#expedition-loading-runtime)
+
 <a id="phase2-current"></a>
 ## 2차 MVP 현행 작업 · 2026-11-18
 

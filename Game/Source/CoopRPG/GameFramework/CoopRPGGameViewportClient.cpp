@@ -1,11 +1,79 @@
 #include "CoopRPGGameViewportClient.h"
 
+#include "CoopRPGExpeditionDashboard.h"
 #include "CoopRPGExpeditionHUDText.h"
+#include "CoopRPGExpeditionMaps.h"
+
+#include "Brushes/SlateColorBrush.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
 #include "Engine/NetDriver.h"
+#include "Engine/Texture2D.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "ImageUtils.h"
+#include "Misc/Paths.h"
+#include "Widgets/Images/SImage.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SScaleBox.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/SOverlay.h"
+#include "Widgets/Text/STextBlock.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGConnectionNotice, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGTravelScreen, Log, All);
+
+namespace
+{
+    constexpr double TravelRevealSeconds = 0.18;
+
+    int32 GetDestinationStage(const FString& Destination)
+    {
+        using namespace CoopRPG::Expedition;
+        if (Destination == LobbyPackage)
+        {
+            return 0;
+        }
+        if (Destination == SkirmishPackage)
+        {
+            return 1;
+        }
+        if (Destination == PuzzlePackage)
+        {
+            return 2;
+        }
+        return Destination == BossPackage ? 3 : INDEX_NONE;
+    }
+
+    const TCHAR* GetTravelTitle(int32 Stage, bool bRetry)
+    {
+        if (Stage == 0)
+        {
+            return TEXT("원정 대기소로 복귀");
+        }
+        if (bRetry)
+        {
+            constexpr const TCHAR* RetryTitles[] = {
+                TEXT("버섯 군락 재도전"), TEXT("쌍둥이 발판 재도전"), TEXT("흑기사 결전 재도전")
+            };
+            return RetryTitles[Stage - 1];
+        }
+        return FCoopRPGExpeditionDashboard::StageTitle(Stage);
+    }
+
+    void ConfigureTravelSprite(FSlateBrush& Brush, UTexture2D& Texture, const FVector2f& Min,
+        const FVector2f& Max, const FVector2f& DisplaySize)
+    {
+        const FVector2f AtlasSize(Texture.GetSizeX(), Texture.GetSizeY());
+        Brush.SetResourceObject(&Texture);
+        Brush.DrawAs = ESlateBrushDrawType::Image;
+        Brush.SetImageSize(DisplaySize);
+        Brush.SetUVRegion(FBox2f(Min / AtlasSize, Max / AtlasSize));
+    }
+}
 
 void UCoopRPGGameViewportClient::ClearConnectionNotice()
 {
@@ -17,23 +85,39 @@ void UCoopRPGGameViewportClient::ClearConnectionNotice()
 void UCoopRPGGameViewportClient::Init(FWorldContext& WorldContext, UGameInstance* OwningGameInstance, bool bCreateNewAudioDevice)
 {
     Super::Init(WorldContext, OwningGameInstance, bCreateNewAudioDevice);
+    PreClientTravelHandle = OwningGameInstance->OnNotifyPreClientTravel().AddUObject(this, &ThisClass::OnPreClientTravel);
+    TravelFailureHandle = GEngine->OnTravelFailure().AddUObject(this, &ThisClass::OnTravelFailure);
     NetworkFailureHandle = GEngine->OnNetworkFailure().AddUObject(this, &ThisClass::OnConnectionFailure);
 }
 
 void UCoopRPGGameViewportClient::DetachViewportClient()
 {
-    if (GEngine && NetworkFailureHandle.IsValid())
+    ClearTravelScreen(TEXT("ViewportDetached"));
+    if (UGameInstance* Instance = GetGameInstance())
     {
-        GEngine->OnNetworkFailure().Remove(NetworkFailureHandle);
-        NetworkFailureHandle.Reset();
+        Instance->OnNotifyPreClientTravel().Remove(PreClientTravelHandle);
     }
+    if (GEngine)
+    {
+        GEngine->OnTravelFailure().Remove(TravelFailureHandle);
+        GEngine->OnNetworkFailure().Remove(NetworkFailureHandle);
+    }
+    PreClientTravelHandle.Reset();
+    TravelFailureHandle.Reset();
+    NetworkFailureHandle.Reset();
     Super::DetachViewportClient();
 }
 
 void UCoopRPGGameViewportClient::PostRender(UCanvas* Canvas)
 {
     Super::PostRender(Canvas);
-    if (!Canvas || Notice.IsEmpty())
+    if (!Canvas)
+    {
+        return;
+    }
+
+    UpdateTravelScreen();
+    if (Notice.IsEmpty())
     {
         return;
     }
@@ -55,6 +139,182 @@ void UCoopRPGGameViewportClient::PostRender(UCanvas* Canvas)
     }
 }
 
+void UCoopRPGGameViewportClient::OnPreClientTravel(const FString& PendingURL, ETravelType, bool)
+{
+    UWorld* CurrentWorld = GetWorld();
+    if (!CoopRPG::Expedition::IsExpedition(CurrentWorld) || CurrentWorld->GetNetMode() != NM_Client)
+    {
+        return;
+    }
+
+    const FURL URL(nullptr, *PendingURL, TRAVEL_Absolute);
+    const FString Destination = UWorld::RemovePIEPrefix(URL.Map);
+    const int32 Stage = GetDestinationStage(Destination);
+    if (Stage == INDEX_NONE)
+    {
+        return;
+    }
+
+    ClearTravelScreen(TEXT("Replaced"));
+    DepartingWorld = CurrentWorld;
+    TravelDestination = Destination;
+    const bool bRetry = UWorld::RemovePIEPrefix(CurrentWorld->GetPackage()->GetName()) == Destination;
+    ShowTravelScreen(GetTravelTitle(Stage, bRetry));
+}
+
+void UCoopRPGGameViewportClient::ShowTravelScreen(const FString& Title)
+{
+    if (!TravelSkin)
+    {
+        TravelSkin = FImageUtils::ImportFileAsTexture2D(FPaths::Combine(
+            FPaths::ProjectContentDir(), TEXT("UI/ExpeditionDashboard/DashboardSkin.png")));
+        if (TravelSkin)
+        {
+            ConfigureTravelSprite(TravelIcon, *TravelSkin, FVector2f(284, 200), FVector2f(316, 232), FVector2f(23, 23));
+            ConfigureTravelSprite(TravelDivider, *TravelSkin, FVector2f(0, 285), FVector2f(250, 293), FVector2f(214, 7));
+        }
+    }
+
+    static const FSlateColorBrush Backdrop(FLinearColor(FColor(24, 33, 26)));
+    static const FSlateRoundedBoxBrush Panel(FLinearColor(FColor(50, 68, 48)), 11.0f,
+        FLinearColor(FColor(218, 184, 111)), 1.5f);
+    const FLinearColor Gold(FColor(224, 198, 143));
+    const FLinearColor Cream(FColor(255, 240, 204));
+    const FLinearColor Muted(FColor(226, 226, 202));
+    using CoopRPG::ExpeditionUI::Font;
+
+    TravelScreen = SNew(SOverlay)
+        .Visibility(EVisibility::HitTestInvisible)
+        + SOverlay::Slot()
+        [
+            SNew(SImage).Image(&Backdrop)
+        ]
+        + SOverlay::Slot()
+        [
+            SNew(SScaleBox)
+            .Stretch(EStretch::ScaleToFit)
+            [
+                SNew(SBox)
+                .WidthOverride(960.0f)
+                .HeightOverride(540.0f)
+                .HAlign(HAlign_Center)
+                .VAlign(VAlign_Center)
+                [
+                    SNew(SBox)
+                    .WidthOverride(444.0f)
+                    .HeightOverride(190.0f)
+                    [
+                        SNew(SBorder)
+                        .BorderImage(&Panel)
+                        .Padding(FMargin(24.0f, 0.0f))
+                        .HAlign(HAlign_Center)
+                        .VAlign(VAlign_Center)
+                        [
+                            SNew(SVerticalBox)
+                            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+                            [
+                                SNew(SHorizontalBox)
+                                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)
+                                [
+                                    SNew(SImage).Image(&TravelIcon)
+                                ]
+                                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+                                [
+                                    SNew(STextBlock).Text(FText::FromString(TEXT("숲 원정"))).Font(Font(15.0f, true)).ColorAndOpacity(Gold)
+                                ]
+                            ]
+                            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 13.0f)
+                            [
+                                SNew(STextBlock).Text(FText::FromString(Title)).Font(Font(27.0f, true)).ColorAndOpacity(Cream)
+                            ]
+                            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+                            [
+                                SNew(SImage).Image(&TravelDivider)
+                            ]
+                            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 10.0f, 0.0f, 0.0f)
+                            [
+                                SNew(STextBlock).Text(FText::FromString(TEXT("맵 이동 중"))).Font(Font(15.0f)).ColorAndOpacity(Muted)
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ];
+    AddViewportWidgetContent(TravelScreen.ToSharedRef(), 100);
+    UE_LOG(LogCoopRPGTravelScreen, Log, TEXT("TravelScreenShown Destination=%s Title=%s"),
+        *TravelDestination, *Title);
+}
+
+void UCoopRPGGameViewportClient::UpdateTravelScreen()
+{
+    UWorld* CurrentWorld = GetWorld();
+    if (!TravelScreen || !CurrentWorld || CurrentWorld == DepartingWorld.Get()
+        || UWorld::RemovePIEPrefix(CurrentWorld->GetPackage()->GetName()) != TravelDestination)
+    {
+        return;
+    }
+
+    const APlayerController* Controller = CurrentWorld->GetFirstPlayerController();
+    const APawn* Pawn = Controller ? Controller->GetPawn() : nullptr;
+    if (!Controller || !Controller->IsLocalController() || !IsValid(Pawn) || Pawn->GetWorld() != CurrentWorld
+        || Controller->GetViewTarget() != Pawn)
+    {
+        CameraReadyAt = 0.0;
+        TravelScreen->SetRenderOpacity(1.0f);
+        return;
+    }
+
+    const double Now = FPlatformTime::Seconds();
+    if (CameraReadyAt == 0.0)
+    {
+        CameraReadyAt = Now;
+        UE_LOG(LogCoopRPGTravelScreen, Log, TEXT("TravelCameraReady Destination=%s Pawn=%s"),
+            *TravelDestination, *GetNameSafe(Pawn));
+        return;
+    }
+
+    const double Progress = (Now - CameraReadyAt) / TravelRevealSeconds;
+    if (Progress >= 1.0)
+    {
+        ClearTravelScreen(TEXT("CameraReady"));
+    }
+    else
+    {
+        TravelScreen->SetRenderOpacity(static_cast<float>(1.0 - Progress));
+    }
+}
+
+void UCoopRPGGameViewportClient::ClearTravelScreen(const TCHAR* Reason)
+{
+    if (TravelScreen)
+    {
+        RemoveViewportWidgetContent(TravelScreen.ToSharedRef());
+        TravelScreen.Reset();
+        UE_LOG(LogCoopRPGTravelScreen, Log, TEXT("TravelScreenHidden Destination=%s Reason=%s"),
+        *TravelDestination, Reason);
+    }
+    DepartingWorld.Reset();
+    TravelDestination.Reset();
+    CameraReadyAt = 0.0;
+}
+
+void UCoopRPGGameViewportClient::OnTravelFailure(UWorld* FailureWorld, ETravelFailure::Type Failure, const FString&)
+{
+    if (!TravelScreen || (FailureWorld && FailureWorld != GetWorld()))
+    {
+        return;
+    }
+
+    ClearTravelScreen(TEXT("TravelFailed"));
+    if (Notice.IsEmpty())
+    {
+        Notice = TEXT("스테이지로 이동할 수 없어요.");
+        NoticeReason = TEXT("TravelFailed");
+        UE_LOG(LogCoopRPGConnectionNotice, Log, TEXT("ConnectionNoticeQueued Reason=%s Failure=%s"),
+            *NoticeReason, ETravelFailure::ToString(Failure));
+    }
+}
+
 void UCoopRPGGameViewportClient::OnConnectionFailure(UWorld* FailureWorld, UNetDriver* Driver, ENetworkFailure::Type Failure, const FString& Error)
 {
     if (!Driver || (Driver->NetDriverName != NAME_PendingNetDriver
@@ -65,7 +325,13 @@ void UCoopRPGGameViewportClient::OnConnectionFailure(UWorld* FailureWorld, UNetD
 
     const FWorldContext* Context = FailureWorld ? GEngine->GetWorldContextFromWorld(FailureWorld)
         : GEngine->GetWorldContextFromPendingNetGameNetDriver(Driver);
-    if (!Context || Context->GameViewport != this || !Notice.IsEmpty())
+    if (!Context || Context->GameViewport != this)
+    {
+        return;
+    }
+
+    ClearTravelScreen(TEXT("ConnectionFailed"));
+    if (!Notice.IsEmpty())
     {
         return;
     }
