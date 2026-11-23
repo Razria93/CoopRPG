@@ -598,8 +598,10 @@ void ACoopRPGLootHUD::DrawExpeditionCombat(const ACoopRPGGameState& State,
 
     if (IsValid(Chest))
     {
+        const FString Stock = FString::Printf(TEXT("[G] 검 ×%d  ·  [F] 물약 ×%d  ·  [Q] 닫기"),
+            Chest->GetWeaponStock(), Chest->GetRecoveryStock());
         DrawWorldLabel(Chest->GetActorLocation() + FVector(0.0, 0.0, 46.0),
-            TEXT("[G] 검 받기  ·  [F] 물약 받기  ·  [Q] 닫기"), FLinearColor::White, FVector2D(0, -30), INDEX_NONE, true);
+            Stock, FLinearColor::White, FVector2D(0, -30), INDEX_NONE, true);
     }
 }
 
@@ -957,9 +959,19 @@ void ACoopRPGLootHUD::DrawPartyStatus(const ACoopRPGGameState& State,
                 HeaderCenter, BadgeFont, Green);
         }
 
-        const FString Title = Fit(*Canvas, HeroName, HeroFont, DividerEnd - Left);
-        const double HeroTextY = BadgeTop - PartyCardInkBounds(*Canvas, Title, HeroFont).X;
+        const bool bShowRecoveryHint = bLocal && Recovery > 0;
+        const FStringView RecoveryHint(TEXT("[H]"));
+        const double HintX = DividerEnd - Measure(*Canvas, RecoveryHint, BadgeFont).X;
+        const double TitleRight = bShowRecoveryHint ? HintX - Gap : DividerEnd;
+        const FString Title = Fit(*Canvas, HeroName, HeroFont, TitleRight - Left);
+        const FVector2D HeroInk = PartyCardInkBounds(*Canvas, Title, HeroFont);
+        const double HeroTextY = BadgeTop - HeroInk.X;
         Text(*Canvas, Title, FVector2D(Left, HeroTextY), HeroFont, Ink);
+        if (bShowRecoveryHint)
+        {
+            const double HintCenterY = BadgeTop + (HeroInk.Y - HeroInk.X) * 0.5;
+            CenterText(RecoveryHint, HintX, HintCenterY, BadgeFont, Green);
+        }
         DrawRect(FLinearColor(FColor(197, 165, 110)), Left, DividerY, DividerEnd - Left, 1.0);
 
         const FString Health = FString::Printf(TEXT("HP %d/%d"), Values.X, static_cast<int32>(UCoopRPGCombatAttributes::MaxHealth));
@@ -996,11 +1008,11 @@ void ACoopRPGLootHUD::DrawPartyStatus(const ACoopRPGGameState& State,
         if (bNewId || !PartyCardValues[Index].IsSet() || PartyCardValues[Index].GetValue() != Values)
         {
             UE_LOG(LogCoopRPGGameplayFeedback, Log,
-                TEXT("ExpeditionPartyCard Round=%s Slot=%d Local=%d HP=%d SP=%d Armed=%d X=%.0f Y=%.0f Width=%.0f Height=%.0f Recovery=%d IdLength=%d Truncated=%d IdPixels=%.1f IdLimit=%.1f DividerEnd=%.0f PotionRight=%.0f SPBottom=%.0f BadgeLeft=%.0f BadgeRight=%.0f BadgeTop=%.0f BadgeBottom=%.0f HeroTop=%.0f"),
+                TEXT("ExpeditionPartyCard Round=%s Slot=%d Local=%d HP=%d SP=%d Armed=%d X=%.0f Y=%.0f Width=%.0f Height=%.0f Recovery=%d IdLength=%d Truncated=%d IdPixels=%.1f IdLimit=%.1f DividerEnd=%.0f PotionRight=%.0f SPBottom=%.0f BadgeLeft=%.0f BadgeRight=%.0f BadgeTop=%.0f BadgeBottom=%.0f HeroTop=%.0f RecoveryHint=%d"),
                 *LastPresentedPartyRound.ToString(), Slot, bLocal, Values.X, Values.Y, Values.Z, X, Y, Width, Height, Recovery,
                 CardId.Characters, RawName != CardId.Display, Measure(*Canvas, CardId.Display, NameFont).X, NameWidth,
                 DividerEnd, PotionLeft + PotionWidth, SpTop + PotionHeight, BadgeLeft, Right, BadgeTop, BadgeBottom,
-                HeroTextY + PartyCardInkBounds(*Canvas, Title, HeroFont).X);
+                BadgeTop, bShowRecoveryHint);
             PartyCardValues[Index] = Values;
         }
     }

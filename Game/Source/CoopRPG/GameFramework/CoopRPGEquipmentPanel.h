@@ -64,6 +64,7 @@ private:
     void DragScrollTrack(double PointerY);
     void ResetInventoryView();
 
+private:
     TStrongObjectPtr<UTexture2D> Skin;
     FVector2D Anchor = FVector2D::ZeroVector;
     float Width = 0.0f;

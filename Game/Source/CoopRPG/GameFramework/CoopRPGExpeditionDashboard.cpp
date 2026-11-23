@@ -298,174 +298,6 @@ void FCoopRPGExpeditionDashboard::Draw(AHUD& HUD, UCanvas& Canvas, const ACoopRP
     DrawBossHealth(HUD, Canvas, State, bBossActive, bWide);
 }
 
-void FCoopRPGExpeditionDashboard::DrawReadyParty(AHUD& HUD, UCanvas& Canvas, const ACoopRPGGameState& State,
-    const ACoopRPGPlayerController& Controller, float Left, float Right, float Top, float BadgeSide, float PartyGap, bool bWide) const
-{
-    using namespace CoopRPG::ExpeditionUI;
-    FString Names[2];
-    for (TActorIterator<ACoopRPGCharacter> It(Controller.GetWorld()); It; ++It)
-    {
-        const int32 Slot = It->GetDisplaySlot();
-        if (Slot >= 1 && Slot <= 2)
-        {
-            Names[Slot - 1] = PlayerName(**It, Slot);
-        }
-    }
-
-    const auto NameFont = Font(bWide ? 13.0f : 11.0f, true);
-    const auto SmallFont = Font(bWide ? 12.0f : 10.0f);
-    const float NameHeight = Measure(Canvas, TEXT("가"), NameFont).Y;
-    const auto& Slots = State.GetReadySlots();
-    const ECoopRPGReadyStatus Statuses[] = {Slots.PlayerOne, Slots.PlayerTwo};
-    for (int32 Index = 0; Index < 2; ++Index)
-    {
-        const float Y = Top + Index * (BadgeSide + PartyGap);
-        const FString Badge = FString::Printf(TEXT("P%d"), Index + 1);
-        const FVector2D BadgePos(Left, Y);
-        const FVector2D BadgeSize(BadgeSide, BadgeSide);
-        const FLinearColor BadgeColor = Index == 0 ? FLinearColor(FColor(106, 73, 37)) : FLinearColor(FColor(40, 79, 111));
-        HUD.DrawRect(BadgeColor, BadgePos.X, BadgePos.Y, BadgeSize.X, BadgeSize.Y);
-        Text(Canvas, Badge, BadgePos + (BadgeSize - Measure(Canvas, Badge, SmallFont)) * 0.5, SmallFont, NoticeInk);
-        const float NameX = Left + BadgeSide + 8.0f;
-        if (Statuses[Index] != ECoopRPGReadyStatus::Disconnected && !Names[Index].IsEmpty())
-        {
-            Text(Canvas, Fit(Canvas, Names[Index], NameFont, Right - NameX), FVector2D(NameX, Y), NameFont, DashboardTextColor);
-        }
-        Text(Canvas, ReadyText(Statuses[Index]), FVector2D(NameX, Y + NameHeight + 3.0f), SmallFont, ReadyColor(Statuses[Index]));
-    }
-}
-
-void FCoopRPGExpeditionDashboard::DrawNotice(AHUD& HUD, UCanvas& Canvas, const ACoopRPGGameState& State,
-    ECoopRPGDashboardLabel Goal, const FVector2D& ViewSize, float Pad, float PanelWidth, bool bWide, bool bBossActive)
-{
-    NoticeBounds = FBox2D(ForceInit);
-    constexpr double HudGap = 14.0;
-    const double MinX = Pad + PanelWidth + HudGap;
-    const double MaxX = ViewSize.X - Pad - (bWide ? 364.0 : 300.0) - HudGap;
-    const double Inset = bWide ? 12.0 : 13.0;
-    const double Available = MaxX - MinX;
-    if (Available < Inset * 2.0 + 60.0)
-    {
-        return;
-    }
-
-    const auto Paragraphs = GetNotice(State, Goal, bBossActive);
-    const auto NoticeFont = Font(bWide ? 14.0f : 12.0f);
-    const auto CaptionFont = Font(bWide ? 11.0f : 10.0f, true);
-    const TCHAR* Title = TEXT("목표 안내");
-    const FVector2D TitleSize = Measure(Canvas, Title, CaptionFont);
-    double NaturalWidth = TitleSize.X;
-    for (const FString& Paragraph : Paragraphs)
-    {
-        NaturalWidth = FMath::Max(NaturalWidth, Measure(Canvas, Paragraph, NoticeFont).X);
-    }
-    const double Minimum = bWide ? 320.0 : 260.0;
-    const double BossNoticeWidth = bWide ? 344.0 : 304.0;
-    const double DesiredWidth = bBossActive ? BossNoticeWidth : FMath::Max(Minimum, FMath::CeilToDouble(NaturalWidth) + 2.0 * Inset);
-    const double Width = FMath::Min(Available, DesiredWidth);
-    const double ContentWidth = Width - 2.0 * Inset;
-
-    TArray<FString, TInlineAllocator<4>> Lines;
-    for (const FString& Paragraph : Paragraphs)
-    {
-        if (Measure(Canvas, Paragraph, NoticeFont).X <= ContentWidth)
-        {
-            Lines.Add(Paragraph);
-            continue;
-        }
-        TArray<FString> Words;
-        Paragraph.ParseIntoArrayWS(Words);
-        FString Line;
-        for (const FString& Word : Words)
-        {
-            FString Candidate = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
-            if (!Line.IsEmpty() && Measure(Canvas, Candidate, NoticeFont).X > ContentWidth)
-            {
-                Lines.Add(MoveTemp(Line));
-                Line = Word;
-            }
-            else
-            {
-                Line = MoveTemp(Candidate);
-            }
-        }
-        Lines.Add(MoveTemp(Line));
-    }
-
-    const double TitleGap = bWide ? 8.0 : 6.0;
-    const double LineGap = bWide ? 6.0 : 5.0;
-    const double LineHeight = Measure(Canvas, TEXT("가"), NoticeFont).Y;
-    const double Height = 2.0 * Inset + TitleSize.Y + TitleGap + Lines.Num() * LineHeight
-        + FMath::Max(0, Lines.Num() - 1) * LineGap;
-    const double X = FMath::Clamp((ViewSize.X - Width) * 0.5, MinX, MaxX - Width);
-    NoticeBounds = FBox2D(FVector2D(X, Pad), FVector2D(X + Width, Pad + Height));
-    DrawDarkPanel(HUD, NoticeBounds.Min, NoticeBounds.GetSize());
-    Text(Canvas, Title, FVector2D(X + (Width - TitleSize.X) * 0.5, Pad + Inset), CaptionFont, NoticeInk);
-    double Y = Pad + Inset + TitleSize.Y + TitleGap;
-    for (FString& Line : Lines)
-    {
-        Line = Fit(Canvas, MoveTemp(Line), NoticeFont, ContentWidth);
-        const double LineWidth = Measure(Canvas, Line, NoticeFont).X;
-        Text(Canvas, Line, FVector2D(X + (Width - LineWidth) * 0.5, Y), NoticeFont, NoticeInk);
-        Y += LineHeight + LineGap;
-    }
-}
-
-void FCoopRPGExpeditionDashboard::DrawBossHealth(AHUD& HUD, UCanvas& Canvas, const ACoopRPGGameState& State,
-    bool bBossActive, bool bWide)
-{
-    BossHealthBounds = FBox2D(ForceInit);
-    const ACoopRPGEnemy* Boss = nullptr;
-    if (bBossActive && NoticeBounds.bIsValid)
-    {
-        for (TActorIterator<ACoopRPGEnemy> It(State.GetWorld()); It; ++It)
-        {
-            if (It->IsBlackKnight() && !It->IsDead() && It->GetHealth() > 0.0f)
-            {
-                Boss = *It;
-                break;
-            }
-        }
-    }
-    if (!Boss)
-    {
-        if (DisplayedBossHealth.IsSet())
-        {
-            UE_LOG(LogCoopRPGExpeditionHUD, Log, TEXT("BossHealthHUD Round=%s Visible=0"), *Round.ToString());
-            DisplayedBossHealth.Reset();
-        }
-        return;
-    }
-
-    const FIntPoint Health(FMath::CeilToInt(Boss->GetHealth()), FMath::CeilToInt(Boss->GetMaxHealth()));
-    const float Fraction = FMath::Clamp(Boss->GetHealth() / FMath::Max(1.0f, Boss->GetMaxHealth()), 0.0f, 1.0f);
-    const auto NameFont = Font(bWide ? 14.0f : 12.0f, true);
-    const auto HealthFont = Font(bWide ? 12.0f : 10.0f);
-    const TCHAR* Name = TEXT("흑기사");
-    const FString Value = FString::Printf(TEXT("%d / %d"), Health.X, Health.Y);
-    const FVector2D NameSize = Measure(Canvas, Name, NameFont);
-    const FVector2D ValueSize = Measure(Canvas, Value, HealthFont);
-    const double Width = NoticeBounds.GetSize().X;
-    constexpr double Inset = 12.0;
-    constexpr double TopPad = 8.0;
-    constexpr double BarGap = 5.0;
-    constexpr double BarHeight = 7.0;
-    const double PositionY = NoticeBounds.Max.Y + 8.0;
-    const double PositionX = NoticeBounds.Min.X;
-    const double Height = TopPad * 2.0 + NameSize.Y + BarGap + BarHeight;
-    BossHealthBounds = FBox2D(FVector2D(PositionX, PositionY), FVector2D(PositionX + Width, PositionY + Height));
-    DrawDarkPanel(HUD, BossHealthBounds.Min, BossHealthBounds.GetSize());
-    Text(Canvas, Name, FVector2D(PositionX + (Width - NameSize.X) * 0.5, PositionY + TopPad), NameFont, NoticeInk);
-    Text(Canvas, Value, FVector2D(PositionX + Width - Inset - ValueSize.X, PositionY + TopPad + (NameSize.Y - ValueSize.Y) * 0.5),
-        HealthFont, NoticeInk);
-    DrawHealthBar(HUD, FVector2D(PositionX + Inset, PositionY + TopPad + NameSize.Y + BarGap), Width - Inset * 2.0, Fraction);
-    if (!DisplayedBossHealth.IsSet() || DisplayedBossHealth.GetValue() != Health)
-    {
-        UE_LOG(LogCoopRPGExpeditionHUD, Log, TEXT("BossHealthHUD Round=%s Visible=1 HP=%d Max=%d"), *Round.ToString(), Health.X, Health.Y);
-        DisplayedBossHealth = Health;
-    }
-}
-
 const TCHAR* FCoopRPGExpeditionDashboard::StageTitle(int32 Stage)
 {
     switch (Stage)
@@ -481,23 +313,6 @@ void FCoopRPGExpeditionDashboard::DrawPanel(AHUD& HUD, FVector2D Position, FVect
 {
     DrawNineSlice(HUD, Position, Size, FBox2D(FVector2D::ZeroVector, FVector2D(286, 195)),
         FVector2D(8, 7), FVector2D(8, 10));
-}
-
-void FCoopRPGExpeditionDashboard::DrawNineSlice(AHUD& HUD, FVector2D Position, FVector2D Size, const FBox2D& Source,
-    FVector2D StartInset, FVector2D EndInset) const
-{
-    const double SourceX[] = {Source.Min.X, Source.Min.X + StartInset.X, Source.Max.X - EndInset.X, Source.Max.X};
-    const double SourceY[] = {Source.Min.Y, Source.Min.Y + StartInset.Y, Source.Max.Y - EndInset.Y, Source.Max.Y};
-    const double X[] = {0, StartInset.X, Size.X - EndInset.X, Size.X};
-    const double Y[] = {0, StartInset.Y, Size.Y - EndInset.Y, Size.Y};
-    for (int32 Row = 0; Row < 3; ++Row)
-    {
-        for (int32 Col = 0; Col < 3; ++Col)
-        {
-            DrawImage(HUD, FBox2D(FVector2D(SourceX[Col], SourceY[Row]), FVector2D(SourceX[Col + 1], SourceY[Row + 1])),
-                Position + FVector2D(X[Col], Y[Row]), FVector2D(X[Col + 1] - X[Col], Y[Row + 1] - Y[Row]));
-        }
-    }
 }
 
 void FCoopRPGExpeditionDashboard::DrawDivider(AHUD& HUD, FVector2D Position, float Width) const
@@ -718,6 +533,191 @@ void FCoopRPGExpeditionDashboard::Update(const ACoopRPGGameState& State, int32 S
     LastInside = Inside;
     bLastStone = bStone;
     bLastCountdown = bCountdown;
+}
+
+void FCoopRPGExpeditionDashboard::DrawReadyParty(AHUD& HUD, UCanvas& Canvas, const ACoopRPGGameState& State,
+    const ACoopRPGPlayerController& Controller, float Left, float Right, float Top, float BadgeSide, float PartyGap, bool bWide) const
+{
+    using namespace CoopRPG::ExpeditionUI;
+    FString Names[2];
+    for (TActorIterator<ACoopRPGCharacter> It(Controller.GetWorld()); It; ++It)
+    {
+        const int32 Slot = It->GetDisplaySlot();
+        if (Slot >= 1 && Slot <= 2)
+        {
+            Names[Slot - 1] = PlayerName(**It, Slot);
+        }
+    }
+
+    const auto NameFont = Font(bWide ? 13.0f : 11.0f, true);
+    const auto SmallFont = Font(bWide ? 12.0f : 10.0f);
+    const float NameHeight = Measure(Canvas, TEXT("가"), NameFont).Y;
+    const auto& Slots = State.GetReadySlots();
+    const ECoopRPGReadyStatus Statuses[] = {Slots.PlayerOne, Slots.PlayerTwo};
+    for (int32 Index = 0; Index < 2; ++Index)
+    {
+        const float Y = Top + Index * (BadgeSide + PartyGap);
+        const FString Badge = FString::Printf(TEXT("P%d"), Index + 1);
+        const FVector2D BadgePos(Left, Y);
+        const FVector2D BadgeSize(BadgeSide, BadgeSide);
+        const FLinearColor BadgeColor = Index == 0 ? FLinearColor(FColor(106, 73, 37)) : FLinearColor(FColor(40, 79, 111));
+        HUD.DrawRect(BadgeColor, BadgePos.X, BadgePos.Y, BadgeSize.X, BadgeSize.Y);
+        Text(Canvas, Badge, BadgePos + (BadgeSize - Measure(Canvas, Badge, SmallFont)) * 0.5, SmallFont, NoticeInk);
+        const float NameX = Left + BadgeSide + 8.0f;
+        if (Statuses[Index] != ECoopRPGReadyStatus::Disconnected && !Names[Index].IsEmpty())
+        {
+            Text(Canvas, Fit(Canvas, Names[Index], NameFont, Right - NameX), FVector2D(NameX, Y), NameFont, DashboardTextColor);
+        }
+        Text(Canvas, ReadyText(Statuses[Index]), FVector2D(NameX, Y + NameHeight + 3.0f), SmallFont, ReadyColor(Statuses[Index]));
+    }
+}
+
+void FCoopRPGExpeditionDashboard::DrawNotice(AHUD& HUD, UCanvas& Canvas, const ACoopRPGGameState& State,
+    ECoopRPGDashboardLabel Goal, const FVector2D& ViewSize, float Pad, float PanelWidth, bool bWide, bool bBossActive)
+{
+    NoticeBounds = FBox2D(ForceInit);
+    constexpr double HudGap = 14.0;
+    const double MinX = Pad + PanelWidth + HudGap;
+    const double MaxX = ViewSize.X - Pad - (bWide ? 364.0 : 300.0) - HudGap;
+    const double Inset = bWide ? 12.0 : 13.0;
+    const double Available = MaxX - MinX;
+    if (Available < Inset * 2.0 + 60.0)
+    {
+        return;
+    }
+
+    const auto Paragraphs = GetNotice(State, Goal, bBossActive);
+    const auto NoticeFont = Font(bWide ? 14.0f : 12.0f);
+    const auto CaptionFont = Font(bWide ? 11.0f : 10.0f, true);
+    const TCHAR* Title = TEXT("목표 안내");
+    const FVector2D TitleSize = Measure(Canvas, Title, CaptionFont);
+    double NaturalWidth = TitleSize.X;
+    for (const FString& Paragraph : Paragraphs)
+    {
+        NaturalWidth = FMath::Max(NaturalWidth, Measure(Canvas, Paragraph, NoticeFont).X);
+    }
+    const double Minimum = bWide ? 320.0 : 260.0;
+    const double BossNoticeWidth = bWide ? 344.0 : 304.0;
+    const double DesiredWidth = bBossActive ? BossNoticeWidth : FMath::Max(Minimum, FMath::CeilToDouble(NaturalWidth) + 2.0 * Inset);
+    const double Width = FMath::Min(Available, DesiredWidth);
+    const double ContentWidth = Width - 2.0 * Inset;
+
+    TArray<FString, TInlineAllocator<4>> Lines;
+    for (const FString& Paragraph : Paragraphs)
+    {
+        if (Measure(Canvas, Paragraph, NoticeFont).X <= ContentWidth)
+        {
+            Lines.Add(Paragraph);
+            continue;
+        }
+        TArray<FString> Words;
+        Paragraph.ParseIntoArrayWS(Words);
+        FString Line;
+        for (const FString& Word : Words)
+        {
+            FString Candidate = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
+            if (!Line.IsEmpty() && Measure(Canvas, Candidate, NoticeFont).X > ContentWidth)
+            {
+                Lines.Add(MoveTemp(Line));
+                Line = Word;
+            }
+            else
+            {
+                Line = MoveTemp(Candidate);
+            }
+        }
+        Lines.Add(MoveTemp(Line));
+    }
+
+    const double TitleGap = bWide ? 8.0 : 6.0;
+    const double LineGap = bWide ? 6.0 : 5.0;
+    const double LineHeight = Measure(Canvas, TEXT("가"), NoticeFont).Y;
+    const double Height = 2.0 * Inset + TitleSize.Y + TitleGap + Lines.Num() * LineHeight
+        + FMath::Max(0, Lines.Num() - 1) * LineGap;
+    const double X = FMath::Clamp((ViewSize.X - Width) * 0.5, MinX, MaxX - Width);
+    NoticeBounds = FBox2D(FVector2D(X, Pad), FVector2D(X + Width, Pad + Height));
+    DrawDarkPanel(HUD, NoticeBounds.Min, NoticeBounds.GetSize());
+    Text(Canvas, Title, FVector2D(X + (Width - TitleSize.X) * 0.5, Pad + Inset), CaptionFont, NoticeInk);
+    double Y = Pad + Inset + TitleSize.Y + TitleGap;
+    for (FString& Line : Lines)
+    {
+        Line = Fit(Canvas, MoveTemp(Line), NoticeFont, ContentWidth);
+        const double LineWidth = Measure(Canvas, Line, NoticeFont).X;
+        Text(Canvas, Line, FVector2D(X + (Width - LineWidth) * 0.5, Y), NoticeFont, NoticeInk);
+        Y += LineHeight + LineGap;
+    }
+}
+
+void FCoopRPGExpeditionDashboard::DrawBossHealth(AHUD& HUD, UCanvas& Canvas, const ACoopRPGGameState& State,
+    bool bBossActive, bool bWide)
+{
+    BossHealthBounds = FBox2D(ForceInit);
+    const ACoopRPGEnemy* Boss = nullptr;
+    if (bBossActive && NoticeBounds.bIsValid)
+    {
+        for (TActorIterator<ACoopRPGEnemy> It(State.GetWorld()); It; ++It)
+        {
+            if (It->IsBlackKnight() && !It->IsDead() && It->GetHealth() > 0.0f)
+            {
+                Boss = *It;
+                break;
+            }
+        }
+    }
+    if (!Boss)
+    {
+        if (DisplayedBossHealth.IsSet())
+        {
+            UE_LOG(LogCoopRPGExpeditionHUD, Log, TEXT("BossHealthHUD Round=%s Visible=0"), *Round.ToString());
+            DisplayedBossHealth.Reset();
+        }
+        return;
+    }
+
+    const FIntPoint Health(FMath::CeilToInt(Boss->GetHealth()), FMath::CeilToInt(Boss->GetMaxHealth()));
+    const float Fraction = FMath::Clamp(Boss->GetHealth() / FMath::Max(1.0f, Boss->GetMaxHealth()), 0.0f, 1.0f);
+    const auto NameFont = Font(bWide ? 14.0f : 12.0f, true);
+    const auto HealthFont = Font(bWide ? 12.0f : 10.0f);
+    const TCHAR* Name = TEXT("흑기사");
+    const FString Value = FString::Printf(TEXT("%d / %d"), Health.X, Health.Y);
+    const FVector2D NameSize = Measure(Canvas, Name, NameFont);
+    const FVector2D ValueSize = Measure(Canvas, Value, HealthFont);
+    const double Width = NoticeBounds.GetSize().X;
+    constexpr double Inset = 12.0;
+    constexpr double TopPad = 8.0;
+    constexpr double BarGap = 5.0;
+    constexpr double BarHeight = 7.0;
+    const double PositionY = NoticeBounds.Max.Y + 8.0;
+    const double PositionX = NoticeBounds.Min.X;
+    const double Height = TopPad * 2.0 + NameSize.Y + BarGap + BarHeight;
+    BossHealthBounds = FBox2D(FVector2D(PositionX, PositionY), FVector2D(PositionX + Width, PositionY + Height));
+    DrawDarkPanel(HUD, BossHealthBounds.Min, BossHealthBounds.GetSize());
+    Text(Canvas, Name, FVector2D(PositionX + (Width - NameSize.X) * 0.5, PositionY + TopPad), NameFont, NoticeInk);
+    Text(Canvas, Value, FVector2D(PositionX + Width - Inset - ValueSize.X, PositionY + TopPad + (NameSize.Y - ValueSize.Y) * 0.5),
+        HealthFont, NoticeInk);
+    DrawHealthBar(HUD, FVector2D(PositionX + Inset, PositionY + TopPad + NameSize.Y + BarGap), Width - Inset * 2.0, Fraction);
+    if (!DisplayedBossHealth.IsSet() || DisplayedBossHealth.GetValue() != Health)
+    {
+        UE_LOG(LogCoopRPGExpeditionHUD, Log, TEXT("BossHealthHUD Round=%s Visible=1 HP=%d Max=%d"), *Round.ToString(), Health.X, Health.Y);
+        DisplayedBossHealth = Health;
+    }
+}
+
+void FCoopRPGExpeditionDashboard::DrawNineSlice(AHUD& HUD, FVector2D Position, FVector2D Size, const FBox2D& Source,
+    FVector2D StartInset, FVector2D EndInset) const
+{
+    const double SourceX[] = {Source.Min.X, Source.Min.X + StartInset.X, Source.Max.X - EndInset.X, Source.Max.X};
+    const double SourceY[] = {Source.Min.Y, Source.Min.Y + StartInset.Y, Source.Max.Y - EndInset.Y, Source.Max.Y};
+    const double X[] = {0, StartInset.X, Size.X - EndInset.X, Size.X};
+    const double Y[] = {0, StartInset.Y, Size.Y - EndInset.Y, Size.Y};
+    for (int32 Row = 0; Row < 3; ++Row)
+    {
+        for (int32 Col = 0; Col < 3; ++Col)
+        {
+            DrawImage(HUD, FBox2D(FVector2D(SourceX[Col], SourceY[Row]), FVector2D(SourceX[Col + 1], SourceY[Row + 1])),
+                Position + FVector2D(X[Col], Y[Row]), FVector2D(X[Col + 1] - X[Col], Y[Row + 1] - Y[Row]));
+        }
+    }
 }
 
 void FCoopRPGExpeditionDashboard::DrawImage(AHUD& HUD, const FBox2D& Source, const FVector2D& Position, const FVector2D& Size) const

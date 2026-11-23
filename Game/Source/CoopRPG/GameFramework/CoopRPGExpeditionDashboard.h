@@ -67,6 +67,7 @@ private:
         FVector2D StartInset, FVector2D EndInset) const;
     void DrawImage(AHUD& HUD, const FBox2D& Source, const FVector2D& Position, const FVector2D& Size) const;
 
+private:
     TStrongObjectPtr<UTexture2D> Skin;
     TArray<FRecord> Records;
     FGuid Round;
