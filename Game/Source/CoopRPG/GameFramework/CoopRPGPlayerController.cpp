@@ -1056,6 +1056,11 @@ void ACoopRPGPlayerController::ServerShopTrade_Implementation(FGuid RoundId, uin
         Reject(TEXT("BagLimit"), TEXT("가방에 더 담을 수 없거나 이미 배운 스킬이에요."));
         return;
     }
+    if (bBuy && GetBagRoom(Item) == 0)
+    {
+        Reject(TEXT("BagFull"), CoopRPG::Bag::FullMessage);
+        return;
+    }
 
     auto* Economy = GetGameInstance()->GetSubsystem<UCoopRPGSessionEconomy>();
     const FUniqueNetIdRepl& OwnerId = Identity->GetUniqueId();
