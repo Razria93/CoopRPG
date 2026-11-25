@@ -108,10 +108,10 @@ private:
     void UpdateGuardPoints();
     void ScheduleGuardPointsUpdate();
     void LogGuardPoints(const TCHAR* Event) const;
-    void UpdateGuardPose();
 
     UFUNCTION(Server, Reliable)
     void ServerSetGuarding(FGuid RoundId, bool bRequested);
+    void UpdateGuardPose();
 
     UFUNCTION()
     void OnRep_ShieldState();
