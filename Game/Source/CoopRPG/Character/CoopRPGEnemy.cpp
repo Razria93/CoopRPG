@@ -4,6 +4,7 @@
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
+#include "CoopRPG/Debug/Logging/CoopRPGTauntLog.h"
 #include "CoopRPG/Character/CoopRPGLocomotionAnimInstance.h"
 #include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
@@ -32,8 +33,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
-
-#include "CoopRPG/Debug/Logging/CoopRPGTauntLog.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEnemy, Log, All);
 
@@ -341,6 +340,16 @@ void ACoopRPGEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
     DOREPLIFETIME(ACoopRPGEnemy, ShieldWarning);
 }
 
+void ACoopRPGEnemy::ApplyTaunt(ACoopRPGCharacter& Caster, double EndsAt)
+{
+    check(HasAuthority());
+    TauntCaster = &Caster;
+    TauntEndsAt = EndsAt;
+    bTauntSelected = false;
+    ForceNetUpdate();
+    CoopRPG::Debug::TauntLog::Applied(*this, Caster, bAttackPending, EndsAt);
+}
+
 bool ACoopRPGEnemy::ShouldPreserveAttackPose() const
 {
     if (!IsBlackKnight() || !bShieldEncounter || bDead)
@@ -565,14 +574,17 @@ void ACoopRPGEnemy::StopChasing()
     }
 }
 
-void ACoopRPGEnemy::ApplyTaunt(ACoopRPGCharacter& Caster, double EndsAt)
+void ACoopRPGEnemy::StopCombat()
 {
-    check(HasAuthority());
-    TauntCaster = &Caster;
-    TauntEndsAt = EndsAt;
-    bTauntSelected = false;
-    ForceNetUpdate();
-    CoopRPG::Debug::TauntLog::Applied(*this, Caster, bAttackPending, EndsAt);
+    ClearTaunt(bDead ? TEXT("EnemyDead") : TEXT("RoundEnded"));
+    AttackTarget.Reset();
+    StopChasing();
+    Target.Reset();
+    SetShieldWarning(0, ShieldWarning.FacingYaw, 0.0);
+    ResolvedKnightStrikeAt = 0.0;
+    MushroomStrike = {};
+    NextActionTime = 0.0;
+    bAttackPending = false;
 }
 
 void ACoopRPGEnemy::ClearTaunt(const TCHAR* Reason)
@@ -586,19 +598,6 @@ void ACoopRPGEnemy::ClearTaunt(const TCHAR* Reason)
     bTauntSelected = false;
     ForceNetUpdate();
     CoopRPG::Debug::TauntLog::Ended(*this, Reason);
-}
-
-void ACoopRPGEnemy::StopCombat()
-{
-    ClearTaunt(bDead ? TEXT("EnemyDead") : TEXT("RoundEnded"));
-    AttackTarget.Reset();
-    StopChasing();
-    Target.Reset();
-    SetShieldWarning(0, ShieldWarning.FacingYaw, 0.0);
-    ResolvedKnightStrikeAt = 0.0;
-    MushroomStrike = {};
-    NextActionTime = 0.0;
-    bAttackPending = false;
 }
 
 void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)

@@ -427,6 +427,15 @@ void ACoopRPGPlayerController::TakeMeleeWeapon()
     RequestChestItem(ECoopRPGChestItem::MeleeWeapon);
 }
 
+void ACoopRPGPlayerController::CloseOpenedChest(FGuid RoundId, const TCHAR* Reason)
+{
+    const ACoopRPGSharedChest* Chest = OpenedChest.Get();
+    OpenedChest = nullptr;
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestClosed Chest=%s Round=%s Reason=%s %s"), *GetNameSafe(Chest),
+        *RoundId.ToString(), Reason, *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
 void ACoopRPGPlayerController::RequestRecoveryRegistration(bool bStamina, bool bRegistered)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -537,15 +546,6 @@ void ACoopRPGPlayerController::CloseSharedChest()
             *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         ServerSetChestOpen(OpenedChest, State->GetRoundId(), false);
     }
-}
-
-void ACoopRPGPlayerController::CloseOpenedChest(FGuid RoundId, const TCHAR* Reason)
-{
-    const ACoopRPGSharedChest* Chest = OpenedChest.Get();
-    OpenedChest = nullptr;
-    ForceNetUpdate();
-    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestClosed Chest=%s Round=%s Reason=%s %s"), *GetNameSafe(Chest),
-        *RoundId.ToString(), Reason, *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGPlayerController::UseRecoveryItem()

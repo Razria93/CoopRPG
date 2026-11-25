@@ -69,6 +69,8 @@ class COOPRPG_API UCoopRPGTauntCost : public UGameplayEffect
 
 public:
     UCoopRPGTauntCost();
+
+public:
     static constexpr float Stamina = 15.0f;
 };
 
@@ -81,5 +83,6 @@ public:
     UCoopRPGTauntCooldown();
     static FGameplayTag GetCooldownTag();
 
+public:
     static constexpr float Seconds = 12.0f;
 };

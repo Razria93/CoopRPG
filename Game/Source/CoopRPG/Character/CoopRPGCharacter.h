@@ -94,9 +94,6 @@ private:
     void CancelAttack();
     void UseSlash();
     void UseTaunt();
-
-    FVector TauntPulseOrigin = FVector::ZeroVector;
-    double TauntPulseStartedAt = -100.0;
     void PressGuardInput();
     void SetGuarding(bool bGuarding);
 
@@ -129,6 +126,10 @@ private:
     void ConfigureHeroShield(ECoopRPGHero Hero);
     void SetPresentationTint(bool bDarkened);
     void RestorePresentationTint();
+
+private:
+    FVector TauntPulseOrigin = FVector::ZeroVector;
+    double TauntPulseStartedAt = -100.0;
 
 public:
     static constexpr double GuardHalfAngleDegrees = 45.0;

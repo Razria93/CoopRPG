@@ -434,42 +434,6 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
     }
 }
 
-void ACoopRPGGameMode::OpenBossRewards(ACoopRPGGameState& State)
-{
-    const FVector ChestLocation(1200.0, 0.0, 28.0);
-    // Matches the placed Joint Extraction in L_ExpeditionSkirmish.
-    const FVector PortalLocation(2440.0, 0.0, 6.0);
-    auto* RewardChest = GetWorld()->SpawnActor<ACoopRPGSharedChest>(ChestLocation, FRotator::ZeroRotator);
-    auto* Portal = GetWorld()->SpawnActor<ACoopRPGExtractionZone>(PortalLocation, FRotator::ZeroRotator);
-    if (!IsValid(RewardChest) || !IsValid(Portal))
-    {
-        if (IsValid(RewardChest))
-        {
-            RewardChest->Destroy();
-        }
-        if (IsValid(Portal))
-        {
-            Portal->Destroy();
-        }
-        return;
-    }
-
-    auto* SupplyChest = State.GetSharedChest();
-    RewardChest->SetBossRewardStock();
-    for (const auto& Participant : RoundPlayers)
-    {
-        if (auto* Player = Participant.Get(); IsValid(Player) && Player->GetOpenedChest() == SupplyChest)
-        {
-            Player->CloseOpenedChest(State.GetRoundId(), TEXT("BossRewards"));
-        }
-    }
-    State.StartBossRewards(*RewardChest, *Portal);
-    if (IsValid(SupplyChest))
-    {
-        SupplyChest->Destroy();
-    }
-}
-
 void ACoopRPGGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId,
     FString& ErrorMessage)
 {
@@ -829,6 +793,42 @@ void ACoopRPGGameMode::FinalizePuzzleReward(ACoopRPGGameState& State, ACoopRPGPl
     UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("PuzzleRewardFinalized Round=%s PlayerId=%d Reward=%s Source=%s At=%.3f"),
         *State.GetRoundId().ToString(), PlayerId, *UEnum::GetValueAsString(Reward),
         bTimedOut ? TEXT("Timeout") : TEXT("Choice"), State.GetServerWorldTimeSeconds());
+}
+
+void ACoopRPGGameMode::OpenBossRewards(ACoopRPGGameState& State)
+{
+    const FVector ChestLocation(1200.0, 0.0, 28.0);
+    // Matches the placed Joint Extraction in L_ExpeditionSkirmish.
+    const FVector PortalLocation(2440.0, 0.0, 6.0);
+    auto* RewardChest = GetWorld()->SpawnActor<ACoopRPGSharedChest>(ChestLocation, FRotator::ZeroRotator);
+    auto* Portal = GetWorld()->SpawnActor<ACoopRPGExtractionZone>(PortalLocation, FRotator::ZeroRotator);
+    if (!IsValid(RewardChest) || !IsValid(Portal))
+    {
+        if (IsValid(RewardChest))
+        {
+            RewardChest->Destroy();
+        }
+        if (IsValid(Portal))
+        {
+            Portal->Destroy();
+        }
+        return;
+    }
+
+    auto* SupplyChest = State.GetSharedChest();
+    RewardChest->SetBossRewardStock();
+    for (const auto& Participant : RoundPlayers)
+    {
+        if (auto* Player = Participant.Get(); IsValid(Player) && Player->GetOpenedChest() == SupplyChest)
+        {
+            Player->CloseOpenedChest(State.GetRoundId(), TEXT("BossRewards"));
+        }
+    }
+    State.StartBossRewards(*RewardChest, *Portal);
+    if (IsValid(SupplyChest))
+    {
+        SupplyChest->Destroy();
+    }
 }
 
 void ACoopRPGGameMode::AdvanceRoundIfReady(ACoopRPGGameState& State, const FString& Destination)

@@ -14,10 +14,6 @@ class COOPRPG_API UCoopRPGTauntAbility : public UGameplayAbility
 public:
     UCoopRPGTauntAbility();
 
-    static constexpr double RangeCm = 400.0;
-    static constexpr double DurationSeconds = 4.0;
-    static constexpr double PulseSeconds = 0.72;
-
 protected:
     virtual bool CheckCost(FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
         FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
@@ -28,4 +24,9 @@ protected:
 
 private:
     static bool IsInRange(const ACoopRPGCharacter& Caster, const ACoopRPGEnemy& Enemy);
+
+public:
+    static constexpr double RangeCm = 400.0;
+    static constexpr double DurationSeconds = 4.0;
+    static constexpr double PulseSeconds = 0.72;
 };

@@ -7,8 +7,6 @@
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGSlashAbility.h"
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGTauntAbility.h"
 #include "CoopRPG/Debug/Logging/CoopRPGTauntLog.h"
-#include "NiagaraFunctionLibrary.h"
-#include "NiagaraSystem.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Debug/CoopRPGCombatProbeComponent.h"
 #include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
@@ -43,6 +41,8 @@
 #include "InputActionValue.h"
 #include "InputCoreTypes.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
