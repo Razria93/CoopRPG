@@ -1073,7 +1073,7 @@ void FCoopRPGEquipmentPanel::DrawEquipment(AHUD& HUD, UCanvas& Surface, const AC
             }
             else if (bShield && bArmed)
             {
-                Item = bGuarding ? TEXT("기본 방패 · 가드 중") : TEXT("기본 방패 [Shift]");
+                Item = bGuarding ? TEXT("기본 방패 · 가드 중") : TEXT("기본 방패 [우클릭]");
             }
             DrawPanelLabel(Surface, Item, Left + 49.0, Y + 29.0, ItemFont, Ink);
         }

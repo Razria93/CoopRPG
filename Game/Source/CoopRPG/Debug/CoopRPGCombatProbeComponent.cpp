@@ -746,7 +746,13 @@ void UCoopRPGCombatProbeComponent::OnPeerLogout(AGameModeBase* Mode, AController
 void UCoopRPGCombatProbeComponent::PreparePlayerGuardLayout(
     FName Layout, ACoopRPGGameMode& Mode, ACoopRPGCharacter& Character)
 {
-    const bool bPause = Layout == TEXT("guardPause");
+    const bool bEquip = Layout == TEXT("guardEquip");
+    const bool bUnequip = Layout == TEXT("guardUnequip");
+    const bool bPause = Layout == TEXT("guardPause") || bEquip || bUnequip;
+    if (bEquip || bUnequip)
+    {
+        Character.SetShieldEquipped(bEquip);
+    }
     int32 Angle = 0;
     if (!bPause && (!LexTryParseString(Angle, *Layout.ToString().Mid(5)) || FMath::Abs(Angle) > 180))
     {

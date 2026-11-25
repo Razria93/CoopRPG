@@ -619,7 +619,7 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
     const FGameplayEffectSpecHandle Damage = AbilitySystem->MakeOutgoingSpec(UCoopRPGMeleeDamage::StaticClass(), 1.0f,
         AbilitySystem->MakeEffectContext());
     check(Damage.IsValid());
-    const bool bGuarding = Player->IsGuarding();
+    const bool bGuarding = Player->EvaluateGuardForHit();
     const double GuardAngle = Player->GetGuardAngle(GetActorLocation());
     const bool bGuarded = bGuarding
         && GuardAngle <= ACoopRPGCharacter::GuardHalfAngleDegrees + UE_DOUBLE_KINDA_SMALL_NUMBER;
@@ -635,9 +635,20 @@ void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)
     AbilitySystem->ApplyGameplayEffectSpecToTarget(*Damage.Data.Get(), Player->GetAbilitySystemComponent());
     if (const float DamageAmount = HealthBefore - Player->GetHealth(); DamageAmount > 0.0f)
     {
+        if (bGuarded)
+        {
+            Player->RestoreGuardPointsOnBlock();
+        }
         if (auto* State = GetWorld()->GetGameState<ACoopRPGGameState>())
         {
-            State->MulticastGameplayFeedback({ECoopRPGFeedbackKind::Damage, Player, DamageAmount, 0});
+            FCoopRPGGameplayFeedback Feedback(ECoopRPGFeedbackKind::Damage, Player, DamageAmount, 0);
+            if (bGuarded)
+            {
+                Feedback.MeleeEffect = ECoopRPGMeleeEffect::ShieldBlock;
+                Feedback.MeleeEffectLocation = Player->GetShieldImpactLocation();
+                Feedback.MeleeEffectYaw = Player->GetActorRotation().Yaw;
+            }
+            State->MulticastGameplayFeedback(Feedback);
         }
     }
     UE_LOG(LogCoopRPGEnemy, Log, TEXT("EnemyAttackHit Actor=%s Target=%s TargetPlayerId=%d Distance=%.2f Range=%.2f HP=%.2f->%.2f Guard=%d GuardAngle=%.2f Guarded=%d DamageScale=%.2f Protection=%d %s"),

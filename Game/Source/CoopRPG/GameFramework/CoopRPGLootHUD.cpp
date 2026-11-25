@@ -132,13 +132,11 @@ namespace CoopRPG::ExpeditionUI
         return {Hero.GetStamina() < UCoopRPGTauntCost::Stamina ? EAttackHudState::LowStamina : EAttackHudState::Ready};
     }
 
-    void DrawTauntGlyph(UCanvas& Canvas, const FBox2D& Bounds, const FAttackHudStatus& Status)
+    void DrawShieldOutline(UCanvas& Canvas, const FBox2D& Bounds, const FLinearColor& Tint)
     {
         const FVector2D Center = Bounds.GetCenter();
         const double Unit = Bounds.GetSize().X * 0.20;
         const FVector2D Vertices[] = {{-1.0, -0.65}, {0.0, -1.0}, {1.0, -0.65}, {0.82, 0.40}, {0.0, 1.04}, {-0.82, 0.40}};
-        const bool bAvailable = Status.State == EAttackHudState::Ready || Status.State == EAttackHudState::Cooling;
-        const FLinearColor Tint(bAvailable ? FColor(155, 216, 255) : FColor(255, 169, 161));
         for (int32 Index = 0; Index < UE_ARRAY_COUNT(Vertices); ++Index)
         {
             const FVector2D From = Center + Vertices[Index] * Unit;
@@ -148,6 +146,12 @@ namespace CoopRPG::ExpeditionUI
             Edge.LineThickness = 2.0f;
             Canvas.DrawItem(Edge);
         }
+    }
+
+    void DrawTauntGlyph(UCanvas& Canvas, const FBox2D& Bounds, const FAttackHudStatus& Status)
+    {
+        const bool bAvailable = Status.State == EAttackHudState::Ready || Status.State == EAttackHudState::Cooling;
+        DrawShieldOutline(Canvas, Bounds, FLinearColor(bAvailable ? FColor(155, 216, 255) : FColor(255, 169, 161)));
         if (Status.State == EAttackHudState::Cooling)
         {
             DrawCooldownSweep(Canvas, Bounds.Min, Bounds.GetSize().X, Status.GetElapsedFraction());
@@ -326,6 +330,7 @@ namespace
 void ACoopRPGLootHUD::DrawHUD()
 {
     Super::DrawHUD();
+    FixedHudBoundsCount = 0;
     PuzzleRewardPanelBounds = FBox2D(ForceInit);
     ChestPanelBounds = FBox2D(ForceInit);
     const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
@@ -386,6 +391,7 @@ void ACoopRPGLootHUD::DrawHUD()
             DrawLocalCombatStatus(*State, *LocalHero, Attack);
         }
     }
+    FixedHudBoundsCount = WorldLabelBounds.Num();
     ON_SCOPE_EXIT
     {
         const FVector2D ViewSize(Canvas->ClipX, Canvas->ClipY);
@@ -544,6 +550,8 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
     FLinearColor Color(0.35f, 0.72f, 1.0f);
     bool bNextToActor = true;
     const bool bAtContact = Feedback.Kind == ECoopRPGFeedbackKind::ShieldBlocked;
+    const bool bPlayerGuarded = Feedback.Kind == ECoopRPGFeedbackKind::Damage
+        && Feedback.MeleeEffect == ECoopRPGMeleeEffect::ShieldBlock && Subject && Subject->IsA<ACoopRPGCharacter>();
     switch (Feedback.Kind)
     {
     case ECoopRPGFeedbackKind::Damage:
@@ -553,6 +561,11 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
         Text = bExpedition ? FString::Printf(TEXT("체력 -%.0f (%s)"), Feedback.Amount, *Attacker)
             : FString::Printf(TEXT("-%.0f HP (By %s)"), Feedback.Amount, *Attacker);
         Color = FLinearColor(1.0f, 0.36f, 0.33f);
+        if (bPlayerGuarded)
+        {
+            Text = FString(bExpedition ? TEXT("가드! · ") : TEXT("Guard! ")) + Text;
+            Color = FLinearColor(FColor(255, 220, 125));
+        }
         bNextToActor = false;
         if (auto* Player = Cast<ACoopRPGCharacter>(Subject))
         {
@@ -614,9 +627,9 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
     }
     FeedbackEntries.Add({Subject, Feedback.Location, Text, Color, Now, bNextToActor, ItemRow, bAtContact});
     const auto* Player = Cast<ACoopRPGCharacter>(Subject);
-    UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("GameplayFeedback Kind=%s Subject=%s Slot=%d Amount=%.2f AttackerSlot=%d %s"),
+    UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("GameplayFeedback Kind=%s Subject=%s Slot=%d Amount=%.2f AttackerSlot=%d Guarded=%d %s"),
         *UEnum::GetValueAsString(Feedback.Kind), *GetNameSafe(Subject), Player ? Player->GetDisplaySlot() : 0,
-        Feedback.Amount, Feedback.AttackerSlot, *CoopRPG::Debug::DescribeLogContext(GetOwningPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        Feedback.Amount, Feedback.AttackerSlot, bPlayerGuarded, *CoopRPG::Debug::DescribeLogContext(GetOwningPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 bool ACoopRPGLootHUD::HandleHudPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
@@ -638,6 +651,43 @@ bool ACoopRPGLootHUD::HandleHudWheel(const ACoopRPGPlayerController& Controller,
 {
     const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
     return (!Viewport || !Viewport->HasConnectionNotice()) && EquipmentPanel.HandleWheel(Controller, Input);
+}
+
+bool ACoopRPGLootHUD::IsPointerOverHud(const ACoopRPGPlayerController& Controller) const
+{
+    const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
+    if (Viewport && Viewport->HasConnectionNotice())
+    {
+        return true;
+    }
+
+    FVector2D Pointer;
+    if (!Controller.GetMousePosition(Pointer.X, Pointer.Y))
+    {
+        return false;
+    }
+
+    const auto ContainsPointer = [&Pointer](const FBox2D& Bounds)
+    {
+        return Bounds.bIsValid && Bounds.IsInsideOrOn(Pointer);
+    };
+    for (int32 Index = 0; Index < FixedHudBoundsCount; ++Index)
+    {
+        if (ContainsPointer(WorldLabelBounds[Index]))
+        {
+            return true;
+        }
+    }
+    for (const FBox2D& Bounds : {EquipmentPanel.GetVisibleBounds(), ExpeditionDashboard.GetPanelBounds(),
+        ExpeditionDashboard.GetNoticeBounds(), ExpeditionDashboard.GetBossHealthBounds(), ChestPanelBounds,
+        PuzzleRewardPanelBounds})
+    {
+        if (ContainsPointer(Bounds))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 void ACoopRPGLootHUD::ReleaseHudPointer()
@@ -1137,11 +1187,7 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
             ExpeditionDashboard.DrawDarkPanel(*this, Position, Size);
             const auto* Hero = Cast<ACoopRPGCharacter>(Plate.Pawn);
             const bool bGuarding = Hero && Hero->IsGuarding();
-            FString Label = FString::Printf(TEXT("[%s]"), *Plate.Name);
-            if (bGuarding)
-            {
-                Label += TEXT(" 가드");
-            }
+            const FString Label = FString::Printf(TEXT("[%s]"), *Plate.Name);
             auto LabelFont = NameFont;
             FVector2D TextSize = Measure(*Canvas, Label, LabelFont);
             if (TextSize.X > Width - 2.0 * SidePad)
@@ -1150,11 +1196,22 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
                 TextSize = Measure(*Canvas, Label, LabelFont);
             }
             Text(*Canvas, Label, Position + FVector2D((Width - TextSize.X) * 0.5,
-                TopPad + (NameHeight - TextSize.Y) * 0.5), LabelFont,
-                bGuarding ? FLinearColor(0.63f, 0.87f, 0.99f) : Plate.Color);
+                TopPad + (NameHeight - TextSize.Y) * 0.5), LabelFont, Plate.Color);
             ExpeditionDashboard.DrawHealthBar(*this, Position + FVector2D(SidePad, TopPad + NameHeight + TextGap),
                 Width - 2.0 * SidePad, FMath::Clamp(Plate.HealthFraction, 0.0f, 1.0f));
             Placed.Add(Bounds);
+            if (bGuarding)
+            {
+                constexpr double BadgeSide = 24.0;
+                const FVector2D BadgePosition(Bounds.GetCenter().X - BadgeSide * 0.5, Bounds.Max.Y + 3.0);
+                const FBox2D Badge(BadgePosition, BadgePosition + FVector2D(BadgeSide));
+                if (Fits(Badge) && !Placed.ContainsByPredicate([&Badge](const FBox2D& Other) { return Badge.Intersect(Other); }))
+                {
+                    ExpeditionDashboard.DrawDarkPanel(*this, Badge.Min, Badge.GetSize());
+                    DrawShieldOutline(*Canvas, Badge, FLinearColor(FColor(155, 216, 255)));
+                    Placed.Add(Badge);
+                }
+            }
             break;
         }
     }
@@ -1466,7 +1523,8 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
     const double Margin = bWide ? 22.0 : 12.0;
     const double Width = bWide ? WideCombatHudWidth : NarrowCombatHudWidth;
     const double TrackHeight = bWide ? 20.0 : 17.0;
-    const double PanelHeight = 2.0 * TrackHeight + 19.0;
+    const bool bShowGuard = Hero.HasShieldEquipped();
+    const double PanelHeight = (bShowGuard ? 3.0 : 2.0) * TrackHeight + (bShowGuard ? 24.0 : 19.0);
     const double SlotSide = bWide ? 54.0 : 43.0;
     constexpr double SlotGap = 11.0;
     const FVector2D Panel(Canvas->ClipX - Margin - Width, Canvas->ClipY - Margin - PanelHeight);
@@ -1474,7 +1532,8 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
     const double SlotRight = Panel.X + Width - 1.0;
     const FVector2D TauntSlot(SlotRight - SlotSide, SlotY);
     const FVector2D EmptySlot(TauntSlot.X - (bShowTaunt ? SlotGap + SlotSide : 0.0), SlotY);
-    const FVector2D AttackSlot(EmptySlot.X - SlotGap - SlotSide, SlotY);
+    const FVector2D GuardSlot(EmptySlot.X - SlotGap - SlotSide, SlotY);
+    const FVector2D AttackSlot(GuardSlot.X - (bShowGuard ? SlotGap + SlotSide : 0.0), SlotY);
     WorldLabelBounds.Emplace(Panel, Panel + FVector2D(Width, PanelHeight));
     WorldLabelBounds.Emplace(FVector2D(AttackSlot.X, SlotY), FVector2D(SlotRight, Panel.Y));
 
@@ -1497,11 +1556,11 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
     const double TrackX = Panel.X + PanelInset + LabelWidth + ColumnGap;
     const double ValueRight = Panel.X + Width - PanelInset;
     const double TrackWidth = ValueRight - ValueWidth - ColumnGap - TrackX;
-    const auto DrawTrack = [&](double Y, const TCHAR* Label, float Current, float Maximum, bool bStamina)
+    const auto DrawTrack = [&](double Y, const TCHAR* Label, float Current, float Maximum, ECoopRPGResourceTrack Resource)
     {
         constexpr double TrackInsetY = 2.0;
         ExpeditionDashboard.DrawResourceTrack(*this, FVector2D(TrackX, Y + TrackInsetY),
-            FVector2D(TrackWidth, TrackHeight - 2.0 * TrackInsetY), Maximum > 0.0f ? Current / Maximum : 0.0f, bStamina);
+            FVector2D(TrackWidth, TrackHeight - 2.0 * TrackInsetY), Maximum > 0.0f ? Current / Maximum : 0.0f, Resource);
 
         const FString Value = FString::Printf(TEXT("%d/%d"), FMath::CeilToInt(Current), FMath::RoundToInt(Maximum));
         const FVector2D TextSize = Measure(*Canvas, Value, TrackFont);
@@ -1509,8 +1568,22 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
         Text(*Canvas, Label, FVector2D(Panel.X + PanelInset, MidY - Measure(*Canvas, Label, TrackFont).Y * 0.5), TrackFont, Paper);
         Text(*Canvas, Value, FVector2D(ValueRight - TextSize.X, MidY - TextSize.Y * 0.5), TrackFont, FLinearColor::White);
     };
-    DrawTrack(Panel.Y + 7.0, TEXT("HP"), Health, UCoopRPGCombatAttributes::MaxHealth, false);
-    DrawTrack(Panel.Y + 12.0 + TrackHeight, TEXT("SP"), Stamina, UCoopRPGCombatAttributes::MaxStamina, true);
+    DrawTrack(Panel.Y + 7.0, TEXT("HP"), Health, UCoopRPGCombatAttributes::MaxHealth, ECoopRPGResourceTrack::Health);
+    DrawTrack(Panel.Y + 12.0 + TrackHeight, TEXT("SP"), Stamina, UCoopRPGCombatAttributes::MaxStamina, ECoopRPGResourceTrack::Stamina);
+    if (bShowGuard)
+    {
+        DrawTrack(Panel.Y + 17.0 + 2.0 * TrackHeight, TEXT("GP"), Hero.GetGuardPoints(),
+            ACoopRPGCharacter::MaxGuardPoints, ECoopRPGResourceTrack::Guard);
+        ExpeditionDashboard.DrawSkillSlot(*this, GuardSlot, SlotSide);
+        const FLinearColor GuardInk(Hero.IsGuardExhausted() ? DisabledInk : Paper);
+        const FVector2D Glyph = GuardSlot + FVector2D(SlotSide * 0.5, SlotSide * 0.47);
+        const double Radius = SlotSide * 0.19;
+        DrawLine(Glyph.X - Radius, Glyph.Y - Radius, Glyph.X + Radius, Glyph.Y - Radius, GuardInk, 2.0f);
+        DrawLine(Glyph.X - Radius, Glyph.Y - Radius, Glyph.X - Radius * 0.7, Glyph.Y + Radius * 0.5, GuardInk, 2.0f);
+        DrawLine(Glyph.X + Radius, Glyph.Y - Radius, Glyph.X + Radius * 0.7, Glyph.Y + Radius * 0.5, GuardInk, 2.0f);
+        DrawLine(Glyph.X - Radius * 0.7, Glyph.Y + Radius * 0.5, Glyph.X, Glyph.Y + Radius, GuardInk, 2.0f);
+        DrawLine(Glyph.X + Radius * 0.7, Glyph.Y + Radius * 0.5, Glyph.X, Glyph.Y + Radius, GuardInk, 2.0f);
+    }
 
     ExpeditionDashboard.DrawSkillSlot(*this, AttackSlot, SlotSide);
     ExpeditionDashboard.DrawSkillSlot(*this, EmptySlot, SlotSide);
@@ -1558,6 +1631,10 @@ void ACoopRPGLootHUD::DrawLocalCombatStatus(const ACoopRPGGameState& State, cons
         Text(*Canvas, Label, Position, LabelFont, Color);
     };
     DrawCaption(AttackSlot, TEXT("기본 공격"), bDisabled ? DisabledInk : Paper);
+    if (bShowGuard)
+    {
+        DrawCaption(GuardSlot, TEXT("가드"), Hero.IsGuardExhausted() ? DisabledInk : Paper);
+    }
     const bool bSlashDisabled = bSlashAssigned && Slash.State != EAttackHudState::Ready && Slash.State != EAttackHudState::Cooling;
     DrawCaption(EmptySlot, bSlashAssigned ? TEXT("슬래시") : TEXT("미배정"), bSlashDisabled ? DisabledInk : Paper);
     if (bShowTaunt)

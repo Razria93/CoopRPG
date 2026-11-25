@@ -98,6 +98,7 @@ void ACoopRPGPlayerController::FlushPressedKeys()
 
 bool ACoopRPGPlayerController::InputKey(const FInputKeyEventArgs& Params)
 {
+    const bool bPointerPressed = Params.Event == IE_Pressed || Params.Event == IE_DoubleClick;
     if (Params.Key == EKeys::LeftMouseButton)
     {
         if (auto* HUD = GetHUD<ACoopRPGLootHUD>(); HUD && HUD->HandleHudPrimaryButton(*this, Params))
@@ -107,6 +108,13 @@ bool ACoopRPGPlayerController::InputKey(const FInputKeyEventArgs& Params)
                 bAwaitFocusClick = false;
                 bConsumeFocusClickRelease = false;
             }
+            return true;
+        }
+    }
+    if (bPointerPressed && (Params.Key == EKeys::LeftMouseButton || Params.Key == EKeys::RightMouseButton))
+    {
+        if (const auto* HUD = GetHUD<ACoopRPGLootHUD>(); HUD && HUD->IsPointerOverHud(*this))
+        {
             return true;
         }
     }
