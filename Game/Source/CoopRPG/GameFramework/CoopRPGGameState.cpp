@@ -669,6 +669,16 @@ FString ACoopRPGGameState::GetRoundTravelDestination() const
     }
 }
 
+void ACoopRPGGameState::SetBossReturnStatus(ECoopRPGBossReturnStatus Status)
+{
+    check(HasAuthority());
+    if (RoundStatus.BossReturnStatus != Status)
+    {
+        RoundStatus.BossReturnStatus = Status;
+        ForceNetUpdate();
+    }
+}
+
 void ACoopRPGGameState::PresentGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback)
 {
     if (GetNetMode() != NM_DedicatedServer)

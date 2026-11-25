@@ -34,6 +34,15 @@ enum class ECoopRPGRoundEndReason : uint8
     BossDefeated
 };
 
+UENUM()
+enum class ECoopRPGBossReturnStatus : uint8
+{
+    None,
+    RetryAvailable,
+    Retrying,
+    RetryFailed
+};
+
 USTRUCT()
 struct FCoopRPGRoundStatus
 {
@@ -59,6 +68,9 @@ struct FCoopRPGRoundStatus
 
     UPROPERTY()
     int32 TeamScore = 0;
+
+    UPROPERTY()
+    ECoopRPGBossReturnStatus BossReturnStatus = ECoopRPGBossReturnStatus::None;
 };
 
 USTRUCT()
@@ -180,6 +192,8 @@ public:
     double GetRoundRemainingSeconds() const;
     double GetExtractionRemainingSeconds() const;
     FString GetRoundTravelDestination() const;
+    ECoopRPGBossReturnStatus GetBossReturnStatus() const { return RoundStatus.BossReturnStatus; }
+    void SetBossReturnStatus(ECoopRPGBossReturnStatus Status);
 
     ACoopRPGSharedChest* GetSharedChest() const { return SharedChest.Get(); }
     FGuid GetRoundId() const { return RoundId; }

@@ -58,6 +58,11 @@
 
 맵 전환, 같은 맵 재도전, 로비 복귀에 목적지 안내를 표시한다. 각 클라이언트가 새 카메라를 준비하면 화면을 걷고 기존 준비 안내로 이어간다. 1440×810과 960×540에서 정상 이동과 재도전, 지연 및 접속 실패를 검증했다. [채택 경위와 구현](Development.md#expedition-loading-implementation) · [검증 범위](Validation/ForestExpedition.md#expedition-loading-runtime)
 
+<a id="expedition-travel-follow-up"></a>
+### 최초 접속 화면과 보스 결과 후 복귀
+
+최초 서버 접속도 전환 화면으로 감싸고 최소 1초 표시한다. 서버의 대기 라운드 재접속은 참가자 상태와 입장 기준을 보존한다. 보스 결과 후 로비 이동에 실패하면 결과를 유지하고 한 차례 재시도할 수 있다. [구현 기록](Development.md#expedition-travel-follow-up-implementation) · [확인 범위](Validation/ForestExpedition.md#expedition-travel-follow-up-verification)
+
 ## 3차 MVP 후속 보완 · 2026-11-23
 
 <a id="expedition-default-equipment-work"></a>

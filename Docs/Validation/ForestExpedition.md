@@ -1078,3 +1078,12 @@ A 1440×810과 B 960×540에서 [E]로 같은 상자를 열었다. 마지막 HP 
 - **개인 방패와 귀속** · 기존 로컬 검증에서 획득, 최초 장착 시 귀속, 해제 후 기본 방패와 같은 맵 입장 상태 복원을 확인했다. C:에 남은 `personal-shield/AB-Verified/result.json`의 185개 항목이 통과했다. C:의 `AB-Final`은 중단된 별도 회차다.
 - **금화·흑기사 보상** · 기존 `skirmish-gold/AB-Verified/result.json`의 256개 항목에서 동시 접근 시 한 번만 수령, 각 1골드, 실패 시 취소, 공동 탈출에서 확정을 확인했다. `boss-upgrade-rewards/AB-Final/result.json`의 82개 항목에서 스크롤 두 장과 하급 방패, 공동 탈출 뒤 각자 30골드를 한 번 지급한 기록을 확인했다.
 - **검증 범위** · 옛 패키지 중 일부는 적 위치·체력·포탈 진입을 재현 명령으로 제어했다. 게임 플레이 결과는 그때의 서버·A·B 원본 로그와 화면을 참조한다. 이 PR의 새 게임 패키지 쿠킹과 별개 PC 시험은 수행하지 않았다.
+
+<a id="expedition-travel-follow-up-verification"></a>
+## 11/25 · 원정 대기 재접속, 결과 이동 재시도와 첫 접속
+
+- **PR #36 빌드** · `c844492`의 UE 5.8.4 Win64 Development Editor Unity 모듈을 컴파일하고 링크했다.
+- **기존 대기 재접속 패키지** · A 1440×810·B 960×540에서 같은 대기 구간에 돌아왔을 때 개인 방패, 물약 등록, 도발 슬롯과 입장 상태를 복원했다. `expedition-reconnect-return/seat-final/result.json`의 168개와 같은 로비 반복 재접속 `lobby-verified/result.json`의 84개가 통과했다.
+- **기존 결과 이동 실패 패키지** · `boss-fail-verified/result.json`의 33개에서 서버의 이동 실패를 주입했다. 실패 후 결과와 재시도 표시, 양쪽 요청 중 한 번 승인, 보상 중복 방지를 대조했다.
+- **기존 최초 접속 패키지** · `initial-lobby-loading/AfterFinal/result.json` 정상 접속 21개, `FaultsPolished/result.json` 접속 실패·오버레이 정리 7개를 확인했다. 별도 `ErrorsFinal`의 연결 시간 초과 문구 확인은 타임아웃됐다. 이 PR의 신규 패키지로 시간 초과 표시를 재시험하지 않았다.
+- **검증 범위** · 런타임 결과는 보관한 패키지의 원본 로그와 화면을 사용한다. 두 PC에서의 퍼즐 대기 중 B 강제 종료·재실행 확인과 보스전 자동 반복 계측은 후속 검증 범위다.
