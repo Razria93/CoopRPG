@@ -8,6 +8,7 @@
 
 class SWidget;
 class UNetDriver;
+class UPendingNetGame;
 class UTexture2D;
 
 UCLASS()
@@ -22,11 +23,14 @@ public:
 protected:
     virtual void Init(FWorldContext& WorldContext, UGameInstance* OwningGameInstance, bool bCreateNewAudioDevice) override;
     virtual void DetachViewportClient() override;
+    virtual void Tick(float DeltaTime) override;
     virtual void PostRender(UCanvas* Canvas) override;
 
 private:
     void OnPreClientTravel(const FString& PendingURL, ETravelType TravelType, bool bIsSeamlessTravel);
-    void ShowTravelScreen(const FString& Title);
+    void OnPreLoadMap(const FWorldContext& WorldContext, const FString& MapName);
+    void ShowConnectionScreen();
+    void ShowTravelScreen(const FString& Title, const TCHAR* Status);
     void UpdateTravelScreen();
     void ClearTravelScreen(const TCHAR* Reason);
     void OnTravelFailure(UWorld* FailureWorld, ETravelFailure::Type Failure, const FString& Error);
@@ -40,10 +44,16 @@ private:
     FSlateBrush TravelDivider;
     TSharedPtr<SWidget> TravelScreen;
     TWeakObjectPtr<UWorld> DepartingWorld;
+    TWeakObjectPtr<UPendingNetGame> FailedPendingConnection;
     FString TravelDestination;
+    double TravelFirstFrameAt = 0.0;
     double CameraReadyAt = 0.0;
+    double TravelFadeStartedAt = 0.0;
+
+    bool bJoiningServer = false;
 
     FDelegateHandle PreClientTravelHandle;
+    FDelegateHandle PreLoadMapHandle;
     FDelegateHandle TravelFailureHandle;
     FDelegateHandle NetworkFailureHandle;
     FString Notice;

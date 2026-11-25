@@ -10,11 +10,13 @@
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/NetDriver.h"
+#include "Engine/PendingNetGame.h"
 #include "Engine/Texture2D.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "ImageUtils.h"
 #include "Misc/Paths.h"
+#include "UObject/UObjectGlobals.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -28,6 +30,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGTravelScreen, Log, All);
 
 namespace
 {
+    constexpr double TravelMinimumVisibleSeconds = 1.0;
     constexpr double TravelRevealSeconds = 0.18;
 
     int32 GetDestinationStage(const FString& Destination)
@@ -86,6 +89,7 @@ void UCoopRPGGameViewportClient::Init(FWorldContext& WorldContext, UGameInstance
 {
     Super::Init(WorldContext, OwningGameInstance, bCreateNewAudioDevice);
     PreClientTravelHandle = OwningGameInstance->OnNotifyPreClientTravel().AddUObject(this, &ThisClass::OnPreClientTravel);
+    PreLoadMapHandle = FCoreUObjectDelegates::PreLoadMapWithContext.AddUObject(this, &ThisClass::OnPreLoadMap);
     TravelFailureHandle = GEngine->OnTravelFailure().AddUObject(this, &ThisClass::OnTravelFailure);
     NetworkFailureHandle = GEngine->OnNetworkFailure().AddUObject(this, &ThisClass::OnConnectionFailure);
 }
@@ -102,10 +106,32 @@ void UCoopRPGGameViewportClient::DetachViewportClient()
         GEngine->OnTravelFailure().Remove(TravelFailureHandle);
         GEngine->OnNetworkFailure().Remove(NetworkFailureHandle);
     }
+    FCoreUObjectDelegates::PreLoadMapWithContext.Remove(PreLoadMapHandle);
+    PreLoadMapHandle.Reset();
     PreClientTravelHandle.Reset();
     TravelFailureHandle.Reset();
     NetworkFailureHandle.Reset();
     Super::DetachViewportClient();
+}
+
+void UCoopRPGGameViewportClient::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+
+    const FWorldContext* Context = GEngine->GetWorldContextFromGameViewport(this);
+    const UPendingNetGame* Pending = Context ? Context->PendingNetGame.Get() : nullptr;
+    if (Pending && Pending != FailedPendingConnection.Get() && !TravelScreen)
+    {
+        ShowConnectionScreen();
+    }
+    else if (bJoiningServer && Context && !Pending)
+    {
+        const UWorld* CurrentWorld = Context->World();
+        if (CurrentWorld && (CurrentWorld->GetNetMode() != NM_Client || CurrentWorld == DepartingWorld.Get()))
+        {
+            ClearTravelScreen(TEXT("ConnectionCanceled"));
+        }
+    }
 }
 
 void UCoopRPGGameViewportClient::PostRender(UCanvas* Canvas)
@@ -116,6 +142,11 @@ void UCoopRPGGameViewportClient::PostRender(UCanvas* Canvas)
         return;
     }
 
+    if (TravelScreen && TravelFirstFrameAt == 0.0)
+    {
+        TravelFirstFrameAt = FPlatformTime::Seconds();
+        UE_LOG(LogCoopRPGTravelScreen, Log, TEXT("TravelScreenFirstFrame Joining=%d"), bJoiningServer);
+    }
     UpdateTravelScreen();
     if (Notice.IsEmpty())
     {
@@ -159,10 +190,30 @@ void UCoopRPGGameViewportClient::OnPreClientTravel(const FString& PendingURL, ET
     DepartingWorld = CurrentWorld;
     TravelDestination = Destination;
     const bool bRetry = UWorld::RemovePIEPrefix(CurrentWorld->GetPackage()->GetName()) == Destination;
-    ShowTravelScreen(GetTravelTitle(Stage, bRetry));
+    ShowTravelScreen(GetTravelTitle(Stage, bRetry), TEXT("맵 이동 중"));
 }
 
-void UCoopRPGGameViewportClient::ShowTravelScreen(const FString& Title)
+void UCoopRPGGameViewportClient::OnPreLoadMap(const FWorldContext& WorldContext, const FString& MapName)
+{
+    // A fast join may load the server map before Tick observes the pending connection.
+    const UPendingNetGame* Pending = WorldContext.PendingNetGame;
+    if (WorldContext.GameViewport == this && !TravelScreen && Pending && Pending != FailedPendingConnection.Get()
+        && Pending->bSuccessfullyConnected
+        && Pending->URL.Map == MapName)
+    {
+        ShowConnectionScreen();
+    }
+}
+
+void UCoopRPGGameViewportClient::ShowConnectionScreen()
+{
+    ClearConnectionNotice();
+    bJoiningServer = true;
+    DepartingWorld = GetWorld();
+    ShowTravelScreen(TEXT("서버 접속 중"), TEXT("입장 준비 중"));
+}
+
+void UCoopRPGGameViewportClient::ShowTravelScreen(const FString& Title, const TCHAR* Status)
 {
     if (!TravelSkin)
     {
@@ -233,7 +284,7 @@ void UCoopRPGGameViewportClient::ShowTravelScreen(const FString& Title)
                             ]
                             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 10.0f, 0.0f, 0.0f)
                             [
-                                SNew(STextBlock).Text(FText::FromString(TEXT("맵 이동 중"))).Font(Font(15.0f)).ColorAndOpacity(Muted)
+                                SNew(STextBlock).Text(FText::FromString(Status)).Font(Font(15.0f)).ColorAndOpacity(Muted)
                             ]
                         ]
                     ]
@@ -241,15 +292,24 @@ void UCoopRPGGameViewportClient::ShowTravelScreen(const FString& Title)
             ]
         ];
     AddViewportWidgetContent(TravelScreen.ToSharedRef(), 100);
-    UE_LOG(LogCoopRPGTravelScreen, Log, TEXT("TravelScreenShown Destination=%s Title=%s"),
-        *TravelDestination, *Title);
+    UE_LOG(LogCoopRPGTravelScreen, Log, TEXT("TravelScreenShown Destination=%s Joining=%d Title=%s"),
+        *TravelDestination, bJoiningServer, *Title);
 }
 
 void UCoopRPGGameViewportClient::UpdateTravelScreen()
 {
     UWorld* CurrentWorld = GetWorld();
-    if (!TravelScreen || !CurrentWorld || CurrentWorld == DepartingWorld.Get()
-        || UWorld::RemovePIEPrefix(CurrentWorld->GetPackage()->GetName()) != TravelDestination)
+    if (!TravelScreen || !CurrentWorld || CurrentWorld == DepartingWorld.Get())
+    {
+        return;
+    }
+
+    const FString CurrentMap = UWorld::RemovePIEPrefix(CurrentWorld->GetPackage()->GetName());
+    if (bJoiningServer && TravelDestination.IsEmpty() && CurrentWorld->GetNetMode() == NM_Client)
+    {
+        TravelDestination = CurrentMap;
+    }
+    if (CurrentMap != TravelDestination)
     {
         return;
     }
@@ -260,6 +320,7 @@ void UCoopRPGGameViewportClient::UpdateTravelScreen()
         || Controller->GetViewTarget() != Pawn)
     {
         CameraReadyAt = 0.0;
+        TravelFadeStartedAt = 0.0;
         TravelScreen->SetRenderOpacity(1.0f);
         return;
     }
@@ -270,10 +331,18 @@ void UCoopRPGGameViewportClient::UpdateTravelScreen()
         CameraReadyAt = Now;
         UE_LOG(LogCoopRPGTravelScreen, Log, TEXT("TravelCameraReady Destination=%s Pawn=%s"),
             *TravelDestination, *GetNameSafe(Pawn));
+    }
+
+    if (Now - TravelFirstFrameAt < TravelMinimumVisibleSeconds)
+    {
         return;
     }
 
-    const double Progress = (Now - CameraReadyAt) / TravelRevealSeconds;
+    if (TravelFadeStartedAt == 0.0)
+    {
+        TravelFadeStartedAt = Now;
+    }
+    const double Progress = (Now - TravelFadeStartedAt) / TravelRevealSeconds;
     if (Progress >= 1.0)
     {
         ClearTravelScreen(TEXT("CameraReady"));
@@ -290,12 +359,20 @@ void UCoopRPGGameViewportClient::ClearTravelScreen(const TCHAR* Reason)
     {
         RemoveViewportWidgetContent(TravelScreen.ToSharedRef());
         TravelScreen.Reset();
-        UE_LOG(LogCoopRPGTravelScreen, Log, TEXT("TravelScreenHidden Destination=%s Reason=%s"),
-        *TravelDestination, Reason);
+        const double Now = FPlatformTime::Seconds();
+        const double VisibleSeconds = TravelFirstFrameAt > 0.0 ? Now - TravelFirstFrameAt : 0.0;
+        const double CameraReadySeconds = CameraReadyAt > 0.0 ? CameraReadyAt - TravelFirstFrameAt : 0.0;
+        const double FadeSeconds = TravelFadeStartedAt > 0.0 ? Now - TravelFadeStartedAt : 0.0;
+        UE_LOG(LogCoopRPGTravelScreen, Log,
+            TEXT("TravelScreenHidden Destination=%s Reason=%s Joining=%d VisibleSeconds=%.3f CameraReadySeconds=%.3f FadeSeconds=%.3f"),
+            *TravelDestination, Reason, bJoiningServer, VisibleSeconds, CameraReadySeconds, FadeSeconds);
     }
     DepartingWorld.Reset();
     TravelDestination.Reset();
+    TravelFirstFrameAt = 0.0;
     CameraReadyAt = 0.0;
+    TravelFadeStartedAt = 0.0;
+    bJoiningServer = false;
 }
 
 void UCoopRPGGameViewportClient::OnTravelFailure(UWorld* FailureWorld, ETravelFailure::Type Failure, const FString&)
@@ -305,10 +382,15 @@ void UCoopRPGGameViewportClient::OnTravelFailure(UWorld* FailureWorld, ETravelFa
         return;
     }
 
+    const bool bJoinFailed = bJoiningServer;
+    if (const FWorldContext* Context = GEngine->GetWorldContextFromGameViewport(this); bJoinFailed && Context)
+    {
+        FailedPendingConnection = Context->PendingNetGame.Get();
+    }
     ClearTravelScreen(TEXT("TravelFailed"));
     if (Notice.IsEmpty())
     {
-        Notice = TEXT("스테이지로 이동할 수 없어요.");
+        Notice = bJoinFailed ? TEXT("서버에 접속할 수 없어요.") : TEXT("스테이지로 이동할 수 없어요.");
         NoticeReason = TEXT("TravelFailed");
         UE_LOG(LogCoopRPGConnectionNotice, Log, TEXT("ConnectionNoticeQueued Reason=%s Failure=%s"),
             *NoticeReason, ETravelFailure::ToString(Failure));
@@ -330,6 +412,11 @@ void UCoopRPGGameViewportClient::OnConnectionFailure(UWorld* FailureWorld, UNetD
         return;
     }
 
+    if (Driver->NetDriverName == NAME_PendingNetDriver)
+    {
+        // The engine may still have the failed driver while it returns to the default map.
+        FailedPendingConnection = Context->PendingNetGame.Get();
+    }
     ClearTravelScreen(TEXT("ConnectionFailed"));
     if (!Notice.IsEmpty())
     {
