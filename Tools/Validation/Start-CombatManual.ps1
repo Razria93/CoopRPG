@@ -1,10 +1,11 @@
-param(
+﻿param(
     [string]$PackageRoot,
     [string]$GameMonitor='',[string]$LogMonitor='',[switch]$ListMonitors,
     [ValidateSet('SideBySide','Stacked')][string]$Layout='SideBySide',
     [switch]$AlwaysOnTop,
     [switch]$NoForeground,
     [switch]$NoLogViewer,
+    [switch]$ServerForceLogFlush,
     [switch]$EnemyCombat,
     [ValidateSet('A','B')][string]$FocusClient='A',
     [ValidateSet('L_Movement','L_ForestExpedition','L_Round_01','L_ExpeditionLobby','L_ExpeditionSkirmish')][string]$Map='L_Movement'
@@ -69,17 +70,18 @@ try {
     foreach($note in $placement.Notes){Write-Warning $note}
     $work=$placement.Game
     $gap=12;$width=$placement.A.Width;$height=$placement.A.Height
-    $common=@('-nosound','-NoSplash','-forcelogflush')
+    $common=@('-nosound','-NoSplash')
     $runEnemyCombat = $EnemyCombat -or $Map -ne 'L_Movement'
     if(!$runEnemyCombat){$common+='-CoopCombatTest'}
     $mapArgs=@(if($runEnemyCombat){"/Game/Maps/${Map}?EnemyCombat"})
+    $serverLogOptions = @(if ($ServerForceLogFlush) { '-forcelogflush' })
     # Server log is written to disk; its console must not cover the two game windows.
-    $started.server=Start-Process -FilePath $server -WorkingDirectory (Split-Path $server) -ArgumentList ($mapArgs+@("-port=$port",'-MULTIHOME=127.0.0.1','-log',"-ABSLOG=`"$out/server.log`"",'-ExecCmds="t.MaxFPS 30,Log LogCoopRPGInput Verbose,AbilitySystem.ServerRPCBatching.Log 1"')+$common) -WindowStyle Hidden -PassThru
+    $started.server=Start-Process -FilePath $server -WorkingDirectory (Split-Path $server) -ArgumentList ($mapArgs+@("-port=$port",'-MULTIHOME=127.0.0.1','-log',"-ABSLOG=`"$out/server.log`"",'-ExecCmds="t.MaxFPS 30,Log LogCoopRPGInput Verbose,AbilitySystem.ServerRPCBatching.Log 1"')+$common+$serverLogOptions) -WindowStyle Hidden -PassThru
     Wait-Log 'server' "listening on port $port\b"
     foreach($role in @('a','b')) {
         $bounds=if($role -eq 'a'){$placement.A}else{$placement.B}
         $x=$bounds.Left;$y=$bounds.Top
-        $started[$role]=Start-Process -FilePath $client -WorkingDirectory (Split-Path $client) -ArgumentList (@("127.0.0.1:$port",'-CoopManualInput','-windowed',"-ResX=$($width-16)","-ResY=$($height-39)","-WinX=$x","-WinY=$y","-ABSLOG=`"$out/$role.log`"",'-ExecCmds="t.MaxFPS 30,Log LogCoopRPGInput Verbose,AbilitySystem.ServerRPCBatching.Log 1"')+$common) -WindowStyle Normal -PassThru
+        $started[$role]=Start-Process -FilePath $client -WorkingDirectory (Split-Path $client) -ArgumentList (@("127.0.0.1:$port",'-CoopManualInput','-windowed',"-ResX=$($width-16)","-ResY=$($height-39)","-WinX=$x","-WinY=$y","-ABSLOG=`"$out/$role.log`"",'-ExecCmds="t.MaxFPS 30,Log LogCoopRPGInput Verbose,AbilitySystem.ServerRPCBatching.Log 1"')+$common+@('-forcelogflush')) -WindowStyle Normal -PassThru
         Wait-Log $role 'ManualInputEnabled'
         for($i=0;$i -lt 120;$i++) {
             $started[$role].Refresh()
@@ -114,6 +116,7 @@ try {
             @{id=$role;label=$label;file=($role+'.log');processId=$started[$role].Id;processName=$started[$role].ProcessName;startedUtc=$started[$role].StartTime.ToUniversalTime().ToString('o')}
         }
     )
+    $meta.serverForceLogFlush=[bool]$ServerForceLogFlush
     $meta.enemyCombat=$runEnemyCombat
     $meta.map=$Map
     $meta.monitorLayout=@{game=$placement.Game.DeviceName;log=$placement.Log.DeviceName;separate=$placement.Separate}

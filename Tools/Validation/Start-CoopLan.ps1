@@ -9,7 +9,8 @@ param(
     [string]$LogRoot,
     [switch]$AllowLoopback,
     [switch]$PassThru,
-    [ValidateSet('L_Movement', 'L_ForestExpedition', 'L_Round_01')][string]$Map = 'L_Movement'
+    [switch]$ServerForceLogFlush,
+    [ValidateSet('L_Movement', 'L_ForestExpedition', 'L_Round_01', 'L_ExpeditionLobby')][string]$Map = 'L_Movement'
 )
 
 Set-StrictMode -Version Latest
@@ -44,7 +45,10 @@ $label = if ($Role -eq 'Server') { 'server' } else { $ClientLabel.ToLowerInvaria
 $logName = '{0}-{1}-{2}.log' -f (Get-Date -Format 'yyyyMMdd-HHmmss-fff'), $label, ([guid]::NewGuid().ToString('N').Substring(0, 8))
 $logDirectory = New-Item -ItemType Directory -Path ([System.IO.Path]::GetFullPath($LogRoot)) -Force
 $log = Join-Path $logDirectory.FullName $logName
-$common = @('-NoSplash', '-forcelogflush', ('-ABSLOG="{0}"' -f $log))
+$common = @('-NoSplash', ('-ABSLOG="{0}"' -f $log))
+if ($Role -eq 'Client' -or $ServerForceLogFlush) {
+    $common += '-forcelogflush'
+}
 
 if ($Role -eq 'Server') {
     $gameArguments = @("/Game/Maps/${Map}?EnemyCombat", "-port=$Port", "-MULTIHOME=$Address", '-unattended', '-nullrhi', '-nosound', '-log')

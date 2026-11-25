@@ -136,7 +136,7 @@ function Get-CoopLauncherPackageInfo([string]$Stage) {
             $unknown.BuildId = [string]$manifest.buildId
             $unknown.Roster = $roster
             if ($serverVerified -and $manifest.PSObject.Properties['serverMaps']) {
-                $supported = @('L_Movement', 'L_ForestExpedition', 'L_Round_01')
+                $supported = @('L_Movement', 'L_ForestExpedition', 'L_Round_01', 'L_ExpeditionLobby')
                 $listed = @($manifest.serverMaps | Where-Object { $_ -is [string] -and $_ -cin $supported } |
                     Select-Object -Unique)
                 if ($listed.Count -gt 0) {
@@ -234,7 +234,8 @@ function Test-CoopLauncherPort([ipaddress]$Address, [int]$Port) {
     return $false
 }
 
-function Start-CoopLauncherProcess($Session, [ValidateSet('server', 'a', 'b')][string]$Id, [string]$PackageRoot) {
+function Start-CoopLauncherProcess($Session, [ValidateSet('server', 'a', 'b')][string]$Id, [string]$PackageRoot,
+    [switch]$ServerForceLogFlush) {
     $old = Get-CoopLauncherSource $Session $Id
     $running = Get-CoopLauncherProcess $old $PackageRoot
     if ($running) {
@@ -255,8 +256,11 @@ function Start-CoopLauncherProcess($Session, [ValidateSet('server', 'a', 'b')][s
     }
     if ($role -eq 'Client') {
         $options.ClientLabel = $Id.ToUpperInvariant()
-    } elseif ($Session.Manifest.PSObject.Properties['serverMap'] -and $Session.Manifest.serverMap) {
-        $options.Map = $Session.Manifest.serverMap
+    } else {
+        if ($Session.Manifest.PSObject.Properties['serverMap'] -and $Session.Manifest.serverMap) {
+            $options.Map = $Session.Manifest.serverMap
+        }
+        $options.ServerForceLogFlush = $ServerForceLogFlush
     }
     $launch = & (Join-Path $PSScriptRoot 'Start-CoopLan.ps1') @options
     $process = $launch.Process
@@ -412,6 +416,13 @@ function Update-CoopLauncherObservation($Observation, [int]$Port) {
                 $Observation.Traveling = $false
                 break
             }
+            'LogCoopRPGRound: (?:\w+: )?Expedition(?<stage>Lobby|Puzzle)Created Round=(?<round>[0-9A-Fa-f]{32})(?:\s|$)' {
+                $Observation.Map = 'L_Expedition' + $Matches.stage
+                $Observation.Round = $Matches.round
+                $Observation.Roster = $null
+                $Observation.Traveling = $false
+                break
+            }
             'LogCoopRPGValidationRoster: ValidationParticipants Round=(?<round>[0-9A-Fa-f]{32}) P1Label=(?<p1Label>A|B|None) P1Id=(?<p1Id>-?\d+) P1State=(?<p1State>Disconnected|Joining|Waiting|Ready) P2Label=(?<p2Label>A|B|None) P2Id=(?<p2Id>-?\d+) P2State=(?<p2State>Disconnected|Joining|Waiting|Ready)$' {
                 if ($Observation.Round -eq $Matches.round) {
                     $Observation.Roster = @(
@@ -436,6 +447,10 @@ function Update-CoopLauncherObservation($Observation, [int]$Port) {
     $Observation.Stage = switch ($Observation.Map) {
         'L_Movement' { '스테이지 1' }
         'L_Movement_Round2' { '스테이지 2' }
+        'L_ExpeditionLobby' { '원정 대기소' }
+        'L_ExpeditionSkirmish' { '버섯 군락' }
+        'L_ExpeditionPuzzle' { '쌍둥이 발판' }
+        'L_ExpeditionBoss' { '흑기사 결전' }
         default { $Observation.Map }
     }
 }

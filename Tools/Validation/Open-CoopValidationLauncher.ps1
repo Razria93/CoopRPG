@@ -4,7 +4,8 @@ param(
     [string]$PackageRoot,
     [string]$LogRoot,
     [string]$Address = '127.0.0.1',
-    [ValidateRange(1024, 65535)][int]$Port = 7777
+    [ValidateRange(1024, 65535)][int]$Port = 7777,
+    [switch]$ServerForceLogFlush
 )
 
 Set-StrictMode -Version Latest
@@ -640,7 +641,7 @@ function Invoke-LauncherStart([string]$Id) {
             $script:messages.Clear()
             $script:canceledStarts.Clear()
         }
-        $source = Start-CoopLauncherProcess $script:session $Id $script:packageRoot
+        $source = Start-CoopLauncherProcess $script:session $Id $script:packageRoot -ServerForceLogFlush:$ServerForceLogFlush
         $script:observed[$Id] = New-CoopLauncherObservation (Join-Path $script:session.Directory $source.file)
         $script:currentLive[$Id] = $true
         return $true
