@@ -84,7 +84,7 @@ private:
     bool bOwnsChestPointer = false;
     EChestControl PressedChestControl = EChestControl::None;
     FBox2D PuzzleRewardPanelBounds{ForceInit};
-    FBox2D PuzzleRewardCardBounds[2] = {FBox2D(ForceInit), FBox2D(ForceInit)};
+    TArray<FBox2D, TInlineAllocator<3>> PuzzleRewardButtonBounds;
     ECoopRPGPuzzleReward PressedPuzzleReward = ECoopRPGPuzzleReward::None;
     bool bOwnsPuzzleRewardPointer = false;
     FGuid LastPresentedPuzzleRewardsRound;

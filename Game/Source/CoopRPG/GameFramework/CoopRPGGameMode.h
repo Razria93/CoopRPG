@@ -29,7 +29,7 @@ public:
     void UpdateLootRoundPhase(const AController* Leaving = nullptr);
     void AcknowledgeRoundResult(ACoopRPGPlayerController* Player, FGuid RoundId);
     void SelectPuzzleReward(ACoopRPGPlayerController& Player, FGuid RoundId, ECoopRPGPuzzleReward Reward);
-    bool HasHealthPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId) const;
+    FIntPoint GetPotionCapacityBonus(const FUniqueNetIdRepl& ConnectionId) const;
 
 protected:
     virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;

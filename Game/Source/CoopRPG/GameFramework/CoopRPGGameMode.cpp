@@ -236,7 +236,8 @@ void ACoopRPGGameMode::SelectPuzzleReward(ACoopRPGPlayerController& Player, FGui
     if (!State || State->GetRoundId() != RoundId || State->GetRoundEndReason() != ECoopRPGRoundEndReason::PuzzleSolved
         || bParticipantDisconnected || bTravelAttempted || !IsRoundParticipant(&Player)
         || State->GetPuzzleRewardDeadline() <= 0.0
-        || (Reward != ECoopRPGPuzzleReward::ExpeditionPower && Reward != ECoopRPGPuzzleReward::HealthPotionCapacity))
+        || (Reward != ECoopRPGPuzzleReward::ExpeditionPower && Reward != ECoopRPGPuzzleReward::HealthPotionCapacity
+            && Reward != ECoopRPGPuzzleReward::StaminaPotionCapacity))
     {
         return;
     }
@@ -249,10 +250,10 @@ void ACoopRPGGameMode::SelectPuzzleReward(ACoopRPGPlayerController& Player, FGui
     FinalizePuzzleReward(*State, Player, Reward, false);
 }
 
-bool ACoopRPGGameMode::HasHealthPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId) const
+FIntPoint ACoopRPGGameMode::GetPotionCapacityBonus(const FUniqueNetIdRepl& ConnectionId) const
 {
-    return ConnectionId.IsValid()
-        && GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->HasHealthPotionCapacityReward(ConnectionId);
+    return ConnectionId.IsValid() ? GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->GetPotionCapacityBonus(ConnectionId)
+        : FIntPoint::ZeroValue;
 }
 
 void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
@@ -741,7 +742,7 @@ bool ACoopRPGGameMode::ReserveRoundTravelSeats(const ACoopRPGGameState& State, c
             UE_LOG(LogCoopRPGRoundTravel, Log,
                 TEXT("ExpeditionBoundaryReserved Round=%s Slot=%d Returning=%d PowerBefore=%d PowerCarry=%d CapacityPassive=%d"),
                 *State.GetRoundId().ToString(), Participants.Num(), bReturnToLobby, Player->HasExpeditionPowerReward(),
-                Participants.Last().bExpeditionPowerReward, HasHealthPotionCapacityReward(ConnectionId));
+                Participants.Last().bExpeditionPowerReward, GetPotionCapacityBonus(ConnectionId).X > 0);
         }
         if (bCarryExpeditionState)
         {
@@ -813,9 +814,11 @@ void ACoopRPGGameMode::FinalizePuzzleReward(ACoopRPGGameState& State, ACoopRPGPl
         return;
     }
 
-    if (Reward == ECoopRPGPuzzleReward::HealthPotionCapacity && Identity && Identity->GetUniqueId().IsValid())
+    const bool bStaminaReward = Reward == ECoopRPGPuzzleReward::StaminaPotionCapacity;
+    if ((Reward == ECoopRPGPuzzleReward::HealthPotionCapacity || bStaminaReward) && Identity && Identity->GetUniqueId().IsValid())
     {
-        GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->GrantHealthPotionCapacityReward(Identity->GetUniqueId());
+        GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->GrantPotionCapacityReward(Identity->GetUniqueId(), bStaminaReward);
+        Player.RefreshPotionCapacityBonus();
     }
     UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("PuzzleRewardFinalized Round=%s PlayerId=%d Reward=%s Source=%s At=%.3f"),
         *State.GetRoundId().ToString(), PlayerId, *UEnum::GetValueAsString(Reward),

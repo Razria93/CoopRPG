@@ -27,14 +27,16 @@ void UCoopRPGRoundTravelSeats::Clear()
     ExpiresAt = 0.0;
 }
 
-bool UCoopRPGRoundTravelSeats::HasHealthPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId) const
+FIntPoint UCoopRPGRoundTravelSeats::GetPotionCapacityBonus(const FUniqueNetIdRepl& ConnectionId) const
 {
-    return HealthPotionCapacityOwners.Contains(ConnectionId);
+    const FIntPoint* Bonus = PotionCapacityBonuses.Find(ConnectionId);
+    return Bonus ? *Bonus : FIntPoint::ZeroValue;
 }
 
-void UCoopRPGRoundTravelSeats::GrantHealthPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId)
+void UCoopRPGRoundTravelSeats::GrantPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId, bool bStamina)
 {
-    HealthPotionCapacityOwners.AddUnique(ConnectionId);
+    FIntPoint& Bonus = PotionCapacityBonuses.FindOrAdd(ConnectionId, FIntPoint::ZeroValue);
+    (bStamina ? Bonus.Y : Bonus.X) = 1;
 }
 
 bool UCoopRPGRoundTravelSeats::Allows(FName Map, const FUniqueNetIdRepl& ConnectionId) const

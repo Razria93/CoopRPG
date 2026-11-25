@@ -40,6 +40,7 @@ public:
         int32 Stage, const FVector2D& ViewSize);
     static const TCHAR* StageTitle(int32 Stage);
     void DrawPanel(AHUD& HUD, FVector2D Position, FVector2D Size) const;
+    void DrawExpeditionIcon(AHUD& HUD, FVector2D Position, float Size) const;
     void DrawDivider(AHUD& HUD, FVector2D Position, float Width) const;
     void DrawDarkPanel(AHUD& HUD, FVector2D Position, FVector2D Size) const;
     void DrawHealthBar(AHUD& HUD, FVector2D Position, float Width, float HealthFraction) const;

@@ -338,6 +338,11 @@ void FCoopRPGExpeditionDashboard::DrawPanel(AHUD& HUD, FVector2D Position, FVect
         FVector2D(8, 7), FVector2D(8, 10));
 }
 
+void FCoopRPGExpeditionDashboard::DrawExpeditionIcon(AHUD& HUD, FVector2D Position, float Size) const
+{
+    DrawImage(HUD, FBox2D(FVector2D(284, 200), FVector2D(316, 232)), Position, FVector2D(Size));
+}
+
 void FCoopRPGExpeditionDashboard::DrawDivider(AHUD& HUD, FVector2D Position, float Width) const
 {
     DrawImage(HUD, FBox2D(FVector2D(0, 285), FVector2D(250, 293)), Position, FVector2D(Width, 8.0f));

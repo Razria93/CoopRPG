@@ -1049,3 +1049,11 @@ A 1440×810에서 보상 상자부터 마법진까지 걸어 들어갔다. B 960
 A 1440×810과 B 960×540에서 [E]로 같은 상자를 열었다. 마지막 HP 물약은 한 번 지급됐고 양쪽 재고가 0으로 갱신됐다. A는 상자에서 마법진까지 걸어갔고, B의 이탈·재진입은 시험 위치 제어로 재현했다. 재진입 후 3.012초에 성공 1점이 확정됐고 두 사람은 같은 세션 로비로 복귀했다.
 
 **로컬 근거** · `Artifacts/Validation/boss-reward-extraction/` 아래 `PackagedAB-centered-chest/BossRewards/`에 라운드 `E2E0665C40AF323F4B1921BCA46462CF`의 A·B 화면과 서버·A·B 원본 로그를 보관했다. 실행 파일 해시는 `CenteredChestBuild/executables.json`에 있다.
+
+<a id="puzzle-card-follow-up-verification"></a>
+## 11/25 · 퍼즐 보상 카드와 물약 한도 패시브
+
+- **PR #33 코드 빌드** · `74b8a99`의 UE 5.8.4 Win64 Development Editor Unity 모듈 빌드와 링크가 통과했다. 문서 추가 후에도 빌드 대상 소스는 동일하다.
+- **기존 패키지의 2인 검증** · 전용 서버와 A·B에서 직접 선택과 30초 자동 확정을 교차 실행했다. `puzzle-reward-cards/Choice-a/`와 `Choice-b/`의 각 `result.json`에 44개 항목 통과와 서버·A·B 원본 로그 및 화면을 보관했다.
+- **기존 SP 한도 검증** · `stamina-passive-bag-capacity/PuzzleAB-Retry/result.json`의 60개 항목이 통과했다. A의 SP 직접 선택과 B의 HP 자동 확정은 각각 1회였다. 흑기사 입장 시 A의 HP·SP 한도는 1·2, B는 2·1이었다. 보급은 각 종류 1개로 유지됐다.
+- **검증 범위** · 위 런타임 결과는 앞서 보관한 로컬 검증 패키지에서 확인했다. 이번 PR head의 새 게임 패키지 쿠킹과 별개 PC 실행은 수행하지 않았다.

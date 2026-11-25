@@ -70,6 +70,8 @@ public:
     int32 GetBagRoom(ECoopRPGStorageItem Item) const;
     void RequestStorageTransfer(ECoopRPGStorageItem Item, bool bPersonal, bool bDeposit);
     FCoopRPGRecoverySnapshot GetTravelRecovery(bool bRetry) const;
+    void RefreshPotionCapacityBonus();
+    FIntPoint GetPotionCapacityBonus() const { return PotionCapacityBonus; }
     FIntPoint GetStageRecoverySupplies() const { return StageRecoverySupplies; }
     FIntPoint GetStageRecoveryUsesRemaining() const { return StageRecoveryUsesRemaining; }
     bool IsRecoveryRegistered(bool bStamina) const;
@@ -200,6 +202,9 @@ private:
 
     UPROPERTY(Replicated)
     FCoopRPGRecoveryRegistration RecoveryRegistration;
+
+    UPROPERTY(Replicated)
+    FIntPoint PotionCapacityBonus = FIntPoint::ZeroValue;
 
     UPROPERTY(Replicated)
     FIntPoint StageRecoveryUsesRemaining = FIntPoint::ZeroValue;

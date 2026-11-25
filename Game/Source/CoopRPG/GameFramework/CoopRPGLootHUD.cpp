@@ -1861,6 +1861,59 @@ void ACoopRPGLootHUD::DrawRoundWaiting(const ACoopRPGGameState& State,
     DrawText(Hint, FLinearColor::White, PanelTextX, PanelPad + 94.0f);
 }
 
+namespace
+{
+    enum class EPuzzleRewardRarity : uint8
+    {
+        Common,
+        Rare
+    };
+
+    struct FPuzzleRewardCard
+    {
+        ECoopRPGPuzzleReward Reward;
+        EPuzzleRewardRarity Rarity;
+        const TCHAR* Kind;
+        const TCHAR* Title;
+        const TCHAR* Detail;
+        const TCHAR* Duration;
+        FColor Paper;
+        FColor Accent;
+    };
+
+    constexpr FPuzzleRewardCard PuzzleRewardCards[] = {
+        {ECoopRPGPuzzleReward::ExpeditionPower, EPuzzleRewardRarity::Rare, TEXT("일시 버프"), TEXT("무력 +1"),
+            TEXT("기본 공격 피해 +1"), TEXT("이번 원정 종료까지"), FColor(246, 228, 191), FColor(108, 62, 38)},
+        {ECoopRPGPuzzleReward::HealthPotionCapacity, EPuzzleRewardRarity::Rare, TEXT("패시브"), TEXT("HP 물약 한도 +1"),
+            TEXT("스테이지마다 사용 횟수 +1"), TEXT("세션 종료까지"), FColor(233, 237, 211), FColor(56, 85, 61)},
+        {ECoopRPGPuzzleReward::StaminaPotionCapacity, EPuzzleRewardRarity::Rare, TEXT("패시브"), TEXT("SP 물약 한도 +1"),
+            TEXT("스테이지마다 사용 횟수 +1"), TEXT("세션 종료까지"), FColor(229, 235, 240), FColor(53, 80, 110)}
+    };
+
+    void FillPuzzleRewardShape(AHUD& HUD, const FBox2D& Bounds, int32 Radius, const FLinearColor& Color)
+    {
+        const FVector2D Size = Bounds.GetSize();
+        HUD.DrawRect(Color, Bounds.Min.X, Bounds.Min.Y + Radius, Size.X, Size.Y - 2.0 * Radius);
+        for (int32 Row = 0; Row < Radius; ++Row)
+        {
+            const double Distance = Radius - Row - 0.5;
+            const double Inset = Radius - FMath::Sqrt(Radius * Radius - Distance * Distance);
+            const double Left = Bounds.Min.X + Inset;
+            const double Width = Size.X - 2.0 * Inset;
+            HUD.DrawRect(Color, Left, Bounds.Min.Y + Row, Width, 1.0);
+            HUD.DrawRect(Color, Left, Bounds.Max.Y - Row - 1.0, Width, 1.0);
+        }
+    }
+
+    void DrawPuzzleRewardShape(AHUD& HUD, const FBox2D& Bounds, int32 Radius,
+        const FLinearColor& BorderColor, const FLinearColor& FaceColor)
+    {
+        FillPuzzleRewardShape(HUD, Bounds, Radius, BorderColor);
+        FillPuzzleRewardShape(HUD, FBox2D(Bounds.Min + FVector2D(1.0), Bounds.Max - FVector2D(1.0)),
+            Radius - 1, FaceColor);
+    }
+}
+
 bool ACoopRPGLootHUD::HandlePuzzleRewardPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
 {
     FVector2D Pointer = FVector2D::ZeroVector;
@@ -1869,13 +1922,13 @@ bool ACoopRPGLootHUD::HandlePuzzleRewardPrimaryButton(ACoopRPGPlayerController& 
     ECoopRPGPuzzleReward Card = ECoopRPGPuzzleReward::None;
     if (bInside && Controller.GetPuzzleReward() == ECoopRPGPuzzleReward::None)
     {
-        if (PuzzleRewardCardBounds[0].IsInsideOrOn(Pointer))
+        for (int32 Index = 0; Index < PuzzleRewardButtonBounds.Num(); ++Index)
         {
-            Card = ECoopRPGPuzzleReward::ExpeditionPower;
-        }
-        else if (PuzzleRewardCardBounds[1].IsInsideOrOn(Pointer))
-        {
-            Card = ECoopRPGPuzzleReward::HealthPotionCapacity;
+            if (PuzzleRewardButtonBounds[Index].bIsValid && PuzzleRewardButtonBounds[Index].IsInsideOrOn(Pointer))
+            {
+                Card = PuzzleRewardCards[Index].Reward;
+                break;
+            }
         }
     }
     if (bOwnsPuzzleRewardPointer)
@@ -1904,64 +1957,132 @@ bool ACoopRPGLootHUD::HandlePuzzleRewardPrimaryButton(ACoopRPGPlayerController& 
 void ACoopRPGLootHUD::DrawPuzzleRewards(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller)
 {
     using namespace CoopRPG::ExpeditionUI;
-    constexpr double Height = 216.0;
-    constexpr double Padding = 18.0;
-    constexpr double Gap = 12.0;
-    constexpr double CardHeight = 88.0;
-    const double Width = FMath::Min(520.0, Canvas->ClipX - 2.0 * Padding);
-    const FVector2D Panel((Canvas->ClipX - Width) * 0.5, FMath::Max(12.0, (Canvas->ClipY - Height) * 0.5));
+    constexpr double Height = 396.0;
+    constexpr double PanelInset = 24.0;
+    constexpr double CardGap = 16.0;
+    constexpr double CardTop = 82.0;
+    constexpr double CardHeight = 262.0;
+    constexpr double CardInset = 14.0;
+    constexpr double BadgeHeight = 24.0;
+    constexpr double ButtonHeight = 30.0;
+    constexpr int32 CardCount = UE_ARRAY_COUNT(PuzzleRewardCards);
+    const double Width = FMath::Min(800.0, Canvas->ClipX - 24.0);
+    const double PartyArea = Canvas->ClipX >= 1200.0 ? 140.0 : 112.0;
+    const FVector2D Panel(FMath::RoundToDouble((Canvas->ClipX - Width) * 0.5),
+        FMath::Max(12.0, FMath::RoundToDouble((Canvas->ClipY - PartyArea - Height) * 0.5)));
     PuzzleRewardPanelBounds = FBox2D(Panel, Panel + FVector2D(Width, Height));
+    DrawRect(FLinearColor(0.01f, 0.014f, 0.007f, 0.55f), 0, 0, Canvas->ClipX, Canvas->ClipY);
     ExpeditionDashboard.DrawPanel(*this, Panel, FVector2D(Width, Height));
 
-    const FLinearColor Ink(FColor(61, 41, 25));
-    const FLinearColor Accent(FColor(34, 99, 54));
-    const auto Title = Font(19.0f, true);
-    const auto Body = Font(13.5f);
-    const auto CardTitle = Font(16.0f, true);
-    const auto CardCaption = Font(12.0f);
-    const auto DrawCentered = [&](const FString& Value, const FVector2D& Area, double Span, const FSlateFontInfo& Style,
+    const FLinearColor Ink(FColor(57, 43, 28));
+    const FLinearColor Heading(FColor(47, 65, 44));
+    const FLinearColor Paper(FColor(255, 241, 210));
+    const FLinearColor Muted(FColor(101, 83, 65));
+    const auto StageFont = Font(12.0f);
+    const auto TitleFont = Font(23.0f, true);
+    const auto CardTitleFont = Font(19.0f, true);
+    const auto BodyFont = Font(13.0f);
+    const auto BadgeFont = Font(12.0f, true);
+    const auto Centered = [&](const FString& Value, const FVector2D& Center, double Span, const FSlateFontInfo& Style,
         const FLinearColor& Color)
     {
-        const FString Label = Fit(*Canvas, Value, Style, Span - 16.0);
-        Text(*Canvas, Label, Area + FVector2D((Span - Measure(*Canvas, Label, Style).X) * 0.5, 0.0), Style, Color);
+        const FString Label = Fit(*Canvas, Value, Style, Span);
+        Text(*Canvas, Label, Center - Measure(*Canvas, Label, Style) * 0.5, Style, Color);
     };
 
     const ECoopRPGPuzzleReward Choice = Controller.GetPuzzleReward();
-    const int32 Remaining = FMath::Max(0, FMath::CeilToInt(State.GetPuzzleRewardDeadline() - State.GetServerWorldTimeSeconds()));
-    DrawCentered(TEXT("쌍둥이 발판 · 퍼즐 보상"), Panel + FVector2D(0.0, 18.0), Width, Title, Accent);
-    const FString Summary = FString::Printf(TEXT("퍼즐 성공 · 팀 점수 %d점"), State.GetTeamScore());
-    DrawCentered(Summary, Panel + FVector2D(0.0, 47.0), Width, Body, Ink);
+    const double Seconds = State.GetPuzzleRewardDeadline() - State.GetServerWorldTimeSeconds();
+    const bool bCanSelect = Choice == ECoopRPGPuzzleReward::None && Seconds > 0.0;
+    const FString ClockLabel = Choice != ECoopRPGPuzzleReward::None ? FString(TEXT("보상 확정"))
+        : bCanSelect ? FString::Printf(TEXT("%d초 남음"), FMath::CeilToInt(Seconds)) : FString(TEXT("확정 중"));
+    const FBox2D Clock(Panel + FVector2D(Width - PanelInset - 88.0, 24.0),
+        Panel + FVector2D(Width - PanelInset, 54.0));
+    FillPuzzleRewardShape(*this, Clock, 6, FLinearColor(FColor(76, 48, 28)));
+    Centered(ClockLabel, Clock.GetCenter(), Clock.GetSize().X - 12.0, BadgeFont, Paper);
+    ExpeditionDashboard.DrawExpeditionIcon(*this, Panel + FVector2D(PanelInset, 21.0), 32.0f);
+    Text(*Canvas, TEXT("쌍둥이 발판"), Panel + FVector2D(PanelInset + 45.0, 16.0), StageFont, Muted);
+    Text(*Canvas, TEXT("퍼즐 보상"), Panel + FVector2D(PanelInset + 45.0, 35.0), TitleFont, Heading);
 
-    const double CardWidth = (Width - 2.0 * Padding - Gap) * 0.5;
-    const ECoopRPGPuzzleReward Cards[] = {ECoopRPGPuzzleReward::ExpeditionPower, ECoopRPGPuzzleReward::HealthPotionCapacity};
-    for (int32 Index = 0; Index < UE_ARRAY_COUNT(Cards); ++Index)
+    const double CardWidth = (Width - 2.0 * PanelInset - (CardCount - 1) * CardGap) / CardCount;
+    PuzzleRewardButtonBounds.SetNum(CardCount);
+    const bool bLogLayout = LastPresentedPuzzleRewardsRound != State.GetRoundId();
+    for (int32 Index = 0; Index < CardCount; ++Index)
     {
-        const FVector2D Position = Panel + FVector2D(Padding + Index * (CardWidth + Gap), 76.0);
-        PuzzleRewardCardBounds[Index] = FBox2D(Position, Position + FVector2D(CardWidth, CardHeight));
-        ExpeditionDashboard.DrawDarkPanel(*this, Position, FVector2D(CardWidth, CardHeight));
-        const FLinearColor White(FColor(249, 235, 196));
-        const FLinearColor Highlight(FColor(190, 237, 140));
-        const bool bBuff = Cards[Index] == ECoopRPGPuzzleReward::ExpeditionPower;
-        const bool bSelected = Choice == Cards[Index];
-        DrawCentered(bBuff ? TEXT("일시 버프") : TEXT("패시브"), Position + FVector2D(0.0, 10.0), CardWidth,
-            CardCaption, bSelected ? Highlight : White);
-        DrawCentered(bBuff ? TEXT("무력 +1") : TEXT("HP 물약 사용 한도 +1"), Position + FVector2D(0.0, 30.0), CardWidth,
-            CardTitle, bSelected ? Highlight : White);
-        const TCHAR* Duration = bBuff ? TEXT("이번 원정 종료까지") : TEXT("세션 종료까지");
-        const FString Detail = bSelected ? FString::Printf(TEXT("확정 · %s"), Duration) : FString(Duration);
-        DrawCentered(Detail, Position + FVector2D(0.0, 58.0), CardWidth, CardCaption, bSelected ? Highlight : White);
-    }
-    const FString Status = Choice == ECoopRPGPuzzleReward::None
-        ? FString::Printf(TEXT("카드 1장 선택 · %d초 후 패시브 자동 확정"), Remaining)
-        : FString(TEXT("보상 확정 · 파티원 보상 확정 후 출발합니다."));
-    DrawCentered(Status, Panel + FVector2D(0.0, 177.0), Width, Body, Ink);
+        const FPuzzleRewardCard& Card = PuzzleRewardCards[Index];
+        const FVector2D At = Panel + FVector2D(PanelInset + Index * (CardWidth + CardGap), CardTop);
+        const FBox2D Bounds(At, At + FVector2D(CardWidth, CardHeight));
+        const double Left = Bounds.Min.X + CardInset;
+        const double Right = Bounds.Max.X - CardInset;
+        const double Middle = Bounds.GetCenter().X;
+        const double Top = At.Y + CardInset;
+        const double ButtonBottom = Bounds.Max.Y - CardInset;
+        const bool bSelected = Choice == Card.Reward;
+        const bool bPressed = bCanSelect && PressedPuzzleReward == Card.Reward;
+        const FLinearColor Accent(Card.Accent);
+        const FLinearColor Face(Card.Paper);
+        DrawPuzzleRewardShape(*this, Bounds, 11, Accent, Face);
 
-    if (LastPresentedPuzzleRewardsRound != State.GetRoundId())
+        const double KindWidth = FMath::Max(82.0, Measure(*Canvas, Card.Kind, BadgeFont).X + 16.0);
+        const FBox2D KindBadge(FVector2D(Left, Top), FVector2D(Left + KindWidth, Top + BadgeHeight));
+        FillPuzzleRewardShape(*this, KindBadge, 5, Accent);
+        Centered(Card.Kind, KindBadge.GetCenter(), KindWidth - 12.0, BadgeFont, Paper);
+
+        const bool bRare = Card.Rarity == EPuzzleRewardRarity::Rare;
+        const TCHAR* RarityLabel = bRare ? TEXT("희귀") : TEXT("일반");
+        constexpr double RarityWidth = 58.0;
+        const FLinearColor RarityInk(bRare ? FColor(35, 97, 148) : FColor(104, 93, 73));
+        const FLinearColor RarityBorder(bRare ? FColor(62, 132, 185) : FColor(155, 141, 113));
+        const FLinearColor RarityFill(bRare ? FColor(231, 240, 244) : FColor(244, 236, 217));
+        const FBox2D RarityBadge(FVector2D(Right - RarityWidth, Top), FVector2D(Right, Top + BadgeHeight));
+        DrawPuzzleRewardShape(*this, RarityBadge, 5, RarityBorder, RarityFill);
+        Centered(RarityLabel, RarityBadge.GetCenter(), RarityWidth - 10.0, BadgeFont, RarityInk);
+
+        const FVector2D IconCenter(Middle, At.Y + 80.0);
+        const FBox2D IconBackground(IconCenter - FVector2D(30.0), IconCenter + FVector2D(30.0));
+        DrawPuzzleRewardShape(*this, IconBackground, 30, Accent, Paper);
+        FillPuzzleRewardShape(*this, FBox2D(IconCenter - FVector2D(27.0), IconCenter + FVector2D(27.0)), 27, Accent);
+        if (Card.Reward == ECoopRPGPuzzleReward::ExpeditionPower)
+        {
+            ExpeditionDashboard.DrawAttackIcon(*this, IconCenter - FVector2D(24.0), 48.0f, false);
+        }
+        else
+        {
+            EquipmentPanel.DrawRecoveryIcon(*this, IconCenter - FVector2D(23.0), 46.0);
+        }
+        const double TextWidth = Right - Left;
+        Centered(Card.Title, FVector2D(Middle, At.Y + 132.0), TextWidth, CardTitleFont, Heading);
+        Centered(Card.Detail, FVector2D(Middle, At.Y + 162.0), TextWidth, BodyFont, Muted);
+        Centered(Card.Duration, FVector2D(Middle, At.Y + 192.0), TextWidth, BadgeFont, Accent);
+
+        const FBox2D Button(FVector2D(Left, ButtonBottom - ButtonHeight), FVector2D(Right, ButtonBottom));
+        PuzzleRewardButtonBounds[Index] = bCanSelect ? Button : FBox2D(ForceInit);
+        const FLinearColor ButtonColor = bPressed ? Accent * FLinearColor(0.74f, 0.74f, 0.74f, 1.0f)
+            : bCanSelect || bSelected ? Accent : FLinearColor(FColor(223, 214, 188));
+        DrawPuzzleRewardShape(*this, Button, 5, bCanSelect || bSelected ? Accent : FLinearColor(FColor(170, 155, 123)),
+            ButtonColor);
+        const TCHAR* Caption = bSelected ? TEXT("확정") : bCanSelect ? TEXT("선택") : TEXT("선택 종료");
+        Centered(Caption, Button.GetCenter(), Button.GetSize().X - 16.0, BadgeFont, bCanSelect || bSelected ? Paper : Muted);
+
+        if (bLogLayout)
+        {
+            UE_LOG(LogCoopRPGGameplayFeedback, Log,
+                TEXT("PuzzleRewardCardLayout Round=%s Index=%d Rarity=%s KindLeft=%.0f RarityRight=%.0f ButtonLeft=%.0f ButtonRight=%.0f ButtonTop=%.0f ButtonBottom=%.0f"),
+                *State.GetRoundId().ToString(), Index, bRare ? TEXT("Rare") : TEXT("Common"), KindBadge.Min.X,
+                RarityBadge.Max.X, Button.Min.X, Button.Max.X, Button.Min.Y, Button.Max.Y);
+        }
+    }
+
+    const TCHAR* Status = Choice == ECoopRPGPuzzleReward::None ? TEXT("시간 초과 시 HP 물약 한도 보상을 자동으로 선택해요.")
+        : TEXT("파티원 보상 확정 후 출발해요.");
+    Centered(Status, Panel + FVector2D(Width * 0.5, 368.0), Width - 2.0 * PanelInset, BodyFont, Muted);
+
+    if (bLogLayout)
     {
         LastPresentedPuzzleRewardsRound = State.GetRoundId();
-        UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("PuzzleRewardPanel Round=%s BuffX=%.0f PassiveX=%.0f CardY=%.0f"),
-            *State.GetRoundId().ToString(), PuzzleRewardCardBounds[0].GetCenter().X, PuzzleRewardCardBounds[1].GetCenter().X,
-            PuzzleRewardCardBounds[0].GetCenter().Y);
+        UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("PuzzleRewardPanel Round=%s BuffX=%.0f PassiveX=%.0f CardY=%.0f Width=%.0f Height=%.0f PanelBottom=%.0f StaminaPassiveX=%.0f"),
+            *State.GetRoundId().ToString(), PuzzleRewardButtonBounds[0].GetCenter().X, PuzzleRewardButtonBounds[1].GetCenter().X,
+            PuzzleRewardButtonBounds[0].GetCenter().Y, Canvas->ClipX, Canvas->ClipY, PuzzleRewardPanelBounds.Max.Y,
+            PuzzleRewardButtonBounds[2].GetCenter().X);
     }
 }
 

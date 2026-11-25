@@ -262,6 +262,14 @@ void FCoopRPGEquipmentPanel::DrawPanelFrame(AHUD& HUD, const FBox2D& Bounds) con
     }
 }
 
+void FCoopRPGEquipmentPanel::DrawRecoveryIcon(AHUD& HUD, FVector2D Position, double Size) const
+{
+    if (Skin.IsValid())
+    {
+        DrawItemIcon(HUD, 0, Position, Size, FLinearColor::White);
+    }
+}
+
 void FCoopRPGEquipmentPanel::Hide()
 {
     bVisible = false;
