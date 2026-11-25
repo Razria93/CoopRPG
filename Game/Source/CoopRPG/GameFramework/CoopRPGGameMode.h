@@ -3,8 +3,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/OnlineReplStructs.h"
-#include "CoopRPGExpeditionSupplies.h"
 #include "CoopRPGPuzzleReward.h"
+#include "CoopRPGSwordInventory.h"
 #include "CoopRPGGameMode.generated.h"
 
 class ACoopRPGAttackTarget;
@@ -50,6 +50,7 @@ private:
     void TickPuzzleRewards(ACoopRPGGameState& State);
     void FinalizePuzzleReward(ACoopRPGGameState& State, ACoopRPGPlayerController& Player,
         ECoopRPGPuzzleReward Reward, bool bTimedOut);
+    void OpenBossRewards(ACoopRPGGameState& State);
     void AdvanceRoundIfReady(ACoopRPGGameState& State, const FString& Destination);
 
 private:
@@ -63,7 +64,7 @@ private:
     TArray<TObjectPtr<ACoopRPGEnemy>> SkirmishEnemies;
 
     // A player may reconnect while the stage is still waiting for readiness.
-    TMap<FUniqueNetIdRepl, FCoopRPGExpeditionSupplies> WaitingPlayerSupplies;
+    TMap<FUniqueNetIdRepl, FCoopRPGSwordSnapshot> WaitingPlayerSwords;
     TWeakObjectPtr<APlayerController> PlayerSlots[2];
     FString ValidationClientLabels[2];
     FString LastValidationParticipants;

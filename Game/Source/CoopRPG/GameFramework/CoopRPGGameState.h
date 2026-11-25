@@ -52,6 +52,9 @@ struct FCoopRPGRoundStatus
     int32 ExtractionPlayersInside = 0;
 
     UPROPERTY()
+    bool bBossRewardsAvailable = false;
+
+    UPROPERTY()
     ECoopRPGRoundEndReason EndReason = ECoopRPGRoundEndReason::None;
 
     UPROPERTY()
@@ -146,6 +149,8 @@ public:
     void InitializePuzzle(const FVector& PlateA, const FVector& PlateB);
     void InitializeLootRound(ACoopRPGSharedChest* Chest, ACoopRPGExtractionZone* Zone);
     void SetRoundPlaying(bool bPlaying);
+    bool CanStartBossRewards() const;
+    void StartBossRewards(ACoopRPGSharedChest& Chest, ACoopRPGExtractionZone& Zone);
 
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
@@ -167,7 +172,7 @@ public:
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);
 
-    void EvaluateRound(bool bDisconnected, bool bDeath, int32 PlayersInside, bool bBossDefeated = false);
+    void EvaluateRound(bool bDisconnected, bool bDeath, int32 PlayersInside);
     void EvaluatePuzzle(bool bDisconnected, bool bDeath, uint8 OccupantsA, uint8 OccupantsB);
     double GetRoundRemainingSeconds() const;
     double GetExtractionRemainingSeconds() const;
@@ -177,6 +182,8 @@ public:
     FGuid GetRoundId() const { return RoundId; }
     bool IsRoundPlaying() const { return RoundStatus.Phase == ECoopRPGRoundPhase::Playing; }
     bool HasRoundResult() const { return RoundStatus.Phase == ECoopRPGRoundPhase::Result; }
+    bool AreBossRewardsAvailable() const { return RoundStatus.bBossRewardsAvailable; }
+    bool IsExtractionUnlocked() const { return AreBossRewardsAvailable() || GetTeamLootCount() > 0; }
     bool IsExtractionInProgress() const { return RoundStatus.ExtractionDeadline > 0.0; }
     int32 GetExtractionPlayersInside() const { return RoundStatus.ExtractionPlayersInside; }
     ACoopRPGExtractionZone* GetExtractionZone() const { return ExtractionZone.Get(); }

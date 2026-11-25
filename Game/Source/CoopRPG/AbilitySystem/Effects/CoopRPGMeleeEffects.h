@@ -61,3 +61,28 @@ public:
 public:
     static constexpr float Seconds = 6.0f;
 };
+
+UCLASS()
+class COOPRPG_API UCoopRPGTauntCost : public UGameplayEffect
+{
+    GENERATED_BODY()
+
+public:
+    UCoopRPGTauntCost();
+
+public:
+    static constexpr float Stamina = 15.0f;
+};
+
+UCLASS()
+class COOPRPG_API UCoopRPGTauntCooldown : public UGameplayEffect
+{
+    GENERATED_BODY()
+
+public:
+    UCoopRPGTauntCooldown();
+    static FGameplayTag GetCooldownTag();
+
+public:
+    static constexpr float Seconds = 12.0f;
+};

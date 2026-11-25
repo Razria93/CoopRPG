@@ -46,6 +46,8 @@ private:
     void DrawExpeditionCombat(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, bool bBoss, bool bLegacyStatus);
     void DrawPuzzle(const ACoopRPGGameState& State, ACoopRPGPlayerController& Controller, bool bLegacyStatus);
     void DrawExpeditionNameplates(const ACoopRPGPlayerController& Controller, int32 Stage);
+    void DrawTauntPulse(const FVector& Origin, double Elapsed);
+    void DrawTauntMarker(const ACoopRPGEnemy& Enemy);
     void DrawCounterTargetMarker(const ACoopRPGCharacter& Target);
     void DrawPartyStatus(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, bool bShowTeamStone);
     void DrawLocalCombatStatus(const ACoopRPGGameState& State, const ACoopRPGCharacter& Hero,

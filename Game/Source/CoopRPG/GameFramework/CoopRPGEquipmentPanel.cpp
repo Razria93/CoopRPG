@@ -333,16 +333,6 @@ bool FCoopRPGEquipmentPanel::HandlePrimaryButton(ACoopRPGPlayerController& Contr
                     }
                 }
             }
-            else if (bHasPointer && ActiveTab == EquipmentTab && PressedSupplySwordAction.IsSet()
-                && IsEquipmentActionAt(Pointer, 0))
-            {
-                Controller.RequestSupplySwordEquipped(PressedSupplySwordAction.GetValue());
-            }
-            else if (bHasPointer && ActiveTab == EquipmentTab && PressedShieldAction.IsSet()
-                && IsEquipmentActionAt(Pointer, 1))
-            {
-                Controller.RequestShieldEquipped(PressedShieldAction.GetValue());
-            }
             else if (bHasPointer && ActiveTab == InventoryTab && PressedInventoryAction.IsSet()
                 && SelectedInventoryItem == PressedActionItem && GetInventoryActionBounds().IsInsideOrOn(Pointer))
             {
@@ -438,18 +428,6 @@ bool FCoopRPGEquipmentPanel::HandlePrimaryButton(ACoopRPGPlayerController& Contr
                 }
             }
         }
-        if (ActiveTab == EquipmentTab)
-        {
-            const auto& Supplies = Controller.GetExpeditionSupplies();
-            if (Supplies.HasSword() && IsEquipmentActionAt(Pointer, 0))
-            {
-                PressedSupplySwordAction = !Supplies.bSwordEquipped;
-            }
-            else if (Controller.CanChangeShield() && IsEquipmentActionAt(Pointer, 1))
-            {
-                PressedShieldAction = !Supplies.bShieldEquipped;
-            }
-        }
         if (ActiveTab == SkillsTab)
         {
             PressedSkillGroup = FindSkillGroup(Pointer);
@@ -494,8 +472,6 @@ void FCoopRPGEquipmentPanel::ReleasePointer()
     PressedInventorySlot = INDEX_NONE;
     PressedActionItem = EInventoryItem::None;
     PressedInventoryAction.Reset();
-    PressedShieldAction.Reset();
-    PressedSupplySwordAction.Reset();
     PressedSkillGroup = INDEX_NONE;
     ScrollDragOffset.Reset();
 }
@@ -1049,8 +1025,7 @@ void FCoopRPGEquipmentPanel::DrawEquipment(AHUD& HUD, UCanvas& Surface, const AC
     const bool bEquipped = IsValid(Hero) && Hero->HasMeleeWeapon();
     const bool bShieldEquipped = IsValid(Hero) && Hero->HasShieldEquipped();
     const bool bGuarding = IsValid(Hero) && Hero->IsGuarding();
-    const bool bCanChangeShield = Controller.CanChangeShield();
-    const auto& Supplies = Controller.GetExpeditionSupplies();
+    const bool bPersonalSword = Controller.IsPersonalSwordEquipped();
     const FBox2D Panel = GetPanelBounds();
     const FBox2D List = GetEquipmentListBounds();
     const double Left = List.Min.X;
@@ -1094,11 +1069,11 @@ void FCoopRPGEquipmentPanel::DrawEquipment(AHUD& HUD, UCanvas& Surface, const AC
             const TCHAR* Item = TEXT("미장착");
             if (bWeapon && bArmed)
             {
-                Item = Supplies.bSwordEquipped ? TEXT("보급 한손검") : TEXT("한손검");
+                Item = bPersonalSword ? TEXT("개인 한손검") : TEXT("기본 한손검");
             }
             else if (bShield && bArmed)
             {
-                Item = bGuarding ? TEXT("가드 중") : TEXT("보급 방패 [Shift]");
+                Item = bGuarding ? TEXT("기본 방패 · 가드 중") : TEXT("기본 방패 [Shift]");
             }
             DrawPanelLabel(Surface, Item, Left + 49.0, Y + 29.0, ItemFont, Ink);
         }
@@ -1106,44 +1081,21 @@ void FCoopRPGEquipmentPanel::DrawEquipment(AHUD& HUD, UCanvas& Surface, const AC
         {
             DrawPanelLabel(Surface, TEXT("빈 슬롯"), Left + 49.0, Y + 21.0, HintFont, Muted);
         }
-        if ((bWeapon && (bArmed || Supplies.HasSword())) || (bShield && (bCanChangeShield || bShieldEquipped)))
-        {
-            const FBox2D Badge = GetEquipmentActionBounds(Y);
-            DrawPanelBox(HUD, Badge, Color(219, 232, 211), Color(146, 167, 126));
-            const TCHAR* Action = TEXT("장착 중");
-            if (bWeapon && Supplies.HasSword())
-            {
-                Action = Supplies.bSwordEquipped ? TEXT("장착 해제") : TEXT("보급 장착");
-            }
-            else if (bShield && bCanChangeShield)
-            {
-                Action = bShieldEquipped ? TEXT("장착 해제") : TEXT("장착");
-            }
-            const FStringView Label(Action);
-            DrawPanelLabel(Surface, Label, Badge.GetCenter().X - Measure(Surface, Label, HintFont).X * 0.5f,
-                Badge.GetCenter().Y, HintFont, Color(55, 87, 66));
-        }
     }
     DrawScrollTrack(HUD);
 
     if (!LastDisplayedWeaponState.IsSet() || LastDisplayedWeaponState.GetValue() != bEquipped
         || LastDisplayedEquipmentRow != FirstEquipmentRow || bLastDisplayedShield != bShieldEquipped || bLastDisplayedGuard != bGuarding
-        || bLastDisplayedSupplySword != Supplies.HasSword() || bLastDisplayedEquippedSupplySword != Supplies.bSwordEquipped
-        || bLastDisplayedIssuedShield != Supplies.bHasShield)
+        || bLastDisplayedPersonalSword != bPersonalSword)
     {
         LastDisplayedWeaponState = bEquipped;
         LastDisplayedEquipmentRow = FirstEquipmentRow;
         bLastDisplayedShield = bShieldEquipped;
         bLastDisplayedGuard = bGuarding;
-        bLastDisplayedSupplySword = Supplies.HasSword();
-        bLastDisplayedEquippedSupplySword = Supplies.bSwordEquipped;
-        bLastDisplayedIssuedShield = Supplies.bHasShield;
-        const FVector2D SupplyAction = GetEquipmentActionBounds(List.Min.Y - FirstEquipmentRow * EquipmentRowPitch).GetCenter();
-        const FVector2D ShieldAction = GetEquipmentActionBounds(List.Min.Y + (1 - FirstEquipmentRow) * EquipmentRowPitch).GetCenter();
+        bLastDisplayedPersonalSword = bPersonalSword;
         UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("EquipmentPanelState Equipped=%d Shield=%d First=%d Visible=%d Slots=%d X=%.0f Y=%.0f Width=%.0f Height=%.0f Guard=%d ShieldActionX=%.0f ShieldActionY=%.0f SupplySword=%d SupplyEquipped=%d IssuedShield=%d SupplyActionX=%.0f SupplyActionY=%.0f %s"),
             bEquipped, bShieldEquipped, FirstEquipmentRow + 1, VisibleEquipmentRows, EquipmentRows, Panel.Min.X, Panel.Min.Y,
-            Panel.GetSize().X, Panel.GetSize().Y, bGuarding, ShieldAction.X, ShieldAction.Y, Supplies.HasSword(), Supplies.bSwordEquipped, Supplies.bHasShield,
-            SupplyAction.X, SupplyAction.Y,
+            Panel.GetSize().X, Panel.GetSize().Y, bGuarding, 0.0, 0.0, 0, 0, 0, 0.0, 0.0,
             *CoopRPG::Debug::DescribeLogContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
     }
 }
@@ -1206,6 +1158,7 @@ void FCoopRPGEquipmentPanel::DrawSkills(AHUD& HUD, UCanvas& Surface, const ACoop
     const auto* Hero = Cast<ACoopRPGCharacter>(Controller.GetPawn());
     const bool bCombatMap = CoopRPG::Expedition::IsSkirmish(Controller.GetWorld()) || CoopRPG::Expedition::IsBoss(Controller.GetWorld());
     const auto Slash = State && Hero ? ReadAttackHud(*State, *Hero, bCombatMap, true) : FAttackHudStatus{};
+    const auto Taunt = State && Hero ? ReadTauntHud(*State, *Hero, bCombatMap) : FAttackHudStatus{};
     const bool bActiveList = SkillGroup == 0;
     const int32 First = FirstSkillRows[SkillGroup];
     const int32 RemainingTenths = Attack.GetRemainingTenths();
@@ -1216,7 +1169,8 @@ void FCoopRPGEquipmentPanel::DrawSkills(AHUD& HUD, UCanvas& Surface, const ACoop
         const double Y = List.Min.Y + Index * SkillRowPitch;
         const FBox2D Bounds(FVector2D(Left, Y), FVector2D(Right, Y + SkillRowHeight));
         const bool bSlashRow = bActiveList && Row == 1 && Controller.HasSlashRegistered();
-        const bool bAttackRow = bActiveList && (Row == 0 || bSlashRow);
+        const bool bTauntRow = bActiveList && Row == 2 && Taunt.State != EAttackHudState::Unassigned;
+        const bool bAttackRow = bActiveList && (Row == 0 || bSlashRow || bTauntRow);
         DrawPanelBox(HUD, Bounds, bAttackRow ? Color(250, 237, 202) : Color(240, 226, 189), Border);
         const double MidY = Bounds.GetCenter().Y;
         const FVector2D Icon(Left + RowInset, MidY - IconSide * 0.5);
@@ -1238,20 +1192,27 @@ void FCoopRPGEquipmentPanel::DrawSkills(AHUD& HUD, UCanvas& Surface, const ACoop
             continue;
         }
 
-        const auto& SlotStatus = bSlashRow ? Slash : Attack;
+        const auto& SlotStatus = bTauntRow ? Taunt : bSlashRow ? Slash : Attack;
         const bool bReady = SlotStatus.State == EAttackHudState::Ready;
         const bool bCooling = SlotStatus.State == EAttackHudState::Cooling;
-        Dashboard.DrawBasicAttackGlyph(HUD, Surface, IconBounds, SlotStatus, bSlashRow);
+        if (bTauntRow)
+        {
+            DrawTauntGlyph(Surface, IconBounds, SlotStatus);
+        }
+        else
+        {
+            Dashboard.DrawBasicAttackGlyph(HUD, Surface, IconBounds, SlotStatus, bSlashRow);
+        }
 
-        const FString Name = Fit(Surface, bSlashRow ? TEXT("한손검 슬래시") : TEXT("기본 공격"), RowFont, TextWidth);
-        const FString Hint = Fit(Surface, bSlashRow ? TEXT("최대 3명 · SP 25") : TEXT("무기를 휘둘러 공격"), HintFont, TextWidth);
+        const FString Name = Fit(Surface, bTauntRow ? TEXT("도발") : bSlashRow ? TEXT("한손검 슬래시") : TEXT("기본 공격"), RowFont, TextWidth);
+        const FString Hint = Fit(Surface, bTauntRow ? TEXT("주변 적 · SP 15") : bSlashRow ? TEXT("최대 3명 · SP 25") : TEXT("무기를 휘둘러 공격"), HintFont, TextWidth);
         constexpr double LineGap = 4.0;
         const double NameHeight = Measure(Surface, Name, RowFont).Y;
         const double HintHeight = Measure(Surface, Hint, HintFont).Y;
         DrawPanelLabel(Surface, Name, TextLeft, MidY - (HintHeight + LineGap) * 0.5, RowFont, Ink);
         DrawPanelLabel(Surface, Hint, TextLeft, MidY + (NameHeight + LineGap) * 0.5, HintFont, Muted);
         const double ChipOffset = (ChipHeight + ChipGap) * 0.5;
-        Chip(bSlashRow ? TEXT("슬롯 2") : TEXT("슬롯 1"), MidY - ChipOffset, Color(237, 226, 194), Muted);
+        Chip(bTauntRow ? TEXT("슬롯 3") : bSlashRow ? TEXT("슬롯 2") : TEXT("슬롯 1"), MidY - ChipOffset, Color(237, 226, 194), Muted);
         const FString Status = bCooling ? FString::Printf(TEXT("쿨다운 %.1f초"), SlotStatus.GetRemainingTenths() / 10.0)
             : FString(bReady ? TEXT("사용 가능") : AttackHudLabel(SlotStatus.State));
         Chip(Status, MidY + ChipOffset, bReady ? Color(219, 232, 211) : Color(239, 216, 203),
@@ -1319,19 +1280,6 @@ FBox2D FCoopRPGEquipmentPanel::GetEquipmentListBounds() const
     const double Top = Panel.Min.Y + 55.0;
     return FBox2D(FVector2D(Panel.Min.X + ContentInset, Top),
         FVector2D(Panel.Max.X - ContentInset, Top + (VisibleEquipmentRows - 1) * EquipmentRowPitch + EquipmentRowHeight));
-}
-
-FBox2D FCoopRPGEquipmentPanel::GetEquipmentActionBounds(double RowY) const
-{
-    const double Right = GetScrollTrack().Min.X - 6.0;
-    return FBox2D(FVector2D(Right - 76.0, RowY + 11.0), FVector2D(Right - 9.0, RowY + 32.0));
-}
-
-bool FCoopRPGEquipmentPanel::IsEquipmentActionAt(const FVector2D& Pointer, int32 Slot) const
-{
-    const int32 VisibleRow = Slot - FirstEquipmentRow;
-    return VisibleRow >= 0 && VisibleRow < VisibleEquipmentRows
-        && GetEquipmentActionBounds(GetEquipmentListBounds().Min.Y + VisibleRow * EquipmentRowPitch).IsInsideOrOn(Pointer);
 }
 
 bool FCoopRPGEquipmentPanel::IsScrollableTab() const

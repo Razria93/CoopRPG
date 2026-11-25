@@ -81,6 +81,7 @@ private:
     int32 LastDefeats = 0;
     int32 LastInside = 0;
     bool bLastStone = false;
+    bool bLastBossRewards = false;
     bool bLastCountdown = false;
     bool bInitialized = false;
     bool bExpanded = false;

@@ -283,6 +283,26 @@ void ACoopRPGGameState::SetRoundPlaying(bool bPlaying)
     }
 }
 
+bool ACoopRPGGameState::CanStartBossRewards() const
+{
+    return HasAuthority() && IsRoundPlaying() && !AreBossRewardsAvailable()
+        && GetServerWorldTimeSeconds() < RoundStatus.RoundDeadline;
+}
+
+void ACoopRPGGameState::StartBossRewards(ACoopRPGSharedChest& Chest, ACoopRPGExtractionZone& Zone)
+{
+    check(CanStartBossRewards());
+    SharedChest = &Chest;
+    ExtractionZone = &Zone;
+    RoundStatus.bBossRewardsAvailable = true;
+    RoundStatus.RoundDeadline = 0.0;
+    UE_LOG(LogCoopRPGRound, Log, TEXT("BossRewardsOpened Round=%s Chest=%s ChestLocation=%s Portal=%s PortalLocation=%s"),
+        *RoundId.ToString(), *Chest.GetName(), *Chest.GetActorLocation().ToCompactString(),
+        *Zone.GetName(), *Zone.GetActorLocation().ToCompactString());
+    OnRep_ExtractionZone();
+    ForceNetUpdate();
+}
+
 void ACoopRPGGameState::MulticastGameplayFeedback_Implementation(const FCoopRPGGameplayFeedback& Feedback)
 {
     PresentGameplayFeedback(Feedback);
@@ -518,7 +538,7 @@ bool ACoopRPGGameState::TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop)
     return true;
 }
 
-void ACoopRPGGameState::EvaluateRound(bool bDisconnected, bool bDeath, int32 PlayersInside, bool bBossDefeated)
+void ACoopRPGGameState::EvaluateRound(bool bDisconnected, bool bDeath, int32 PlayersInside)
 {
     if (!HasAuthority() || !IsRoundPlaying())
     {
@@ -542,13 +562,9 @@ void ACoopRPGGameState::EvaluateRound(bool bDisconnected, bool bDeath, int32 Pla
     {
         Reason = ECoopRPGRoundEndReason::Timeout;
     }
-    else if (bBossDefeated)
-    {
-        Reason = ECoopRPGRoundEndReason::BossDefeated;
-    }
     else if (bExtractionReady)
     {
-        Reason = ECoopRPGRoundEndReason::Extracted;
+        Reason = AreBossRewardsAvailable() ? ECoopRPGRoundEndReason::BossDefeated : ECoopRPGRoundEndReason::Extracted;
     }
     else
     {
@@ -738,12 +754,12 @@ void ACoopRPGGameState::OnRep_ExtractionZone()
 {
     if (IsValid(ExtractionZone))
     {
-        const bool bActive = TeamLootCount > 0;
+        const bool bActive = IsExtractionUnlocked();
         if (bActive)
         {
             ExtractionZone->OpenPortal();
         }
-        ExtractionZone->PresentSkirmishPortal(bActive, bActive && IsRoundPlaying() && IsExtractionInProgress());
+        ExtractionZone->PresentExpeditionPortal(bActive, bActive && IsRoundPlaying() && IsExtractionInProgress());
     }
 }
 
@@ -763,6 +779,10 @@ void ACoopRPGGameState::OnRep_SkirmishDefeats()
 void ACoopRPGGameState::OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousStatus)
 {
     OnRep_ExtractionZone();
+    if (AreBossRewardsAvailable() && !PreviousStatus.bBossRewardsAvailable)
+    {
+        UE_LOG(LogCoopRPGRound, Log, TEXT("BossRewardsReplicated Round=%s"), *RoundId.ToString());
+    }
     const FString Context = CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__));
     if (HasRoundResult() && PreviousStatus.Phase != ECoopRPGRoundPhase::Result)
     {

@@ -5,6 +5,8 @@
 #include "CoopRPG/AbilitySystem/Attributes/CoopRPGCombatAttributes.h"
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGSlashAbility.h"
+#include "CoopRPG/AbilitySystem/Abilities/CoopRPGTauntAbility.h"
+#include "CoopRPG/Debug/Logging/CoopRPGTauntLog.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/Debug/CoopRPGCombatProbeComponent.h"
 #include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
@@ -39,6 +41,8 @@
 #include "InputActionValue.h"
 #include "InputCoreTypes.h"
 #include "Net/UnrealNetwork.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
@@ -208,6 +212,35 @@ void ACoopRPGCharacter::SetMeleeWeaponEquipped(bool bEquipped)
         RefreshWeaponVisibility();
         ForceNetUpdate();
     }
+}
+
+bool ACoopRPGCharacter::IsGuardian() const
+{
+    const auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
+    return Identity && Identity->GetSelectedHero() == ECoopRPGHero::AnimalHero;
+}
+
+double ACoopRPGCharacter::GetTauntPulseAge() const
+{
+    return GetWorld()->GetTimeSeconds() - TauntPulseStartedAt;
+}
+
+void ACoopRPGCharacter::MulticastTauntPulse_Implementation(FVector_NetQuantize Origin)
+{
+    if (GetNetMode() == NM_DedicatedServer)
+    {
+        return;
+    }
+    TauntPulseOrigin = Origin;
+    TauntPulseStartedAt = GetWorld()->GetTimeSeconds();
+    static const FSoftObjectPath EffectPath(TEXT("/Game/ThirdParty/Effects/Taunt/WarCry/MedievalRPGVFX/Niagara/Combat/Melee/NS_MRPG_War_Cry.NS_MRPG_War_Cry"));
+    auto* Effect = Cast<UNiagaraSystem>(EffectPath.TryLoad());
+    // Calibrated radius of War Cry's visible ground wave at unit scale.
+    constexpr double WarCryGroundWaveRadiusCm = 615.0;
+    constexpr double WarCryScale = UCoopRPGTauntAbility::RangeCm / WarCryGroundWaveRadiusCm;
+    const auto* WarCry = Effect ? UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+        this, Effect, Origin, FRotator::ZeroRotator, FVector(WarCryScale)) : nullptr;
+    CoopRPG::Debug::TauntLog::Pulse(*this, WarCry != nullptr);
 }
 
 bool ACoopRPGCharacter::IsGuarding() const
@@ -414,6 +447,7 @@ void ACoopRPGCharacter::BeginPlay()
         if (CoopRPG::Expedition::IsSkirmish(GetWorld()) || CoopRPG::Expedition::IsBoss(GetWorld()))
         {
             AbilitySystem->GiveAbility(FGameplayAbilitySpec(UCoopRPGSlashAbility::StaticClass()));
+            AbilitySystem->GiveAbility(FGameplayAbilitySpec(UCoopRPGTauntAbility::StaticClass()));
         }
     }
 }
@@ -441,6 +475,7 @@ void ACoopRPGCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
         Input->BindAction(AttackAction, ETriggerEvent::Started, this, &ACoopRPGCharacter::Attack);
         PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ACoopRPGCharacter::CancelAttack);
         PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACoopRPGCharacter::UseSlash);
+        PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACoopRPGCharacter::UseTaunt);
         PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &ACoopRPGCharacter::PressGuardInput);
         PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &ACoopRPGCharacter::ReleaseGuardInput);
     }
@@ -487,6 +522,11 @@ void ACoopRPGCharacter::CancelAttack()
 void ACoopRPGCharacter::UseSlash()
 {
     AbilitySystem->TryActivateAbilityByClass(UCoopRPGSlashAbility::StaticClass());
+}
+
+void ACoopRPGCharacter::UseTaunt()
+{
+    AbilitySystem->TryActivateAbilityByClass(UCoopRPGTauntAbility::StaticClass());
 }
 
 void ACoopRPGCharacter::PressGuardInput()

@@ -80,6 +80,8 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     bool IsDead() const { return bDead; }
+    void ApplyTaunt(ACoopRPGCharacter& Caster, double EndsAt);
+    bool IsTaunted(double Now) const { return !bDead && TauntEndsAt > Now; }
     bool ShouldPreserveAttackPose() const;
     void FlashPresentationHit(bool bPreserveAttackPose);
     void EnableShieldEncounter();
@@ -106,6 +108,7 @@ private:
     void SetShieldWarning(int32 TargetSlot, float FacingYaw, double EndsAt);
     void StopChasing();
     void StopCombat();
+    void ClearTaunt(const TCHAR* Reason);
     void ResolveAttack(ACoopRPGCharacter* Player);
     void HandleHealthChanged(const FOnAttributeChangeData& Change);
     void SpawnDeathLoot(const FGuid& RoundId);
@@ -188,6 +191,13 @@ private:
     bool bDead = false;
 
     TWeakObjectPtr<ACoopRPGCharacter> Target;
+    TWeakObjectPtr<ACoopRPGCharacter> AttackTarget;
+    TWeakObjectPtr<ACoopRPGCharacter> TauntCaster;
+    bool bTauntSelected = false;
+
+    UPROPERTY(Replicated)
+    double TauntEndsAt = 0.0;
+
     double NextActionTime = 0.0;
     bool bChasing = false;
     bool bAttackPending = false;

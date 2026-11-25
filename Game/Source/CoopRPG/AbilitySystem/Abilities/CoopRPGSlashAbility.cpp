@@ -1,5 +1,6 @@
 #include "CoopRPGSlashAbility.h"
 
+#include "CoopRPG/AbilitySystem/CoopRPGAreaTargeting.h"
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Character/CoopRPGEnemy.h"
@@ -29,23 +30,6 @@ namespace
                 Hero->HasAuthority() ? TEXT("SlashRejected") : TEXT("SlashBlocked"), Reason,
                 *DescribePlayerRequestContext(Hero, TEXT("Slash")));
         }
-    }
-
-    bool IsObstructed(const ACoopRPGCharacter& Hero, const ACoopRPGEnemy& Enemy)
-    {
-        FCollisionQueryParams Query(SCENE_QUERY_STAT(CoopRPGSlash), false, &Hero);
-        Query.AddIgnoredActor(&Enemy);
-        FCollisionObjectQueryParams WorldObjects;
-        WorldObjects.AddObjectTypesToQuery(ECC_WorldStatic);
-        WorldObjects.AddObjectTypesToQuery(ECC_WorldDynamic);
-        TArray<FHitResult> Hits;
-        Hero.GetWorld()->LineTraceMultiByObjectType(Hits, Hero.GetActorLocation(), Enemy.GetActorLocation(),
-            WorldObjects, Query);
-        return Hits.ContainsByPredicate([](const FHitResult& Hit)
-        {
-            const auto* Component = Hit.GetComponent();
-            return Component && Component->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block;
-        });
     }
 }
 
@@ -175,7 +159,7 @@ void UCoopRPGSlashAbility::ResolveHit()
         const double Range = RangeCm + Enemy->GetMeleeRangeBonus();
         if (FMath::Abs(Offset.Z) <= VerticalReachCm && DistanceSquared <= FMath::Square(Range)
             && FVector::DotProduct(Facing, Offset.GetSafeNormal2D()) + UE_DOUBLE_SMALL_NUMBER >= AngleThreshold
-            && !IsObstructed(*Hero, *Enemy))
+            && !CoopRPG::AreaTargeting::IsObstructed(*Hero, *Enemy))
         {
             Targets.Add({Enemy, DistanceSquared});
         }

@@ -932,3 +932,120 @@ UE 5.8.4 Development 전용 서버와 동일 PC의 A·B로 58/58을 통과했다
 자동 시험은 클라이언트 입력과 시험용 배치·시간 제어를 사용했다. 첫 사망 → 같은 맵 재도전 → 3.008초 공동 탈출과 양쪽 1점은 [사용자 조작 회차](#expedition-four-mushrooms-manual)의 원본 로그에 있다.
 
 **로컬 근거** · `Artifacts/Validation/expedition-commits/`의 `One/Forest/`, `TwoFresh/Full02/`, `Three/Full/`, `Three/Retry/`에 원본 로그·판정·화면을 보관했다. 각 단계의 `Package/build-identity.json`에 실행 파일·쿠킹 콘텐츠·맵 해시를 남겼다.
+<a id="expedition-loading-runtime"></a>
+## 11/23 · 숲 원정 이동 화면과 카메라 전환
+
+`origin/main`의 `29815c6`에서 분기한 `feat/expedition-loading-screen` 작업 트리로 시험했다. UE 5.8.4의 Development 에디터 빌드가 통과했다. 첫 컴파일에서 뷰포트의 `World` 멤버를 지역 변수가 가리는 오류가 나와 `CurrentWorld`로 고친 뒤 재빌드했다.
+
+같은 PC에서 동일 Win64 Development 패키지로 전용 서버 1개와 클라이언트 A 1440×810·B 960×540을 실행했다. 정상 회차에는 시험용 시간·전투 배치 명령을 사용했고, 공격·습득·발판·준비 입력과 서버 권한의 전환은 실제 플레이 경로를 사용했다.
+
+| 상황 | 전용 서버와 양쪽 클라이언트에서 확인한 결과 |
+|---|---|
+| 로비 → 버섯 군락 | 두 명이 준비한 뒤 `스테이지 1 · 버섯 군락`이 표시됐다. A가 가림을 해제한 뒤에도 B는 자기 카메라가 준비될 때까지 화면을 유지했다. 해제 로그의 간격은 약 9.2초였다. |
+| 시간 초과 → 같은 버섯 군락 | 실패 결과 뒤 `버섯 군락 재도전`을 표시했다. 새 Round ID를 받은 뒤 양쪽 자기 카메라가 잡혀 화면이 풀렸다. |
+| 버섯 군락 → 쌍둥이 발판 | 버섯 4마리 처치·마법석 획득·공동 탈출 뒤 `스테이지 2 · 쌍둥이 발판`을 표시했다. B 수신 지연을 450ms로 설정했고, 가림 표시 로그는 B가 484ms 늦었다. 양쪽 모두 각자의 카메라 준비 로그 뒤 `Reason=CameraReady`로 화면을 해제했다. |
+| 쌍둥이 발판 → 흑기사 결전 | 발판 2개와 양쪽 보상 확정 뒤 `스테이지 3 · 흑기사 결전`을 표시했다. 두 클라이언트에서 보스 맵 카메라와 준비 HUD가 나타났다. |
+| 흑기사 결전 → 로비 | 흑기사 처치와 성공 결과 뒤 `원정 대기소로 복귀`를 표시했다. 같은 세션의 로비로 한 번 이동했고 양쪽이 준비 대기로 돌아왔다. |
+| 재도전 도중 서버 종료 | 이동 화면이 양쪽에 나타난 뒤 시험 서버를 종료했다. 엔진의 20초 접속 시간 초과 뒤 두 클라이언트 모두 `Reason=ConnectionFailed`로 화면을 닫고 접속 실패 안내를 표시했다. |
+
+두 해상도의 창 녹화에서 가림이 처음 풀린 프레임을 직접 대조했다. 정상 이동 다섯 경로의 첫 공개 프레임은 해당 목적지의 캐릭터 카메라와 준비 HUD였다. 재도전 중 연결이 끊긴 경우에는 양쪽에 접속 실패 안내가 표시됐다. `Review/`에 전환별 PNG와 원본 시각 기준 WebP를 남겼고, 전체 시각 판정은 캡처가 수집한 프레임 범위에 한한다.
+
+**로컬 근거** · 원래 로딩 워크트리의 `Artifacts/Validation/expedition-loading/29815c6/`에 빌드 로그와 `Package/executables.json`의 SHA-256, 정상 `PackagedAB/RetryToLobby/` 및 로비 출발·실패 `PackagedAB-interrupted/Interrupted/`의 `server.log`, `a.log`, `b.log`와 창 녹화를 보관한다. 별도 PC 환경은 이번 회차에서 시험하지 않았다.
+
+**로컬 커밋 전 재검증** · `66f770c` 기준 로딩 소스의 diff가 장비 변경과 함께 시험한 스냅샷과 SHA-256까지 일치했다. 같은 패키지로 재실행해 로비 출발, 시간 초과·0점, 새 회차의 같은 버섯 군락 진입, 양쪽 새 카메라 준비 뒤 가림 해제를 확인했다. 실행 결과와 원본 로그는 통합 검증 워크트리의 `Artifacts/Validation/equipment-loading/PackagedAB-commit-retry-2/ExpeditionAB/`에 있다.
+
+[개발 기록](../Development.md#expedition-loading-implementation)
+
+<a id="expedition-default-equipment-verification"></a>
+## 11/23 · 직업 기본 장비와 개인 한손검 수명
+
+`66f770c`에 직업 기본 장비와 로딩 화면을 합친 검증 작업 트리에서 UE 5.8.4 Win64 Development 전용 서버와 렌더링 클라이언트 A 1440×810·B 960×540을 같은 PC에서 실행했다. 장비 관련 변경 경로 12개에서 소스 내용과 폐기한 헤더의 삭제 상태가 기능 작업 트리와 일치한다. 시간 초과와 반복 전투 위치는 시험 명령으로 만들고, 준비·상자·장착·해제·전투와 맵 이동은 게임의 기존 입력과 서버 경로를 사용했다.
+
+| 조건 | 확인 결과 |
+|---|---|
+| 첫 로비·잡몹전 | 가방에 개인 한손검이 없는 상태로 전사는 기본 검, 수호기사는 기본 검·방패를 사용했다. 첫 시간 초과 뒤 같은 맵에서도 기본 장비가 다시 적용됐다. |
+| 개인 한손검 장착·해제 | 상자에서 받은 개인 검을 장착할 때 귀속이 한 번 발생했다. 해제해도 개인 검의 소유권과 귀속이 유지됐다. 수호기사의 방패는 기본값으로 남았다. |
+| 퍼즐·보스·로비 복귀 | 개인 한손검과 기본 방패 조합이 이어졌다. 복귀 로비의 장비창에 개인 한손검과 기본 방패가 구분되어 나타났다. |
+| 다음 원정·재도전 | 로비에서 재장착한 검을 들고 다음 원정에 입장했다. 구간 중 해제한 뒤 시간 초과로 재도전하자 입장 때의 장착 선택이 복원됐고 귀속이 유지됐다. |
+
+지연을 주입한 첫 회차는 B의 퍼즐 이동 확인에서 멈췄다. 최종 회차는 기본 네트워크 조건에서 완료했다. 느린 렌더링 중 B의 준비 입력은 한 번 다시 보내 서버의 양쪽 준비 로그를 확인했다. 별도 PC는 시험하지 않았다. 폐기 헤더를 제거한 임시 Git 인덱스로 저장소 검사 6개를 통과했다.
+
+**근거** · 로컬 `Artifacts/Worktrees/mvp3-expedition-test/Artifacts/Validation/equipment-loading/` 아래 `validation-inputs.json`과 `Package/executables.json`에 소스·실행 파일 식별 정보가 있다. `PackagedAB-full/ExpeditionAB/`에 `result.json`, 서버·A·B 원본 로그 및 `00-lobby-defaults-*.png`, `06-lobby-personal-kept-*.png`를 남겼다.
+
+커밋 전 같은 패키지로 다시 실행해 로비와 첫 잡몹전의 기본 장비, 시간 초과 후 같은 맵의 새 회차에서 양쪽 기본 장비가 다시 표시되는 것을 확인했다. 서버와 A·B 로그·화면은 같은 위치의 `PackagedAB-commit-retry-2/ExpeditionAB/`에 남겼다.
+
+<a id="guardian-taunt-verification"></a>
+## 11/23 · 수호기사 도발과 흑기사 반격 대상 유지
+
+`feat/guardian-taunt`의 코드로 Windows 전용 서버와 클라이언트 A·B를 한 PC에서 실행했다. 역할·위치는 검증용 배치로 고정하고 3번 스킬, 가드, 기본 공격은 클라이언트의 실제 입력으로 실행했다. 행동 검증 패키지에는 별도 브랜치의 직업 기본 장비 변경을 임시 적용했다. 독립 도발 워크트리의 에디터 빌드는 별도로 확인했다.
+
+| 조건 | 확인한 결과 |
+|---|---|
+| 버섯 4마리 | 사거리와 가림 조건을 통과한 두 마리만 도발됐다. 범위 밖과 벽 뒤의 적은 제외됐다. |
+| 전사, 빈 범위, SP 부족, 쿨다운 | 전사와 빈 범위 요청은 서버에서 거절됐다. SP 부족 상태의 클라이언트 입력은 실제 발동으로 이어지지 않았다. 쿨다운 중에는 재발동과 추가 소모가 없었다. |
+| 방패 가드 중 발동 | 가드를 유지하면서 도발했고 SP가 100에서 85로 줄었다. 두 클라이언트에서 바닥 파동과 도발 상태가 표시됐다. |
+| 도발 만료와 같은 맵 재도전 | 4초 뒤 적이 기존 대상 선택으로 돌아왔다. 시간 초과 뒤 같은 맵의 새 회차에서는 쿨다운을 이월하지 않았다. |
+| 흑기사 반격 중 도발 | 진행 중이던 반격은 기존 P1 대상·방향으로 끝났다. 이후 반격은 P2 수호기사를 향했고, 그동안 P1이 후방에서 적중시켰다. 도발 만료 뒤에는 다시 가까운 P1을 선택했다. |
+| 흑기사 반격 전 도발 | 이미 시작된 공격이 없으면 다음 반격부터 수호기사를 대상으로 선택했다. |
+
+도발 중 접속을 끊은 수호기사와 체력이 0이 된 수호기사 모두 서버에서 도발이 해제됐다. A 1440×810과 B 960×540에서 파동과 표시를 기록했다. 흑기사전에서 반격 대상 마커는 도발 표시보다 우선한다. 파동이 화면 가까이 퍼지는 순간에는 하단 HUD를 잠깐 가로지르는 장면이 있었다.
+
+Holy Nova를 사용한 이전 검증의 원본은 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-Final`, `Boss-Final`에 있다. 각 폴더의 `server.log`, `a.log`, `b.log`와 `result.json`을 대조했다. 잡몹 파동은 `Skirmish-Final/Review/mushrooms-a-pulse.png`, `mushrooms-b-pulse.png`에, 흑기사 반격 예고는 `Boss-Final/02-boss-guardian-warning-a.png`, `02-boss-guardian-warning-b.png`에 남겼다. `Holy Nova`와 의존 에셋 19개는 로컬 검증 패키지에 포함했다. 별도 PC 검증과 사용자 조작 검증은 남아 있다.
+
+**외부 FX 로드 실패 재현** · 최종 클라이언트 실행 파일의 시험용 사본에서 `Holy Nova` 조회 경로만 존재하지 않는 이름으로 바꿨다. 같은 패키지의 전용 서버와 A·B에서 `Niagara=0`, 범위 안 두 마리 도발, 기본 파란 파동을 원본 로그와 두 해상도 화면으로 확인했다. 결과와 화면은 `Artifacts/Validation/guardian-taunt/Skirmish-MissingEffect/`에, 시험용 사본의 해시와 조회 경로는 같은 위치의 상위 `PackageMissingEffect/verification-inputs.json`에 있다. 외부 에셋을 뺀 별도 Cook은 이번 검증 범위에 포함되지 않는다.
+
+### 11/23 · War Cry 에셋 교체
+
+MedievalRPGVFX의 `Combat/Melee/NS_MRPG_War_Cry`와 의존 에셋 16개를 로컬 패키지에 적용했다. 에셋의 기본 색상과 밝기를 사용하고, 재생 크기는 0.65배로 적용했다. 파란 범위선은 별도로 표시한다. 잡몹전에서 A 1440×810과 B 960×540 모두 War Cry와 파란 범위선을 확인했다. 섬광의 가장 밝은 구간은 실제 플레이 화면에서 흰빛과 금빛이 섞여 보였다. 흑기사전은 두 클라이언트의 `Niagara=1`과 기존 반격이 원래 대상에게 끝난 뒤 다음 반격부터 도발 대상이 적용되는 것을 로그로 확인했다.
+
+**근거** · 도발 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-WarCryRed/`와 `Boss-WarCryRed/`에 `server.log`, `a.log`, `b.log`, `result.json`이 있다. 잡몹전 프레임은 `Skirmish-WarCryRed/Review/mushrooms-a-war-cry.png`와 `mushrooms-b-war-cry.png`에 남겼다. 독립 에디터 빌드 로그는 상위 폴더의 `war-cry-red-editor.log`에 있다.
+
+### 11/23 · 도발 경계와 War Cry 파동 크기
+
+기존 파란 선은 4m까지 커지면서 먼저 사라져 War Cry의 바닥 파동과 경계가 어긋나 보였다. 범위선은 시전 순간부터 4m에 고정하고 0.72초 동안 표시한다. 하단 파티 카드와 자원 패널은 선을 덮도록 렌더링 순서를 바꿨다. War Cry의 재생 스케일은 서버의 판정 반경으로 계산한다.
+
+전용 서버의 잡몹전에서 한 번 시전해 두 마리 적용을 확인했다. A 1440×810과 B 960×540의 녹화에서 밝은 바닥 파동이 후반에 각각 고정 경계 반경의 약 99%, 98%까지 도달하는 프레임을 비교했다. 이는 같은 장면에서 바닥의 밝은 영역을 기준으로 계산한 화면 추정값이다. 옅은 잔광은 경계 바깥에도 보인다. 첫 시험은 프레임 수집이 한 장으로 끝나고 클라이언트 이벤트를 기다리다 종료했다. 한 번만 시전하는 재시험은 양쪽의 War Cry 수신과 녹화가 완료됐다.
+
+**근거** · 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-AlignedRetry/`에 서버·A·B 원본 로그와 `Review/a-aligned-24.png`, `Review/b-aligned-24.png`를 보관한다. 실행 패키지와 독립 에디터 빌드 로그는 `D:/CoopRPG-Validation/guardian-taunt-war-cry-alignment-20261123`에 있다.
+
+**색상 재검증** · 범위선은 짙은 주황색 `#C43E1E`, 적 위 도발 표시는 적갈색 `#5D2214` 바탕과 밝은 살구색 `#FFD7AA` 글씨로 바꿨다. 같은 전용 서버 실행 파일과 Cook 데이터를 재사용하고 새 클라이언트를 적용했다. 잡몹전 A 1440×810과 B 960×540에서 두 대상의 도발 표시와 War Cry의 밝은 파동 위에서 읽히는 경계를 확인했다. 스크린샷과 원본 로그는 워크트리의 `Artifacts/Validation/guardian-taunt/Skirmish-WarmLabel/`에 있다.
+
+**11/24 사용자 조작 회차** · 서버는 수호기사 도발 5회와 발동당 SP 15 소모, 한 번에 버섯 2~3마리 적용을 기록했다. A·B에서 각각 War Cry 재생 5회를 확인했다. 이 기록은 사용자 조작 중 재생을 대조한 결과다. 원본은 `Artifacts/Validation/guardian-taunt/PackageWarCryWarm/manual-20261123-235957-110/`에 있다.
+
+
+<a id="boss-reward-extraction-verification"></a>
+## 11/24 · 흑기사 보상 상자와 공동 탈출
+
+`feat/boss-reward-extraction`의 `66f770c` 위 미커밋 변경을 UE 5.8.4 Win64 Development로 검증했다. 같은 PC에서 전용 서버 1개와 A 1440×810, B 960×540을 실행했다. 시험 명령으로 보스의 측면 공격 각도와 체력을 고정하고, 실제 기본 공격 입력으로 마지막 피해를 냈다. 상자는 이동 후 [E]로 열고 두 클라이언트에서 [F]를 함께 눌렀다. 포탈 진입 위치와 재도전용 실패는 시험 명령으로 재현했다.
+
+| 확인 항목 | 서버와 A·B 대조 결과 |
+|---|---|
+| 흑기사 처치 | 피해 10이 확정된 뒤 보상 상자와 포탈이 한 번 열렸다. A·B에 보상 단계가 전달되고 화면에서 보상 상자와 포탈을 확인했다. 이 시점에는 점수·골드·맵 전환이 발생하지 않았다. |
+| 공용 보상 상자 | 같은 상자에 HP·SP 물약이 한 개씩 표시됐다. 두 사람의 마지막 HP 물약 요청 중 하나만 승인됐고 상대 요청은 재고 소진으로 거절됐다. A·B 모두 남은 HP 물약 0을 표시했다. |
+| 공동 탈출 | 1인 진입 중에는 카운트다운을 시작하지 않았다. 2인 진입 뒤 이탈하자 0.133초에 초기화됐고, 재진입부터 3.020초를 채우자 성공 1회와 팀 점수 1점이 확정됐다. 각 플레이어에게 30골드가 한 번 지급되고 A·B가 같은 세션 로비로 돌아왔다. |
+| 실패와 재도전 | 보상 물약을 가져간 뒤 사망과 만료 조건을 동시에 발생시켜 실패 0점·사망 우선 판정을 확인했다. 같은 보스 맵의 새 라운드에서 두 사람의 개인 HP·SP 물약은 입장 때와 같은 0개였다. 보급분은 HP·SP 각각 1개로 초기화됐다. 이번 실패에는 성공 골드 지급이 없었다. |
+
+첫 화면에서 포탈이 옆을 보며 마법진을 가렸다. 포탈을 접근 방향으로 돌리고 마법진 바깥쪽으로 옮겼다. 최종 클라이언트를 다시 링크하고 같은 서버 실행 파일과 Cook 콘텐츠로 A·B 화면을 다시 확인했다. 최종 Editor Unity 빌드도 통과했다.
+
+**로컬 근거** · `Artifacts/Validation/boss-reward-extraction/`의 아래 두 회차에 `server.log`, `a.log`, `b.log`, `result.json`과 A·B 화면을 보관했다.
+
+- `PackagedAB-success-final/BossRewards/` · 보스 라운드 `693FE055461B0024BC0D88AD80520562`. `02-both-looting`, `04-one-waiting`, `05-reset`, `06-success`, `07-lobby` 화면.
+- `PackagedAB-retry-confirmed/BossRewards/` · 보스 라운드 `597BDC3145A22EAED7ED1DB9832C52DB`에서 재도전 `570C1D0042887FE757FA70B51B98A3CB`로 전환. `03-stock-depleted`, `04-retry` 화면.
+- `PortalAlignmentBuild/prior-executables.json` · 위 두 회차에 사용한 서버와 클라이언트 SHA-256. `Editor-final.log` · 해당 회차의 Editor 빌드.
+
+### 11/24 · 1스테이지와 보스 포탈 위치 통일
+
+에디터에서 버섯 군락의 배치를 읽어 보스 포탈 메시를 `(3000, 0, 0)`, 가이드 원·마법진·서버 탈출 판정 중심을 `(2440, 0, 6)`으로 맞췄다. 메시 회전은 90°, 배율은 1배다. 갱신한 양쪽 실행 파일에 이전 Cook 콘텐츠를 사용했다. 같은 패키지의 전용 서버에서 버섯 군락과 보스전의 탈출 판정 중심이 같은 좌표로 기록됐다.
+
+A 1440×810에서 보상 상자부터 마법진까지 걸어 들어갔다. B 960×540의 진입·이탈·재진입은 시험 명령으로 재현했다. 한 사람만 있을 때는 카운트다운이 시작되지 않았다. 이탈 시 초기화됐고 재진입 후 3.012초에 성공 1점이 한 번 확정됐다. A·B가 같은 세션 로비로 돌아왔다.
+
+**로컬 근거** · `Artifacts/Validation/boss-reward-extraction/`의 `portal-map-transforms.json`, `PortalAlignmentBuild/skirmish-stage.log`, `Package/executables.json`. `PackagedAB-portal-alignment-final/BossRewards/`에 라운드 `D72877AA4A81C17DB4E1358940C1383B`의 서버·A·B 원본 로그와 화면 `04-one-waiting-a.png`, `05-reset-b.png`를 보관했다.
+
+
+### 11/24 · 흑기사 보상 상자 중앙 배치
+
+수동 확인에서 보상 상자가 출구 통로 중심선에서 옆으로 한쪽에 치우쳐 보였다. 보상 상자는 `(1200, 0, 28)`에 배치했다. 서버 로그에서 상자와 마법진의 Y 좌표가 모두 0임을 확인했다. 변경한 Win64 Development 서버를 별도 경로에서 실행하고 이전 Cook 콘텐츠와 클라이언트 실행 파일을 사용했다.
+
+A 1440×810과 B 960×540에서 [E]로 같은 상자를 열었다. 마지막 HP 물약은 한 번 지급됐고 양쪽 재고가 0으로 갱신됐다. A는 상자에서 마법진까지 걸어갔고, B의 이탈·재진입은 시험 위치 제어로 재현했다. 재진입 후 3.012초에 성공 1점이 확정됐고 두 사람은 같은 세션 로비로 복귀했다.
+
+**로컬 근거** · `Artifacts/Validation/boss-reward-extraction/` 아래 `PackagedAB-centered-chest/BossRewards/`에 라운드 `E2E0665C40AF323F4B1921BCA46462CF`의 A·B 화면과 서버·A·B 원본 로그를 보관했다. 실행 파일 해시는 `CenteredChestBuild/executables.json`에 있다.

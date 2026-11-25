@@ -4,6 +4,7 @@
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
+#include "CoopRPG/Debug/Logging/CoopRPGTauntLog.h"
 #include "CoopRPG/Character/CoopRPGLocomotionAnimInstance.h"
 #include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
@@ -207,7 +208,13 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
     }
 
     const double Now = GetWorld()->GetTimeSeconds();
-    ACoopRPGCharacter* Player = Target.Get();
+    ACoopRPGCharacter* ForcedTarget = TauntCaster.Get();
+    if (TauntEndsAt > 0.0 && (Now >= TauntEndsAt || !IsLivePlayer(ForcedTarget)))
+    {
+        ClearTaunt(Now >= TauntEndsAt ? TEXT("Expired") : TEXT("CasterUnavailable"));
+        ForcedTarget = nullptr;
+    }
+
     if (bAttackPending)
     {
         if (Now >= NextActionTime)
@@ -219,7 +226,8 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
                 ResolvedKnightStrikeAt = ShieldWarning.EndsAt;
                 SetShieldWarning(0, ShieldWarning.FacingYaw, 0.0);
             }
-            ResolveAttack(Player);
+            ResolveAttack(AttackTarget.Get());
+            AttackTarget.Reset();
         }
         return;
     }
@@ -228,7 +236,13 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
     {
         return;
     }
-    if (bShieldEncounter)
+    ACoopRPGCharacter* Player = ForcedTarget ? ForcedTarget : Target.Get();
+    if (ForcedTarget && !bTauntSelected)
+    {
+        bTauntSelected = true;
+        CoopRPG::Debug::TauntLog::Selected(*this, *ForcedTarget);
+    }
+    if (bShieldEncounter && !ForcedTarget)
     {
         if (ACoopRPGCharacter* InRange = FindTarget(GetAttackRange(), true))
         {
@@ -237,8 +251,8 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
         }
     }
 
-    if (!IsLivePlayer(Player) ||
-        FVector::DistSquared2D(GetActorLocation(), Player->GetActorLocation()) > FMath::Square(DetectionRangeCm))
+    if (!ForcedTarget && (!IsLivePlayer(Player) ||
+        FVector::DistSquared2D(GetActorLocation(), Player->GetActorLocation()) > FMath::Square(DetectionRangeCm)))
     {
         StopChasing();
         Player = FindTarget(DetectionRangeCm);
@@ -276,6 +290,7 @@ void ACoopRPGEnemy::Tick(float DeltaSeconds)
     {
         const float WindupSeconds = bShieldEncounter ? ShieldWindupSeconds : EnemyWindupSeconds;
         bAttackPending = true;
+        AttackTarget = Player;
         NextActionTime = Now + WindupSeconds;
         if (bShieldEncounter)
         {
@@ -319,9 +334,20 @@ void ACoopRPGEnemy::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGEnemy, bDead);
+    DOREPLIFETIME(ACoopRPGEnemy, TauntEndsAt);
     DOREPLIFETIME(ACoopRPGEnemy, bShieldEncounter);
     DOREPLIFETIME(ACoopRPGEnemy, MushroomStrike);
     DOREPLIFETIME(ACoopRPGEnemy, ShieldWarning);
+}
+
+void ACoopRPGEnemy::ApplyTaunt(ACoopRPGCharacter& Caster, double EndsAt)
+{
+    check(HasAuthority());
+    TauntCaster = &Caster;
+    TauntEndsAt = EndsAt;
+    bTauntSelected = false;
+    ForceNetUpdate();
+    CoopRPG::Debug::TauntLog::Applied(*this, Caster, bAttackPending, EndsAt);
 }
 
 bool ACoopRPGEnemy::ShouldPreserveAttackPose() const
@@ -550,6 +576,8 @@ void ACoopRPGEnemy::StopChasing()
 
 void ACoopRPGEnemy::StopCombat()
 {
+    ClearTaunt(bDead ? TEXT("EnemyDead") : TEXT("RoundEnded"));
+    AttackTarget.Reset();
     StopChasing();
     Target.Reset();
     SetShieldWarning(0, ShieldWarning.FacingYaw, 0.0);
@@ -557,6 +585,19 @@ void ACoopRPGEnemy::StopCombat()
     MushroomStrike = {};
     NextActionTime = 0.0;
     bAttackPending = false;
+}
+
+void ACoopRPGEnemy::ClearTaunt(const TCHAR* Reason)
+{
+    if (TauntEndsAt <= 0.0)
+    {
+        return;
+    }
+    TauntCaster.Reset();
+    TauntEndsAt = 0.0;
+    bTauntSelected = false;
+    ForceNetUpdate();
+    CoopRPG::Debug::TauntLog::Ended(*this, Reason);
 }
 
 void ACoopRPGEnemy::ResolveAttack(ACoopRPGCharacter* Player)

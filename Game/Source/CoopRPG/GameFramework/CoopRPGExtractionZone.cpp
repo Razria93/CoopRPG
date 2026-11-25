@@ -1,6 +1,7 @@
 #include "CoopRPGExtractionZone.h"
 
 #include "CoopRPGExpeditionMaps.h"
+#include "CoopRPGGameState.h"
 
 #include "Components/DynamicMeshComponent.h"
 #include "DynamicMesh/DynamicMesh3.h"
@@ -19,7 +20,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGExtractionZone, Log, All);
 namespace
 {
     const FVector ZoneHalfExtent(140.0f, 140.0f, 160.0f);
-    constexpr double SkirmishZoneRadius = 140.0;
+    constexpr double ExpeditionZoneRadius = 140.0;
     constexpr double PortalCountdownScale = 1.35;
     // The texture is padded. Its 100 cm plane is slightly larger than the 280 cm guide.
     constexpr double PortalGlyphPlaneScale = 3.0;
@@ -29,13 +30,13 @@ namespace
     const FName ForestPortalGateTag(TEXT("ForestPortalGate"));
     const FName ForestPortalVisualTag(TEXT("ForestPortalVisual"));
 
-    UStaticMeshComponent* CreatePortalFloorVisual(AActor& Owner, UStaticMesh& Plane, UMaterialInterface& Material,
-        const FVector& Position, double PlaneScale)
+    UStaticMeshComponent* CreatePortalMeshVisual(AActor& Owner, UStaticMesh& Plane, UMaterialInterface& Material,
+        const FVector& Position, const FVector& Scale)
     {
         auto* Visual = NewObject<UStaticMeshComponent>(&Owner, NAME_None, RF_Transient);
         Visual->SetupAttachment(Owner.GetRootComponent());
         Visual->SetAbsolute(false, false, true);
-        Visual->SetRelativeScale3D(FVector(PlaneScale, PlaneScale, 1.0));
+        Visual->SetRelativeScale3D(Scale);
         Visual->SetStaticMesh(&Plane);
         Visual->SetMaterial(0, &Material);
         Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -80,10 +81,10 @@ ACoopRPGExtractionZone::ACoopRPGExtractionZone()
 bool ACoopRPGExtractionZone::ContainsPawn(const APawn& Pawn) const
 {
     const FVector Offset = Pawn.GetActorLocation() - GetActorLocation();
-    if (CoopRPG::Expedition::IsSkirmish(GetWorld()))
+    if (CoopRPG::Expedition::IsSkirmish(GetWorld()) || CoopRPG::Expedition::IsBoss(GetWorld()))
     {
         return FMath::Abs(Offset.Z) <= ZoneHalfExtent.Z
-            && Offset.SizeSquared2D() <= FMath::Square(SkirmishZoneRadius);
+            && Offset.SizeSquared2D() <= FMath::Square(ExpeditionZoneRadius);
     }
     return FBox(-ZoneHalfExtent, ZoneHalfExtent).IsInsideOrOn(Offset);
 }
@@ -105,9 +106,10 @@ void ACoopRPGExtractionZone::SetPresentationColor(const FLinearColor& Color)
     }
 }
 
-void ACoopRPGExtractionZone::PresentSkirmishPortal(bool bActive, bool bCountingDown)
+void ACoopRPGExtractionZone::PresentExpeditionPortal(bool bActive, bool bCountingDown)
 {
-    if (!CoopRPG::Expedition::IsSkirmish(GetWorld()) || GetNetMode() == NM_DedicatedServer || !HasActorBegunPlay())
+    const bool bExpeditionPortal = CoopRPG::Expedition::IsSkirmish(GetWorld()) || CoopRPG::Expedition::IsBoss(GetWorld());
+    if (!bExpeditionPortal || GetNetMode() == NM_DedicatedServer || !HasActorBegunPlay())
     {
         return;
     }
@@ -190,12 +192,13 @@ void ACoopRPGExtractionZone::OpenPortal()
 void ACoopRPGExtractionZone::BeginPlay()
 {
     Super::BeginPlay();
-    if (!CoopRPG::Expedition::IsSkirmish(GetWorld()))
+    const bool bBoss = CoopRPG::Expedition::IsBoss(GetWorld());
+    if (!bBoss && !CoopRPG::Expedition::IsSkirmish(GetWorld()))
     {
         return;
     }
 
-    // The original map hides the zone actor with its old box. Keep only that box hidden in the skirmish.
+    // The map can hide the original zone box. The expedition guide is drawn by separate components.
     SetActorHiddenInGame(false);
     ZoneVisual->SetVisibility(false);
     if (GetNetMode() == NM_DedicatedServer)
@@ -212,8 +215,8 @@ void ACoopRPGExtractionZone::BeginPlay()
     for (int32 Index = 0; Index < Segments; ++Index)
     {
         const FVector Radial = FRotator(0.0, 360.0 * Index / Segments, 0.0).Vector();
-        Vertices.Add(Ring.AppendVertex(Radial * (SkirmishZoneRadius - PortalGuideOutlineWidth)));
-        Vertices.Add(Ring.AppendVertex(Radial * SkirmishZoneRadius));
+        Vertices.Add(Ring.AppendVertex(Radial * (ExpeditionZoneRadius - PortalGuideOutlineWidth)));
+        Vertices.Add(Ring.AppendVertex(Radial * ExpeditionZoneRadius));
     }
     for (int32 Index = 0; Index < Segments; ++Index)
     {
@@ -256,9 +259,25 @@ void ACoopRPGExtractionZone::BeginPlay()
     {
         auto* Glyph = UMaterialInstanceDynamic::Create(GlyphMaterial, this);
         Glyph->SetTextureParameterValue(TEXT("GlyphTexture"), GlyphTexture);
-        CreatePortalFloorVisual(*this, *Plane, *Glyph, PresentationOrigin - FVector(0.0, 0.0, 0.5), PortalGlyphPlaneScale);
+        CreatePortalMeshVisual(*this, *Plane, *Glyph, PresentationOrigin - FVector(0.0, 0.0, 0.5),
+            FVector(PortalGlyphPlaneScale, PortalGlyphPlaneScale, 1.0));
         PortalGlyphMaterial = Glyph;
     }
 
-    PresentSkirmishPortal(false, false);
+    if (bBoss)
+    {
+        auto* PortalMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/ThirdParty/RPGTinyFantasyForest/Mesh/BuildingUtilityDeco/SM_PortalA.SM_PortalA"));
+        if (PortalMesh && PortalMesh->GetMaterial(0))
+        {
+            auto* Visual = CreatePortalMeshVisual(*this, *PortalMesh, *PortalMesh->GetMaterial(0),
+                // Matches the distance from Joint Extraction to SM_PortalA in L_ExpeditionSkirmish.
+                GetActorLocation() + FVector(560.0, 0.0, -6.0), FVector::OneVector);
+            Visual->SetWorldRotation(FRotator(0.0, 90.0, 0.0));
+        }
+    }
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const bool bActive = bBoss || (State && State->IsExtractionUnlocked());
+    PresentExpeditionPortal(bActive, State && bActive && State->IsRoundPlaying()
+        && State->IsExtractionInProgress());
 }

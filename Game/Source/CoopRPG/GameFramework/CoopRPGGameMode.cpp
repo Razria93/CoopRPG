@@ -374,7 +374,7 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
     }
 
     const ACoopRPGExtractionZone* Zone = State->GetExtractionZone();
-    const bool bCanUseZone = IsValid(Zone) && State->GetTeamLootCount() >= 1;
+    const bool bCanUseZone = IsValid(Zone) && State->IsExtractionUnlocked();
     bool bDeath = false;
     int32 PlayersInside = 0;
     uint8 OccupantsA = 0;
@@ -415,8 +415,12 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
     }
     else
     {
-        const bool bBossDefeated = bExpeditionBoss && IsValid(Enemy.Get()) && Enemy->IsDead();
-        State->EvaluateRound(bParticipantDisconnected, bDeath, PlayersInside, bBossDefeated);
+        if (!bParticipantDisconnected && !bDeath && bExpeditionBoss && IsValid(Enemy.Get())
+            && Enemy->IsDead() && State->CanStartBossRewards())
+        {
+            OpenBossRewards(*State);
+        }
+        State->EvaluateRound(bParticipantDisconnected, bDeath, PlayersInside);
         if (State->GetRoundEndReason() == ECoopRPGRoundEndReason::BossDefeated)
         {
             for (const auto& Participant : RoundPlayers)
@@ -496,7 +500,7 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
         {
             if (auto* CoopPlayer = Cast<ACoopRPGPlayerController>(Player))
             {
-                CoopPlayer->RestoreTravelInventory(Arrival.Recovery, Arrival.Sword, Arrival.Stats, Arrival.Supplies,
+                CoopPlayer->RestoreTravelInventory(Arrival.Recovery, Arrival.Sword, Arrival.Stats,
                     Arrival.Slash, Arrival.bExpeditionPowerReward);
                 const TCHAR* Stage = bExpeditionLobby ? TEXT("Lobby")
                     : bExpeditionBoss ? TEXT("Boss") : bExpeditionPuzzle ? TEXT("Puzzle") : TEXT("Skirmish");
@@ -504,11 +508,11 @@ APlayerController* ACoopRPGGameMode::Login(UPlayer* NewPlayer, ENetRole InRemote
                     Stage, SlotIndex + 1, CoopPlayer->GetRecoveryCount());
             }
         }
-        if (const auto* WaitingSupplies = WaitingPlayerSupplies.Find(UniqueId))
+        if (const auto* WaitingSword = WaitingPlayerSwords.Find(UniqueId))
         {
             if (auto* CoopPlayer = Cast<ACoopRPGPlayerController>(Player))
             {
-                CoopPlayer->RestoreWaitingExpeditionSupplies(*WaitingSupplies);
+                CoopPlayer->RestoreSword(*WaitingSword);
             }
         }
         const FString Label = UGameplayStatics::ParseOption(Options, TEXT("CoopValidationLabel"));
@@ -541,9 +545,9 @@ void ACoopRPGGameMode::Logout(AController* Exiting)
     const auto* Player = Cast<ACoopRPGPlayerController>(Exiting);
     const auto* Identity = Player ? Player->GetPlayerState<ACoopRPGPlayerState>() : nullptr;
     if (State && !State->IsRoundPlaying() && !State->HasRoundResult() && Identity && Identity->GetUniqueId().IsValid()
-        && Player->GetExpeditionSupplies().HasSword())
+        && CoopRPG::Expedition::IsExpedition(GetWorld()))
     {
-        WaitingPlayerSupplies.Add(Identity->GetUniqueId(), Player->GetTravelExpeditionSupplies(true));
+        WaitingPlayerSwords.Add(Identity->GetUniqueId(), Player->GetTravelSword(!bExpeditionLobby));
     }
     Super::Logout(Exiting);
     UpdateLootRoundPhase(Exiting);
@@ -566,10 +570,10 @@ void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
                     if (CoopRPG::Expedition::IsExpedition(GetWorld()))
                     {
                         Controller->LoadSessionGold(State->GetRoundId());
+                        Controller->ApplyExpeditionEquipment();
                     }
                     if (bExpeditionLobby)
                     {
-                        Character->SetMeleeWeaponEquipped(Controller->GetTravelSword(true).bEquipped);
                         Controller->LoadPersonalStorage();
                     }
                     else if (CoopRPG::Expedition::IsExpedition(GetWorld()))
@@ -702,17 +706,9 @@ bool ACoopRPGGameMode::ReserveRoundTravelSeats(const ACoopRPGGameState& State, c
             : FCoopRPGSwordSnapshot{};
         const FCoopRPGStatProgress Stats = bCarryInventory ? Player->GetTravelStats(bRetryStage)
             : FCoopRPGStatProgress{};
-        const FCoopRPGExpeditionSupplies CarriedEquipment = bCarryExpeditionState ? Player->GetTravelExpeditionSupplies(bRetryStage)
-            : FCoopRPGExpeditionSupplies{};
         const FCoopRPGSlashProgress Slash = bCarryInventory ? Player->GetTravelSlash(bRetryStage) : FCoopRPGSlashProgress{};
-        Participants.Add({ConnectionId, Carried, Sword, Stats, CarriedEquipment, Slash,
+        Participants.Add({ConnectionId, Carried, Sword, Stats, Slash,
             bCarryExpeditionState && Player->HasExpeditionPowerReward()});
-        if (bReturnToLobby && Player->GetExpeditionSupplies().HasSword())
-        {
-            UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("ExpeditionSuppliesRecovered Round=%s Slot=%d Origin=%s Sword=1 Shield=%d"),
-                *State.GetRoundId().ToString(), Participants.Num(), *Player->GetExpeditionSupplies().OriginRound.ToString(),
-                Player->GetExpeditionSupplies().bHasShield);
-        }
         if (bReturnToLobby || bStartExpedition)
         {
             UE_LOG(LogCoopRPGRoundTravel, Log,
@@ -797,6 +793,42 @@ void ACoopRPGGameMode::FinalizePuzzleReward(ACoopRPGGameState& State, ACoopRPGPl
     UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("PuzzleRewardFinalized Round=%s PlayerId=%d Reward=%s Source=%s At=%.3f"),
         *State.GetRoundId().ToString(), PlayerId, *UEnum::GetValueAsString(Reward),
         bTimedOut ? TEXT("Timeout") : TEXT("Choice"), State.GetServerWorldTimeSeconds());
+}
+
+void ACoopRPGGameMode::OpenBossRewards(ACoopRPGGameState& State)
+{
+    const FVector ChestLocation(1200.0, 0.0, 28.0);
+    // Matches the placed Joint Extraction in L_ExpeditionSkirmish.
+    const FVector PortalLocation(2440.0, 0.0, 6.0);
+    auto* RewardChest = GetWorld()->SpawnActor<ACoopRPGSharedChest>(ChestLocation, FRotator::ZeroRotator);
+    auto* Portal = GetWorld()->SpawnActor<ACoopRPGExtractionZone>(PortalLocation, FRotator::ZeroRotator);
+    if (!IsValid(RewardChest) || !IsValid(Portal))
+    {
+        if (IsValid(RewardChest))
+        {
+            RewardChest->Destroy();
+        }
+        if (IsValid(Portal))
+        {
+            Portal->Destroy();
+        }
+        return;
+    }
+
+    auto* SupplyChest = State.GetSharedChest();
+    RewardChest->SetBossRewardStock();
+    for (const auto& Participant : RoundPlayers)
+    {
+        if (auto* Player = Participant.Get(); IsValid(Player) && Player->GetOpenedChest() == SupplyChest)
+        {
+            Player->CloseOpenedChest(State.GetRoundId(), TEXT("BossRewards"));
+        }
+    }
+    State.StartBossRewards(*RewardChest, *Portal);
+    if (IsValid(SupplyChest))
+    {
+        SupplyChest->Destroy();
+    }
 }
 
 void ACoopRPGGameMode::AdvanceRoundIfReady(ACoopRPGGameState& State, const FString& Destination)
