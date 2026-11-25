@@ -9,6 +9,7 @@
 class ACoopRPGAttackTarget;
 class ACoopRPGEnemy;
 class ACoopRPGGameState;
+class ACoopRPGGoldDrop;
 class ACoopRPGPlayerController;
 
 UCLASS()
@@ -23,6 +24,7 @@ public:
     AActor* GetMeleeTarget() const;
     bool IsSkirmishEncounter() const { return bExpeditionSkirmish; }
     bool IsSkirmishEnemy(const ACoopRPGEnemy* Candidate) const;
+    void SpawnSkirmishGold(const ACoopRPGEnemy& Defeated);
     ACoopRPGEnemy* FindClosestSkirmishEnemy(const FVector& Origin) const;
     const TArray<TObjectPtr<ACoopRPGEnemy>>& GetSkirmishEnemies() const { return SkirmishEnemies; }
     void UpdateLootRoundPhase(const AController* Leaving = nullptr);
@@ -51,6 +53,7 @@ private:
     void FinalizePuzzleReward(ACoopRPGGameState& State, ACoopRPGPlayerController& Player,
         ECoopRPGPuzzleReward Reward, bool bTimedOut);
     void OpenBossRewards(ACoopRPGGameState& State);
+    void TickSkirmishGold(const ACoopRPGGameState& State);
     void AdvanceRoundIfReady(ACoopRPGGameState& State, const FString& Destination);
 
 private:
@@ -68,6 +71,8 @@ private:
     FString LastValidationParticipants;
     TArray<TWeakObjectPtr<ACoopRPGPlayerController>> RoundPlayers;
     TArray<TWeakObjectPtr<ACoopRPGPlayerController>> ResultAcknowledgements;
+    TArray<TWeakObjectPtr<ACoopRPGGoldDrop>> SkirmishGoldDrops;
+    int32 PendingSkirmishGold = 0;
     double NextTravelTime = 0.0;
     bool bTravelAttempted = false;
     bool bParticipantDisconnected = false;

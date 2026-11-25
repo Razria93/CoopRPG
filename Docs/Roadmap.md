@@ -76,7 +76,7 @@
 <a id="boss-reward-extraction"></a>
 ## 3차 MVP 후속 · 흑기사 보상과 공동 탈출
 
-흑기사 처치 후 보상 상자와 마법진을 열고 두 사람이 포탈에 머물렀을 때 원정 결과와 골드를 확정한다. 상자에는 HP·SP 회복 물약을 한 개씩 배치했다. 11/24 전용 서버와 A·B에서 처치 뒤 잔류, 마지막 HP 물약 경합, 포탈 이탈·재진입 뒤 로비 복귀, 실패 후 같은 맵 재도전과 입장 재고 복원을 확인했다. [패키지 검증 근거](Validation/ForestExpedition.md#boss-reward-extraction-verification)
+흑기사 처치 후 보상 상자와 마법진을 열고 두 사람이 포탈에 머물렀을 때 원정 결과와 골드를 확정한다. 처음에는 HP·SP 회복 물약을 한 개씩 배치했다. 현재 보상은 무력·수호 스크롤 각 1장과 하급 방패 1개이며, 공동 탈출 뒤 각자 30골드를 받는다. [현재 보상 검증](Validation/ForestExpedition.md#loot-follow-up-verification) 11/24 전용 서버와 A·B에서 처치 뒤 잔류, 마지막 HP 물약 경합, 포탈 이탈·재진입 뒤 로비 복귀, 실패 후 같은 맵 재도전과 입장 재고 복원을 확인했다. [패키지 검증 근거](Validation/ForestExpedition.md#boss-reward-extraction-verification)
 
 <a id="expedition-follow-up-work"></a>
 ### 누적 통합과 후속 구현 · 2026-11-24
@@ -90,7 +90,8 @@
 | 3 | **물약 표시와 선택 UX** | 파티 카드에 HP·SP별 사용 가능 횟수를 표시하고, 내 단축키가 사용할 물약과 0개 상태를 알 수 있게 한다. 개인 물약 회복량 40은 조정 후보로 둔다. |
 | 4 | **퍼즐 보상 카드 UI와 SP 물약 패시브** | 종류·희귀도·선택 버튼을 적용했다. 직접 선택과 30초 자동 확정은 참가자별로 한 번씩 처리하고, 다음 구간에서 획득한 HP·SP 패시브의 사용 한도를 반영한다. [구현 기록](Development.md#puzzle-card-follow-up) · [시험 범위와 근거](Validation/ForestExpedition.md#puzzle-card-follow-up-verification) |
 | 5 | **로비 NPC와 직업 선택** | 창고·상점은 가방 왼쪽에, 직업 교관은 중앙에 연다. 직업 변경을 준비 상태·기본 장비·파티 배지에 연결했다. 직업 스킬을 2·3번으로 옮길 수 있고 같은 맵 재도전에서 배정을 복원한다. [구현 기록](Development.md#lobby-services-follow-up) · [시험 범위와 근거](Validation/ForestExpedition.md#lobby-services-follow-up-verification) |
-| 6 | **추가 성장 후보** | 기동·집중은 대표 기술을 정한 뒤 연결한다. 가방 16칸 한도는 #32에서, SP 물약 사용 한도 패시브는 #33에서 구현했다. |
+| 6 | **보급 상자·개인 방패·원정 보상** | 첫 전투 전 슬래시와 도발 캡슐을 한 개씩 확보할 수 있다. 개인 방패는 최초 장착 시 귀속되고 해제하면 기본 방패로 돌아간다. 버섯 금화는 팀원 각각 1골드를 더하며 버섯 군락 성공에서 확정한다. [구현 기록](Development.md#loot-follow-up) · [검증 근거](Validation/ForestExpedition.md#loot-follow-up-verification) |
+| 7 | **추가 성장 후보** | 기동·집중은 대표 기술을 정한 뒤 연결한다. 가방 16칸 한도는 #32에서, SP 물약 사용 한도 패시브는 #33에서 구현했다. |
 
 <a id="phase2-current"></a>
 ## 2차 MVP 현행 작업 · 2026-11-18

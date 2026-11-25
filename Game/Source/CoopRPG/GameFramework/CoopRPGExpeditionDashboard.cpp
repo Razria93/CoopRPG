@@ -25,7 +25,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGExpeditionHUD, Log, All);
 
 enum class ECoopRPGDashboardLabel : uint8
 {
-    Lobby, Skirmish, Puzzle, Boss, Expedition, Ready, OpenChest, ChestActions, Mushrooms, Plates, Knight,
+    Lobby, Skirmish, Puzzle, Boss, Expedition, Ready, PrepareSkills, OpenChest, ChestActions, Mushrooms, Plates, Knight,
     Stone, Portal, WaitForPartner, Countdown, Start, Defeat, StoneGranted, CountStarted, CountReset,
     More, Fold, ReadyYes, ReadyWait, ReadyMissing, Objective, StoneAppeared, CloseChest, Departure, EquipSword,
     BossRewards, BossRewardsOpened, PartyWaiting, StageStart
@@ -58,7 +58,7 @@ namespace
             {
                 return ELabel::StageStart;
             }
-            return Controller.IsRoundReady() ? ELabel::PartyWaiting : ELabel::Ready;
+            return Controller.IsRoundReady() ? ELabel::PartyWaiting : Stage == 1 ? ELabel::PrepareSkills : ELabel::Ready;
         }
         if (Stage == 2)
         {
@@ -133,6 +133,8 @@ namespace
         {
         case ELabel::Ready:
             return {TEXT("시작할 준비가 되면 [R] 키를 눌러 주세요.")};
+        case ELabel::PrepareSkills:
+            return {TEXT("보급 상자는 [E]로 열어요."), TEXT("준비를 마치면 [R] 키를 눌러 주세요.")};
         case ELabel::PartyWaiting:
             return {TEXT("준비가 완료됐어요."), TEXT("파티원이 준비할 때까지 기다려 주세요.")};
         case ELabel::Departure:

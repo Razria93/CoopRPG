@@ -342,6 +342,50 @@ void ACoopRPGPlayerController::AwardBossGold(FGuid RoundId)
     }
 }
 
+void ACoopRPGPlayerController::PreviewSkirmishGold(FGuid RoundId, FGuid DropId, int32 PendingGold)
+{
+    const auto* Identity = GetPlayerState<APlayerState>();
+    if (!HasAuthority() || !Identity || !Identity->GetUniqueId().IsValid())
+    {
+        return;
+    }
+
+    const auto* Economy = GetGameInstance()->GetSubsystem<UCoopRPGSessionEconomy>();
+    const int32 Balance = Economy->GetGold(Identity->GetUniqueId());
+    const int32 PreviousGold = SessionGold;
+    SessionGold = Balance + FMath::Min(PendingGold, MAX_int32 - Balance);
+    ForceNetUpdate();
+    if (APawn* CurrentHero = GetPawn(); CurrentHero && SessionGold > PreviousGold)
+    {
+        ClientGameplayFeedback({ECoopRPGFeedbackKind::GoldAcquired, CurrentHero, static_cast<float>(SessionGold - PreviousGold)});
+    }
+    UE_LOG(LogCoopRPGShop, Log, TEXT("SkirmishGoldPreview Round=%s DropId=%s Gold=%d->%d Pending=%d %s"),
+        *RoundId.ToString(), *DropId.ToString(), PreviousGold, SessionGold, PendingGold,
+        *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::SettleSkirmishGold(FGuid RoundId, int32 PendingGold, bool bCommit)
+{
+    const auto* Identity = GetPlayerState<APlayerState>();
+    if (!HasAuthority() || !Identity || !Identity->GetUniqueId().IsValid())
+    {
+        return;
+    }
+
+    auto* Economy = GetGameInstance()->GetSubsystem<UCoopRPGSessionEconomy>();
+    const FUniqueNetIdRepl& OwnerId = Identity->GetUniqueId();
+    const int32 PreviousBalance = Economy->GetGold(OwnerId);
+    if (bCommit)
+    {
+        Economy->TryChangeGold(OwnerId, FMath::Min(PendingGold, MAX_int32 - PreviousBalance));
+    }
+    SessionGold = Economy->GetGold(OwnerId);
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGShop, Log, TEXT("SkirmishGoldSettled Round=%s Outcome=%s Gold=%d->%d Pending=%d %s"),
+        *RoundId.ToString(), bCommit ? TEXT("Committed") : TEXT("Discarded"), PreviousBalance, SessionGold, PendingGold,
+        *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
 void ACoopRPGPlayerController::RequestShopTrade(ECoopRPGStorageItem Item, bool bBuy, int32 Quantity)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -564,7 +608,7 @@ bool ACoopRPGPlayerController::HasSkillCapsule(ECoopRPGActiveSkill Skill) const
 bool ACoopRPGPlayerController::HasLearnedSkill(ECoopRPGActiveSkill Skill) const
 {
     return Skill == ECoopRPGActiveSkill::Slash ? SkillProgress.Slash.bRegistered
-        : Skill == ECoopRPGActiveSkill::Taunt && IsJobEligibleForSkill(Skill);
+        : Skill == ECoopRPGActiveSkill::Taunt && SkillProgress.Taunt.bRegistered;
 }
 
 bool ACoopRPGPlayerController::CanLearnSkill(ECoopRPGActiveSkill Skill) const
@@ -838,7 +882,9 @@ void ACoopRPGPlayerController::RequestChestItem(ECoopRPGChestItem Item)
             : Item == ECoopRPGChestItem::StaminaRecovery ? TEXT("ChestStaminaRequested")
             : Item == ECoopRPGChestItem::MartialPowerScroll ? TEXT("ChestMartialPowerScrollRequested")
             : Item == ECoopRPGChestItem::ProtectionScroll ? TEXT("ChestProtectionScrollRequested")
-            : Item == ECoopRPGChestItem::SlashCapsule ? TEXT("ChestSlashCapsuleRequested") : TEXT("ChestTakeRequested");
+            : Item == ECoopRPGChestItem::SlashCapsule ? TEXT("ChestSlashCapsuleRequested")
+            : Item == ECoopRPGChestItem::TauntCapsule ? TEXT("ChestTauntCapsuleRequested")
+            : Item == ECoopRPGChestItem::PersonalShield ? TEXT("ChestPersonalShieldRequested") : TEXT("ChestTakeRequested");
         UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Chest=%s Round=%s Request=%u %s"),
             Event, *GetNameSafe(OpenedChest), *State->GetRoundId().ToString(), NextPickupRequest,
             *CoopRPG::Debug::DescribeLogContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
@@ -909,14 +955,17 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
     uint32 Request, ECoopRPGChestItem Item)
 {
     const bool bTakingWeapon = Item == ECoopRPGChestItem::MeleeWeapon;
+    const bool bTakingShield = Item == ECoopRPGChestItem::PersonalShield;
     const bool bTakingStamina = Item == ECoopRPGChestItem::StaminaRecovery;
-    const bool bTakingCapsule = Item == ECoopRPGChestItem::SlashCapsule;
+    const bool bTakingTaunt = Item == ECoopRPGChestItem::TauntCapsule;
+    const bool bTakingCapsule = Item == ECoopRPGChestItem::SlashCapsule || bTakingTaunt;
     const bool bTakingProtection = Item == ECoopRPGChestItem::ProtectionScroll;
     const bool bTakingScroll = Item == ECoopRPGChestItem::MartialPowerScroll || bTakingProtection;
-    const TCHAR* Action = bTakingWeapon ? TEXT("TakeWeapon") : bTakingStamina ? TEXT("TakeStamina")
+    const TCHAR* Action = bTakingWeapon ? TEXT("TakeWeapon") : bTakingShield ? TEXT("TakePersonalShield")
+        : bTakingStamina ? TEXT("TakeStamina")
         : bTakingProtection ? TEXT("TakeProtectionScroll") : bTakingScroll ? TEXT("TakeMartialPowerScroll")
-        : bTakingCapsule ? TEXT("TakeSlashCapsule") : TEXT("Take");
-    if (!bTakingWeapon && Item != ECoopRPGChestItem::Recovery && !bTakingStamina && !bTakingScroll && !bTakingCapsule)
+        : bTakingTaunt ? TEXT("TakeTauntCapsule") : bTakingCapsule ? TEXT("TakeSlashCapsule") : TEXT("Take");
+    if (!bTakingWeapon && !bTakingShield && Item != ECoopRPGChestItem::Recovery && !bTakingStamina && !bTakingScroll && !bTakingCapsule)
     {
         LogChestRejection(Action, TEXT("InvalidItem"), Chest, RoundId, Request);
         return;
@@ -992,39 +1041,73 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
         return;
     }
 
-    if (bTakingCapsule)
+    if (bTakingShield)
     {
-        if (RejectFullBag(ECoopRPGStorageItem::SlashCapsule))
+        if (StageInventoryRound != RoundId || !CoopRPG::Expedition::IsExpedition(GetWorld()))
+        {
+            LogChestRejection(Action, TEXT("ShieldUnavailable"), Chest, RoundId, Request);
+            return;
+        }
+        if (Shield.Ownership != ECoopRPGEquipmentOwnership::None)
+        {
+            LogChestRejection(Action, TEXT("AlreadyOwned"), Chest, RoundId, Request);
+            return;
+        }
+        if (RejectFullBag(ECoopRPGStorageItem::UnboundShield))
         {
             return;
         }
+        const int32 StockBefore = Chest->GetPersonalShieldStock();
+        if (!Chest->TryTakePersonalShield())
+        {
+            LogChestRejection(Action, TEXT("Depleted"), Chest, RoundId, Request);
+            return;
+        }
+        Shield.Ownership = ECoopRPGEquipmentOwnership::Unbound;
+        ForceNetUpdate();
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestPersonalShieldGranted Round=%s Stock=%d->%d Bound=0 Equipped=0 %s"),
+            *RoundId.ToString(), StockBefore, Chest->GetPersonalShieldStock(),
+            *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        return;
+    }
+
+    if (bTakingCapsule)
+    {
         if (StageInventoryRound != RoundId || !CoopRPG::Expedition::IsSkirmish(GetWorld()))
         {
             LogChestRejection(Action, TEXT("CapsuleUnavailable"), Chest, RoundId, Request);
             return;
         }
-        if (HasSlashCapsule() || HasSlashRegistered())
+        auto& Progress = bTakingTaunt ? SkillProgress.Taunt : SkillProgress.Slash;
+        if (Progress.bHasCapsule)
         {
             LogChestRejection(Action, TEXT("AlreadyOwned"), Chest, RoundId, Request);
             return;
         }
-        const int32 StockBefore = Chest->GetSlashCapsuleStock();
-        if (!Chest->TryTakeSlashCapsule())
+        if (RejectFullBag(bTakingTaunt ? ECoopRPGStorageItem::TauntCapsule : ECoopRPGStorageItem::SlashCapsule))
+        {
+            return;
+        }
+        const int32 StockBefore = bTakingTaunt ? Chest->GetTauntCapsuleStock() : Chest->GetSlashCapsuleStock();
+        if (!(bTakingTaunt ? Chest->TryTakeTauntCapsule() : Chest->TryTakeSlashCapsule()))
         {
             LogChestRejection(Action, TEXT("Depleted"), Chest, RoundId, Request);
             return;
         }
-        SkillProgress.Slash.bHasCapsule = true;
+        Progress.bHasCapsule = true;
         ForceNetUpdate();
-        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestSlashCapsuleGranted Round=%s Stock=%d->%d %s"),
-            *RoundId.ToString(), StockBefore, Chest->GetSlashCapsuleStock(),
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Round=%s Stock=%d->%d %s"),
+            bTakingTaunt ? TEXT("ChestTauntCapsuleGranted") : TEXT("ChestSlashCapsuleGranted"), *RoundId.ToString(),
+            StockBefore, bTakingTaunt ? Chest->GetTauntCapsuleStock() : Chest->GetSlashCapsuleStock(),
             *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         return;
     }
 
     if (bTakingScroll)
     {
-        if (StageInventoryRound != RoundId || !CoopRPG::Expedition::IsSkirmish(GetWorld()))
+        const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+        const bool bUpgradeChest = CoopRPG::Expedition::IsSkirmish(GetWorld()) || (State && State->AreBossRewardsAvailable());
+        if (StageInventoryRound != RoundId || !bUpgradeChest)
         {
             LogChestRejection(Action, TEXT("ScrollUnavailable"), Chest, RoundId, Request);
             return;
@@ -1040,7 +1123,6 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
             LogChestRejection(Action, TEXT("Depleted"), Chest, RoundId, Request);
             return;
         }
-
         auto& Progress = bTakingProtection ? StatProgress.Protection : StatProgress.MartialPower;
         ++Progress.ScrollCount;
         ForceNetUpdate();
@@ -1693,7 +1775,8 @@ const TCHAR* ACoopRPGPlayerController::GetChestRejection(const ACoopRPGSharedChe
     {
         return TEXT("WrongRound");
     }
-    if (!State->IsRoundPlaying())
+    const bool bSupplyPreparation = CoopRPG::Expedition::IsSkirmish(GetWorld()) && !State->HasRoundResult();
+    if (!State->IsRoundPlaying() && !bSupplyPreparation)
     {
         return TEXT("NotPlaying");
     }

@@ -5,6 +5,8 @@
 #include "CoopRPG/Character/CoopRPGCharacter.h"
 #include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
+#include "CoopRPG/Debug/CoopRPGLogContext.h"
+#include "CoopRPG/Loot/CoopRPGGoldDrop.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 #include "CoopRPGExtractionZone.h"
 #include "CoopRPGExpeditionMaps.h"
@@ -20,11 +22,14 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/CommandLine.h"
 #include "Misc/PackageName.h"
+#include "Misc/Parse.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundTravel, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGRoundAdmission, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGValidationRoster, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGSkirmishGold, Log, All);
 
 namespace
 {
@@ -100,6 +105,42 @@ bool ACoopRPGGameMode::IsSkirmishEnemy(const ACoopRPGEnemy* Candidate) const
 {
     return bExpeditionSkirmish && Candidate && SkirmishEnemies.ContainsByPredicate(
         [Candidate](const ACoopRPGEnemy* Registered) { return Registered == Candidate; });
+}
+
+void ACoopRPGGameMode::SpawnSkirmishGold(const ACoopRPGEnemy& Defeated)
+{
+    const auto* State = GetGameState<ACoopRPGGameState>();
+    if (!bExpeditionSkirmish || !State || !State->IsRoundPlaying())
+    {
+        return;
+    }
+
+    const FVector Feet = Defeated.GetActorLocation()
+        - FVector(0.0, 0.0, Defeated.GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+    FVector Landing = Feet;
+    const FCollisionObjectQueryParams Geometry(ECC_WorldStatic);
+    const FCollisionQueryParams Query(SCENE_QUERY_STAT(SkirmishGoldLanding), false, &Defeated);
+    // The standard potion and stone landing search starts on the opposite side.
+    for (const double Offset : {85.0, 55.0, 0.0})
+    {
+        const FVector Near = Feet + Defeated.GetActorRightVector() * Offset;
+        FHitResult Ground;
+        if (GetWorld()->LineTraceSingleByObjectType(Ground, Near + FVector(0.0, 0.0, 50.0),
+            Near - FVector(0.0, 0.0, 85.0), Geometry, Query) && Ground.ImpactNormal.Z >= 0.7)
+        {
+            Landing = Ground.ImpactPoint;
+            break;
+        }
+    }
+
+    FActorSpawnParameters Params;
+    Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    if (auto* Drop = GetWorld()->SpawnActor<ACoopRPGGoldDrop>(Landing, FRotator::ZeroRotator, Params))
+    {
+        SkirmishGoldDrops.Add(Drop);
+        UE_LOG(LogCoopRPGSkirmishGold, Log, TEXT("SkirmishGoldSpawned Round=%s DropId=%s Enemy=%s X=%.1f Y=%.1f Z=%.1f"),
+            *State->GetRoundId().ToString(), *Drop->GetDropId().ToString(), *Defeated.GetName(), Landing.X, Landing.Y, Landing.Z);
+    }
 }
 
 ACoopRPGEnemy* ACoopRPGGameMode::FindClosestSkirmishEnemy(const FVector& Origin) const
@@ -348,6 +389,10 @@ void ACoopRPGGameMode::BeginPlay()
             && (bExpeditionBoss ? !Zone && Enemy->IsBlackKnight() : IsValid(Zone)),
             TEXT("Round map %s has missing or incompatible round actors."), *MapName))
         {
+            if (bExpeditionSkirmish)
+            {
+                Chest->SetPersonalShieldStock(1);
+            }
             State->InitializeLootRound(Chest, Zone);
             InitializeTravelRound(*State);
             const TCHAR* Event = MapName == ForestMapName ? TEXT("ForestStageReady") : TEXT("RoundStageReady");
@@ -464,6 +509,10 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
             OpenBossRewards(*State);
         }
         State->EvaluateRound(bParticipantDisconnected, bDeath, PlayersInside);
+        if (bExpeditionSkirmish)
+        {
+            TickSkirmishGold(*State);
+        }
         if (State->GetRoundEndReason() == ECoopRPGRoundEndReason::BossDefeated)
         {
             for (const auto& Participant : RoundPlayers)
@@ -889,6 +938,87 @@ void ACoopRPGGameMode::OpenBossRewards(ACoopRPGGameState& State)
     if (IsValid(SupplyChest))
     {
         SupplyChest->Destroy();
+    }
+}
+
+void ACoopRPGGameMode::TickSkirmishGold(const ACoopRPGGameState& State)
+{
+    const FGuid RoundId = State.GetRoundId();
+    if (State.HasRoundResult())
+    {
+        if (PendingSkirmishGold > 0)
+        {
+            const bool bCommit = State.GetRoundEndReason() == ECoopRPGRoundEndReason::Extracted;
+            for (const auto& Participant : RoundPlayers)
+            {
+                if (auto* Player = Participant.Get())
+                {
+                    Player->SettleSkirmishGold(RoundId, PendingSkirmishGold, bCommit);
+                }
+            }
+            PendingSkirmishGold = 0;
+        }
+        for (const auto& Entry : SkirmishGoldDrops)
+        {
+            if (auto* Drop = Entry.Get())
+            {
+                Drop->Destroy();
+            }
+        }
+        SkirmishGoldDrops.Reset();
+        return;
+    }
+
+    if (RoundPlayers.Num() != RoundCapacity)
+    {
+        return;
+    }
+    for (int32 Index = SkirmishGoldDrops.Num() - 1; Index >= 0; --Index)
+    {
+        auto* Drop = SkirmishGoldDrops[Index].Get();
+        if (!IsValid(Drop))
+        {
+            SkirmishGoldDrops.RemoveAtSwap(Index);
+            continue;
+        }
+        if (!Drop->IsSettled())
+        {
+            continue;
+        }
+
+        const ACoopRPGCharacter* Collector = nullptr;
+        int32 InRange = 0;
+        for (const auto& Participant : RoundPlayers)
+        {
+            const auto* Player = Participant.Get();
+            const auto* Hero = Player ? Cast<ACoopRPGCharacter>(Player->GetPawn()) : nullptr;
+            if (Hero && Drop->IsInPickupRange(*Hero))
+            {
+                ++InRange;
+                if (!Collector)
+                {
+                    Collector = Hero;
+                }
+            }
+        }
+        if (!Collector)
+        {
+            continue;
+        }
+
+        const FGuid DropId = Drop->GetDropId();
+        SkirmishGoldDrops.RemoveAtSwap(Index);
+        Drop->Destroy();
+        ++PendingSkirmishGold;
+        UE_LOG(LogCoopRPGSkirmishGold, Log, TEXT("SkirmishGoldPickedUp Round=%s DropId=%s CollectorSlot=%d InRange=%d Recipients=%d Pending=%d"),
+            *RoundId.ToString(), *DropId.ToString(), Collector->GetDisplaySlot(), InRange, RoundPlayers.Num(), PendingSkirmishGold);
+        for (const auto& Participant : RoundPlayers)
+        {
+            if (auto* Player = Participant.Get())
+            {
+                Player->PreviewSkirmishGold(RoundId, DropId, PendingSkirmishGold);
+            }
+        }
     }
 }
 

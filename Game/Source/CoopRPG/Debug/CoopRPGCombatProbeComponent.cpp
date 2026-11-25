@@ -13,6 +13,7 @@
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 #include "CoopRPG/GameFramework/CoopRPGPlayerController.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
+#include "CoopRPG/Loot/CoopRPGGoldDrop.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
 
 #include "AbilitySystemComponent.h"
@@ -493,6 +494,31 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
 {
     if (!IsProbeEnabled(GetWorld()))
     {
+        return;
+    }
+    if (Layout == TEXT("goldPair"))
+    {
+        const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+        TActorIterator<ACoopRPGGoldDrop> Drop(GetWorld());
+        const auto* Requester = Cast<ACoopRPGCharacter>(GetOwner());
+        if (State && State->IsRoundPlaying() && Drop && Requester)
+        {
+            const FVector Landing = Drop->GetActorLocation();
+            for (TActorIterator<ACoopRPGCharacter> It(GetWorld()); It; ++It)
+            {
+                const int32 Slot = It->GetDisplaySlot();
+                if (Slot == 1 || Slot == 2)
+                {
+                    const FVector Position = Landing + FVector(Slot == 1 ? -47.0 : 47.0, 0.0,
+                        It->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 0.15);
+                    It->GetCharacterMovement()->StopMovementImmediately();
+                    It->TeleportTo(Position, It->GetActorRotation(), false, true);
+                    It->ForceNetUpdate();
+                }
+            }
+            UE_LOG(LogCoopRPGCombatProbe, Log, TEXT("MeleeTestLayout Layout=%s Player=%d DropId=%s"),
+                *Layout.ToString(), Requester->GetDisplaySlot(), *Drop->GetDropId().ToString());
+        }
         return;
     }
     const FString LayoutName = Layout.ToString();

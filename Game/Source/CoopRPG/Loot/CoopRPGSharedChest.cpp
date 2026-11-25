@@ -140,12 +140,14 @@ void ACoopRPGSharedChest::SetPersonalShieldStock(int32 Stock)
 void ACoopRPGSharedChest::SetBossRewardStock()
 {
     check(HasAuthority());
-    RecoveryStock = 1;
-    StaminaRecoveryStock = 1;
+    RecoveryStock = 0;
+    StaminaRecoveryStock = 0;
     WeaponStock = 0;
-    MartialPowerScrollStock = 0;
-    ProtectionScrollStock = 0;
+    MartialPowerScrollStock = 1;
+    ProtectionScrollStock = 1;
     SlashCapsuleStock = 0;
+    TauntCapsuleStock = 0;
+    PersonalShieldStock = 1;
     ForceNetUpdate();
 }
 
