@@ -1,10 +1,5 @@
 #include "CoopRPGExpeditionDashboard.h"
 
-#include "CanvasItem.h"
-#include "Engine/Canvas.h"
-#include "Misc/CommandLine.h"
-#include "Misc/Parse.h"
-
 #include "CoopRPGExpeditionAttackHUD.h"
 #include "CoopRPGExpeditionHUDText.h"
 #include "CoopRPGExpeditionMaps.h"
@@ -14,11 +9,16 @@
 #include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
+
+#include "CanvasItem.h"
+#include "Engine/Canvas.h"
 #include "Engine/Texture2D.h"
 #include "EngineUtils.h"
 #include "GameFramework/HUD.h"
 #include "ImageUtils.h"
 #include "InputKeyEventArgs.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGExpeditionHUD, Log, All);

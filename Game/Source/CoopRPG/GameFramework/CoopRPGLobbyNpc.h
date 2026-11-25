@@ -34,6 +34,7 @@ private:
     UFUNCTION()
     void OnRep_Service();
 
+private:
     UPROPERTY()
     TObjectPtr<USkeletalMeshComponent> Mesh;
 

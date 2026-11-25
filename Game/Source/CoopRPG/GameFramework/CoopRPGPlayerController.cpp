@@ -513,28 +513,6 @@ void ACoopRPGPlayerController::TakePersonalShield()
     RequestChestItem(ECoopRPGChestItem::PersonalShield);
 }
 
-bool ACoopRPGPlayerController::HasSkillCapsule(ECoopRPGActiveSkill Skill) const
-{
-    return Skill == ECoopRPGActiveSkill::Slash ? SkillProgress.Slash.bHasCapsule
-        : Skill == ECoopRPGActiveSkill::Taunt && SkillProgress.Taunt.bHasCapsule;
-}
-
-bool ACoopRPGPlayerController::HasLearnedSkill(ECoopRPGActiveSkill Skill) const
-{
-    return Skill == ECoopRPGActiveSkill::Slash ? SkillProgress.Slash.bRegistered
-        : Skill == ECoopRPGActiveSkill::Taunt && IsJobEligibleForSkill(Skill);
-}
-
-void ACoopRPGPlayerController::TakeSkillCapsule(ECoopRPGActiveSkill Skill)
-{
-    switch (Skill)
-    {
-    case ECoopRPGActiveSkill::Slash: RequestChestItem(ECoopRPGChestItem::SlashCapsule); break;
-    case ECoopRPGActiveSkill::Taunt: RequestChestItem(ECoopRPGChestItem::TauntCapsule); break;
-    default: break;
-    }
-}
-
 void ACoopRPGPlayerController::CloseOpenedChest(FGuid RoundId, const TCHAR* Reason)
 {
     const ACoopRPGSharedChest* Chest = OpenedChest.Get();
@@ -558,6 +536,16 @@ void ACoopRPGPlayerController::TakeStatScroll(ECoopRPGScrollStat Stat)
     RequestChestItem(Stat == ECoopRPGScrollStat::Protection ? ECoopRPGChestItem::ProtectionScroll : ECoopRPGChestItem::MartialPowerScroll);
 }
 
+void ACoopRPGPlayerController::TakeSkillCapsule(ECoopRPGActiveSkill Skill)
+{
+    switch (Skill)
+    {
+    case ECoopRPGActiveSkill::Slash: RequestChestItem(ECoopRPGChestItem::SlashCapsule); break;
+    case ECoopRPGActiveSkill::Taunt: RequestChestItem(ECoopRPGChestItem::TauntCapsule); break;
+    default: break;
+    }
+}
+
 void ACoopRPGPlayerController::RequestUseSkillCapsule(ECoopRPGActiveSkill Skill)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -565,6 +553,18 @@ void ACoopRPGPlayerController::RequestUseSkillCapsule(ECoopRPGActiveSkill Skill)
     {
         ServerUseSkillCapsule(State->GetRoundId(), Skill);
     }
+}
+
+bool ACoopRPGPlayerController::HasSkillCapsule(ECoopRPGActiveSkill Skill) const
+{
+    return Skill == ECoopRPGActiveSkill::Slash ? SkillProgress.Slash.bHasCapsule
+        : Skill == ECoopRPGActiveSkill::Taunt && SkillProgress.Taunt.bHasCapsule;
+}
+
+bool ACoopRPGPlayerController::HasLearnedSkill(ECoopRPGActiveSkill Skill) const
+{
+    return Skill == ECoopRPGActiveSkill::Slash ? SkillProgress.Slash.bRegistered
+        : Skill == ECoopRPGActiveSkill::Taunt && IsJobEligibleForSkill(Skill);
 }
 
 bool ACoopRPGPlayerController::CanLearnSkill(ECoopRPGActiveSkill Skill) const

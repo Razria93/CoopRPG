@@ -591,6 +591,15 @@ void ACoopRPGGameMode::Logout(AController* Exiting)
             ValidationClientLabels[Index].Reset();
         }
     }
+    const auto* Player = Cast<ACoopRPGPlayerController>(Exiting);
+    const auto* Identity = Player ? Player->GetPlayerState<ACoopRPGPlayerState>() : nullptr;
+    if (GetNetMode() == NM_DedicatedServer && State && !State->IsRoundPlaying() && !State->HasRoundResult()
+        && Identity && Identity->GetUniqueId().IsValid() && CoopRPG::Expedition::IsExpedition(GetWorld()))
+    {
+        const FGuid RoundId = State->GetRoundId();
+        GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->SaveParticipant(RoundId, Identity->GetUniqueId(),
+            {Player->GetTravelInventory(false), Identity->GetSelectedHero(), Player->GetStageEntryInventory(RoundId)});
+    }
     Super::Logout(Exiting);
     UpdateLootRoundPhase(Exiting);
 }
