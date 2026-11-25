@@ -310,15 +310,6 @@ void ACoopRPGPlayerController::InitializeStageInventory(FGuid RoundId)
         *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
-void ACoopRPGPlayerController::RefreshPotionCapacityBonus()
-{
-    check(HasAuthority());
-    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
-    const auto* Identity = GetPlayerState<APlayerState>();
-    PotionCapacityBonus = Mode && Identity ? Mode->GetPotionCapacityBonus(Identity->GetUniqueId()) : FIntPoint::ZeroValue;
-    ForceNetUpdate();
-}
-
 void ACoopRPGPlayerController::LoadSessionGold(FGuid RoundId)
 {
     const auto* Identity = GetPlayerState<APlayerState>();
@@ -379,6 +370,22 @@ void ACoopRPGPlayerController::LoadPersonalStorage()
     }
 }
 
+void ACoopRPGPlayerController::CloseLobbyService()
+{
+    if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>(); State && OpenedLobbyNpc)
+    {
+        ServerSetLobbyNpc(State->GetRoundId(), nullptr);
+    }
+}
+
+void ACoopRPGPlayerController::RequestLobbyJob(ECoopRPGHero Hero)
+{
+    if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>(); State && OpenedLobbyNpc)
+    {
+        ServerSelectLobbyJob(State->GetRoundId(), Hero);
+    }
+}
+
 int32 ACoopRPGPlayerController::GetStorageBagCount(ECoopRPGStorageItem Item) const
 {
     switch (Item)
@@ -421,6 +428,15 @@ void ACoopRPGPlayerController::RequestStorageTransfer(ECoopRPGStorageItem Item, 
     {
         ServerTransferStorage(State->GetRoundId(), Item, bPersonal, bDeposit);
     }
+}
+
+void ACoopRPGPlayerController::RefreshPotionCapacityBonus()
+{
+    check(HasAuthority());
+    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+    const auto* Identity = GetPlayerState<APlayerState>();
+    PotionCapacityBonus = Mode && Identity ? Mode->GetPotionCapacityBonus(Identity->GetUniqueId()) : FIntPoint::ZeroValue;
+    ForceNetUpdate();
 }
 
 bool ACoopRPGPlayerController::IsRecoveryRegistered(bool bStamina) const
@@ -492,23 +508,21 @@ void ACoopRPGPlayerController::TakeMeleeWeapon()
     RequestChestItem(ECoopRPGChestItem::MeleeWeapon);
 }
 
-void ACoopRPGPlayerController::RequestRecoveryRegistration(bool bStamina, bool bRegistered)
-{
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    if (IsLocalController() && State && State->GetRoundId().IsValid())
-    {
-        ServerSetRecoveryRegistration(State->GetRoundId(), bStamina, bRegistered);
-    }
-}
-
 void ACoopRPGPlayerController::TakePersonalShield()
 {
     RequestChestItem(ECoopRPGChestItem::PersonalShield);
 }
 
-void ACoopRPGPlayerController::TakeStatScroll(ECoopRPGScrollStat Stat)
+bool ACoopRPGPlayerController::HasSkillCapsule(ECoopRPGActiveSkill Skill) const
 {
-    RequestChestItem(Stat == ECoopRPGScrollStat::Protection ? ECoopRPGChestItem::ProtectionScroll : ECoopRPGChestItem::MartialPowerScroll);
+    return Skill == ECoopRPGActiveSkill::Slash ? SkillProgress.Slash.bHasCapsule
+        : Skill == ECoopRPGActiveSkill::Taunt && SkillProgress.Taunt.bHasCapsule;
+}
+
+bool ACoopRPGPlayerController::HasLearnedSkill(ECoopRPGActiveSkill Skill) const
+{
+    return Skill == ECoopRPGActiveSkill::Slash ? SkillProgress.Slash.bRegistered
+        : Skill == ECoopRPGActiveSkill::Taunt && IsJobEligibleForSkill(Skill);
 }
 
 void ACoopRPGPlayerController::TakeSkillCapsule(ECoopRPGActiveSkill Skill)
@@ -521,12 +535,91 @@ void ACoopRPGPlayerController::TakeSkillCapsule(ECoopRPGActiveSkill Skill)
     }
 }
 
+void ACoopRPGPlayerController::CloseOpenedChest(FGuid RoundId, const TCHAR* Reason)
+{
+    const ACoopRPGSharedChest* Chest = OpenedChest.Get();
+    OpenedChest = nullptr;
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestClosed Chest=%s Round=%s Reason=%s %s"), *GetNameSafe(Chest),
+        *RoundId.ToString(), Reason, *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::RequestRecoveryRegistration(bool bStamina, bool bRegistered)
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (IsLocalController() && State && State->GetRoundId().IsValid())
+    {
+        ServerSetRecoveryRegistration(State->GetRoundId(), bStamina, bRegistered);
+    }
+}
+
+void ACoopRPGPlayerController::TakeStatScroll(ECoopRPGScrollStat Stat)
+{
+    RequestChestItem(Stat == ECoopRPGScrollStat::Protection ? ECoopRPGChestItem::ProtectionScroll : ECoopRPGChestItem::MartialPowerScroll);
+}
+
 void ACoopRPGPlayerController::RequestUseSkillCapsule(ECoopRPGActiveSkill Skill)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
     if (IsLocalController() && State && State->GetRoundId().IsValid() && CanLearnSkill(Skill))
     {
         ServerUseSkillCapsule(State->GetRoundId(), Skill);
+    }
+}
+
+bool ACoopRPGPlayerController::CanLearnSkill(ECoopRPGActiveSkill Skill) const
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const auto* Hero = Cast<ACoopRPGCharacter>(GetPawn());
+    return State && Hero && Hero->GetHealth() > 0.0f && IsJobEligibleForSkill(Skill)
+        && HasSkillCapsule(Skill) && !HasLearnedSkill(Skill) && !State->HasRoundResult()
+        && (CoopRPG::Expedition::IsLobby(GetWorld()) ? !State->IsLobbyDepartureScheduled()
+            : State->IsRoundPlaying() || CoopRPG::Expedition::IsSkirmish(GetWorld()));
+}
+
+bool ACoopRPGPlayerController::IsJobEligibleForSkill(ECoopRPGActiveSkill Skill) const
+{
+    const auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
+    const auto Job = Identity ? Identity->GetSelectedHero() : ECoopRPGHero::Unassigned;
+    return (Skill == ECoopRPGActiveSkill::Slash && Job == ECoopRPGHero::Adventurer)
+        || (Skill == ECoopRPGActiveSkill::Taunt && Job == ECoopRPGHero::AnimalHero);
+}
+
+uint8 ACoopRPGPlayerController::GetActiveSkillSlot(ECoopRPGActiveSkill Skill) const
+{
+    if (!IsJobEligibleForSkill(Skill) || !HasLearnedSkill(Skill))
+    {
+        return 0;
+    }
+    return Skill == ECoopRPGActiveSkill::Slash ? ActiveSkillSlots.Slash : ActiveSkillSlots.Taunt;
+}
+
+ECoopRPGActiveSkill ACoopRPGPlayerController::GetSkillInSlot(uint8 Slot) const
+{
+    if (Slot != 2 && Slot != 3)
+    {
+        return ECoopRPGActiveSkill::None;
+    }
+    if (GetActiveSkillSlot(ECoopRPGActiveSkill::Slash) == Slot)
+    {
+        return ECoopRPGActiveSkill::Slash;
+    }
+    return GetActiveSkillSlot(ECoopRPGActiveSkill::Taunt) == Slot ? ECoopRPGActiveSkill::Taunt : ECoopRPGActiveSkill::None;
+}
+
+void ACoopRPGPlayerController::RequestActiveSkillSlot(ECoopRPGActiveSkill Skill, uint8 Slot)
+{
+    if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>())
+    {
+        ServerSetActiveSkillSlot(State->GetRoundId(), Skill, Slot);
+    }
+}
+
+void ACoopRPGPlayerController::UseActiveSkillSlot(uint8 Slot)
+{
+    if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>(); State && State->IsRoundPlaying())
+    {
+        ServerActivateSkillSlot(State->GetRoundId(), Slot);
     }
 }
 
@@ -637,28 +730,11 @@ void ACoopRPGPlayerController::CloseSharedChest()
     }
 }
 
-void ACoopRPGPlayerController::CloseOpenedChest(FGuid RoundId, const TCHAR* Reason)
-{
-    const ACoopRPGSharedChest* Chest = OpenedChest.Get();
-    OpenedChest = nullptr;
-    ForceNetUpdate();
-    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestClosed Chest=%s Round=%s Reason=%s %s"), *GetNameSafe(Chest),
-        *RoundId.ToString(), Reason, *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
-}
-
 bool ACoopRPGPlayerController::CanUseLobbyService(ECoopRPGLobbyService Service) const
 {
     const APawn* CurrentPawn = GetPawn();
     return IsValid(OpenedLobbyNpc) && OpenedLobbyNpc->GetService() == Service
         && CurrentPawn && OpenedLobbyNpc->IsInRange(*CurrentPawn);
-}
-
-void ACoopRPGPlayerController::CloseLobbyService()
-{
-    if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>(); State && OpenedLobbyNpc)
-    {
-        ServerSetLobbyNpc(State->GetRoundId(), nullptr);
-    }
 }
 
 void ACoopRPGPlayerController::EndLobbyService(const TCHAR* Reason)
@@ -698,14 +774,6 @@ void ACoopRPGPlayerController::ServerSetLobbyNpc_Implementation(FGuid RoundId, A
     UE_LOG(LogCoopRPGStorage, Log, TEXT("LobbyServiceOpened Round=%s Service=%s %s"),
         *RoundId.ToString(), *UEnum::GetValueAsString(Npc->GetService()),
         *CoopRPG::Debug::DescribePlayerRequestContext(CurrentPawn, ANSI_TO_TCHAR(__FUNCTION__)));
-}
-
-void ACoopRPGPlayerController::RequestLobbyJob(ECoopRPGHero Hero)
-{
-    if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>(); State && OpenedLobbyNpc)
-    {
-        ServerSelectLobbyJob(State->GetRoundId(), Hero);
-    }
 }
 
 void ACoopRPGPlayerController::ServerSelectLobbyJob_Implementation(FGuid RoundId, ECoopRPGHero Hero)
@@ -1415,72 +1483,25 @@ void ACoopRPGPlayerController::ServerUseStatScroll_Implementation(
         *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
-bool ACoopRPGPlayerController::HasSkillCapsule(ECoopRPGActiveSkill Skill) const
-{
-    return Skill == ECoopRPGActiveSkill::Slash ? SkillProgress.Slash.bHasCapsule
-        : Skill == ECoopRPGActiveSkill::Taunt && SkillProgress.Taunt.bHasCapsule;
-}
-
-bool ACoopRPGPlayerController::HasLearnedSkill(ECoopRPGActiveSkill Skill) const
-{
-    return Skill == ECoopRPGActiveSkill::Slash ? SkillProgress.Slash.bRegistered
-        : Skill == ECoopRPGActiveSkill::Taunt && IsJobEligibleForSkill(Skill);
-}
-
-bool ACoopRPGPlayerController::CanLearnSkill(ECoopRPGActiveSkill Skill) const
+void ACoopRPGPlayerController::ServerUseSkillCapsule_Implementation(FGuid RoundId, ECoopRPGActiveSkill Skill)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    const auto* Hero = Cast<ACoopRPGCharacter>(GetPawn());
-    return State && Hero && Hero->GetHealth() > 0.0f && IsJobEligibleForSkill(Skill)
-        && HasSkillCapsule(Skill) && !HasLearnedSkill(Skill) && !State->HasRoundResult()
-        && (CoopRPG::Expedition::IsLobby(GetWorld()) ? !State->IsLobbyDepartureScheduled()
-            : State->IsRoundPlaying() || CoopRPG::Expedition::IsSkirmish(GetWorld()));
-}
-
-bool ACoopRPGPlayerController::IsJobEligibleForSkill(ECoopRPGActiveSkill Skill) const
-{
-    const auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
-    const auto Job = Identity ? Identity->GetSelectedHero() : ECoopRPGHero::Unassigned;
-    return (Skill == ECoopRPGActiveSkill::Slash && Job == ECoopRPGHero::Adventurer)
-        || (Skill == ECoopRPGActiveSkill::Taunt && Job == ECoopRPGHero::AnimalHero);
-}
-
-uint8 ACoopRPGPlayerController::GetActiveSkillSlot(ECoopRPGActiveSkill Skill) const
-{
-    if (!IsJobEligibleForSkill(Skill) || !HasLearnedSkill(Skill))
+    const bool bTaunt = Skill == ECoopRPGActiveSkill::Taunt;
+    if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId || !CanLearnSkill(Skill))
     {
-        return 0;
+        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Round=%s Capsule=%d Learned=%d %s"),
+            bTaunt ? TEXT("TauntCapsuleRejected") : TEXT("SlashCapsuleRejected"),
+            *RoundId.ToString(), HasSkillCapsule(Skill), HasLearnedSkill(Skill),
+            *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+        return;
     }
-    return Skill == ECoopRPGActiveSkill::Slash ? ActiveSkillSlots.Slash : ActiveSkillSlots.Taunt;
-}
-
-ECoopRPGActiveSkill ACoopRPGPlayerController::GetSkillInSlot(uint8 Slot) const
-{
-    if (Slot != 2 && Slot != 3)
-    {
-        return ECoopRPGActiveSkill::None;
-    }
-    if (GetActiveSkillSlot(ECoopRPGActiveSkill::Slash) == Slot)
-    {
-        return ECoopRPGActiveSkill::Slash;
-    }
-    return GetActiveSkillSlot(ECoopRPGActiveSkill::Taunt) == Slot ? ECoopRPGActiveSkill::Taunt : ECoopRPGActiveSkill::None;
-}
-
-void ACoopRPGPlayerController::RequestActiveSkillSlot(ECoopRPGActiveSkill Skill, uint8 Slot)
-{
-    if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>())
-    {
-        ServerSetActiveSkillSlot(State->GetRoundId(), Skill, Slot);
-    }
-}
-
-void ACoopRPGPlayerController::UseActiveSkillSlot(uint8 Slot)
-{
-    if (const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>(); State && State->IsRoundPlaying())
-    {
-        ServerActivateSkillSlot(State->GetRoundId(), Slot);
-    }
+    auto& Progress = bTaunt ? SkillProgress.Taunt : SkillProgress.Slash;
+    Progress.bHasCapsule = false;
+    Progress.bRegistered = true;
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Round=%s Capsule=1->0 Learned=0->1 %s"),
+        bTaunt ? TEXT("TauntCapsuleUsed") : TEXT("SlashCapsuleUsed"),
+        *RoundId.ToString(), *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGPlayerController::ServerSetActiveSkillSlot_Implementation(FGuid RoundId, ECoopRPGActiveSkill Skill, uint8 Slot)
@@ -1533,27 +1554,6 @@ void ACoopRPGPlayerController::ServerActivateSkillSlot_Implementation(FGuid Roun
         *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
     Hero->GetAbilitySystemComponent()->TryActivateAbilityByClass(Skill == ECoopRPGActiveSkill::Slash
         ? UCoopRPGSlashAbility::StaticClass() : UCoopRPGTauntAbility::StaticClass());
-}
-
-void ACoopRPGPlayerController::ServerUseSkillCapsule_Implementation(FGuid RoundId, ECoopRPGActiveSkill Skill)
-{
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    const bool bTaunt = Skill == ECoopRPGActiveSkill::Taunt;
-    if (!State || !RoundId.IsValid() || State->GetRoundId() != RoundId || !CanLearnSkill(Skill))
-    {
-        UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Round=%s Capsule=%d Learned=%d %s"),
-            bTaunt ? TEXT("TauntCapsuleRejected") : TEXT("SlashCapsuleRejected"),
-            *RoundId.ToString(), HasSkillCapsule(Skill), HasLearnedSkill(Skill),
-            *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
-        return;
-    }
-    auto& Progress = bTaunt ? SkillProgress.Taunt : SkillProgress.Slash;
-    Progress.bHasCapsule = false;
-    Progress.bRegistered = true;
-    ForceNetUpdate();
-    UE_LOG(LogCoopRPGChestRequest, Log, TEXT("%s Round=%s Capsule=1->0 Learned=0->1 %s"),
-        bTaunt ? TEXT("TauntCapsuleUsed") : TEXT("SlashCapsuleUsed"),
-        *RoundId.ToString(), *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
 void ACoopRPGPlayerController::ClientGameplayFeedback_Implementation(const FCoopRPGGameplayFeedback& Feedback)

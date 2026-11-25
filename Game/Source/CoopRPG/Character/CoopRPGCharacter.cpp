@@ -803,6 +803,14 @@ void ACoopRPGCharacter::OnRep_ShieldState()
     }
 }
 
+void ACoopRPGCharacter::OnRep_ShieldModel()
+{
+    if (const auto* Identity = GetPlayerState<ACoopRPGPlayerState>())
+    {
+        ConfigureHeroShield(Identity->GetSelectedHero());
+    }
+}
+
 void ACoopRPGCharacter::ServerCancelAttack_Implementation()
 {
     if (GetNetConnection())
@@ -1094,14 +1102,6 @@ void ACoopRPGCharacter::RefreshWeaponVisibility()
             HeroWeaponMesh->IsVisible() ? 1 : 0, WeaponMesh->IsVisible() ? 1 : 0,
             HeroWeaponMesh->GetRelativeLocation().X, HeroWeaponMesh->GetRelativeRotation().Roll,
             *CoopRPG::Debug::DescribeLogContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
-    }
-}
-
-void ACoopRPGCharacter::OnRep_ShieldModel()
-{
-    if (const auto* Identity = GetPlayerState<ACoopRPGPlayerState>())
-    {
-        ConfigureHeroShield(Identity->GetSelectedHero());
     }
 }
 

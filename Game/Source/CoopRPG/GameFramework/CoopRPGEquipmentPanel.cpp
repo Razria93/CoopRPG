@@ -304,29 +304,6 @@ void FCoopRPGEquipmentPanel::Draw(AHUD& HUD, UCanvas& Surface, ACoopRPGPlayerCon
     DrawStats(HUD, Surface, Controller);
 }
 
-void FCoopRPGEquipmentPanel::LogLayout(const FVector2D& ViewSize)
-{
-    const auto ServicePanel = GetServiceBounds();
-    const bool bInventoryVisible = ActiveService != ECoopRPGLobbyService::Job && ActiveTab == InventoryTab;
-    const auto Inventory = bInventoryVisible ? GetPanelBounds() : FBox2D(ForceInit);
-    const bool bStorage = ActiveService == ECoopRPGLobbyService::Storage;
-    const double ServiceTop = ServicePanel.Min.Y;
-    const double BagTop = Inventory.Min.Y;
-    const FString Layout = FString::Printf(TEXT("Service=%s Width=%.0f Height=%.0f ServiceX=%.0f ServiceRight=%.0f ServiceY=%.0f BagX=%.0f BagY=%.0f "
-        "InventoryVisible=%d ServiceBottom=%.0f BagBottom=%.0f ServiceTitleY=%.0f BagTitleY=%.0f ServiceRuleY=%.0f BagRuleY=%.0f "
-        "ServiceGridY=%.0f BagGridY=%.0f ServiceDetailY=%.0f BagDetailY=%.0f ServiceFooterY=%.0f BagFooterY=%.0f"),
-        *UEnum::GetValueAsString(ActiveService), ViewSize.X, ViewSize.Y, ServicePanel.Min.X, ServicePanel.Max.X, ServiceTop,
-        Inventory.Min.X, BagTop, bInventoryVisible, ServicePanel.Max.Y, Inventory.Max.Y, ServiceTop + PanelTitleY, BagTop + PanelTitleY,
-        ServiceTop + PanelRuleY, BagTop + PanelRuleY, bStorage ? StorageControlBounds(ServicePanel, ContentInset, 0).Min.Y : 0.0,
-        bInventoryVisible ? GetInventoryGridBounds().Min.Y : 0.0, ServiceTop + PairedDetailY, BagTop + PairedDetailY,
-        bStorage ? StorageControlBounds(ServicePanel, ContentInset, StorageDeposit).Min.Y : 0.0, BagTop + PairedFooterY);
-    if (Layout != LastServiceLayout)
-    {
-        LastServiceLayout = Layout;
-        UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("LobbyServiceLayout %s"), *Layout);
-    }
-}
-
 FBox2D FCoopRPGEquipmentPanel::GetVisibleBounds() const
 {
     if (!bVisible || ActiveService == ECoopRPGLobbyService::Job)
@@ -335,6 +312,23 @@ FBox2D FCoopRPGEquipmentPanel::GetVisibleBounds() const
     }
     const FVector2D End = ActiveTab == INDEX_NONE ? Anchor + FVector2D(Width, ButtonHeight) : GetPanelBounds().Max;
     return FBox2D(Anchor, End);
+}
+
+FBox2D FCoopRPGEquipmentPanel::GetServiceBounds() const
+{
+    if (!bVisible || ActiveService == ECoopRPGLobbyService::None)
+    {
+        return FBox2D(ForceInit);
+    }
+    if (ActiveService == ECoopRPGLobbyService::Job)
+    {
+        const FVector2D Size(Width, EquipmentPanelHeight);
+        const FVector2D TopLeft = (Viewport - Size) * 0.5;
+        return FBox2D(TopLeft, TopLeft + Size);
+    }
+    const FBox2D Inventory = GetPanelBounds();
+    const FVector2D Position = Inventory.Min - FVector2D(Width + 8.0, 0.0);
+    return FBox2D(Position, Position + FVector2D(Width, EquipmentPanelHeight));
 }
 
 void FCoopRPGEquipmentPanel::DrawPanelFrame(AHUD& HUD, const FBox2D& Bounds) const
@@ -734,23 +728,6 @@ FBox2D FCoopRPGEquipmentPanel::GetPanelBounds() const
     return FBox2D(Start, Start + FVector2D(Width, EquipmentPanelHeight + ExtraHeight));
 }
 
-FBox2D FCoopRPGEquipmentPanel::GetServiceBounds() const
-{
-    if (!bVisible || ActiveService == ECoopRPGLobbyService::None)
-    {
-        return FBox2D(ForceInit);
-    }
-    if (ActiveService == ECoopRPGLobbyService::Job)
-    {
-        const FVector2D Size(Width, EquipmentPanelHeight);
-        const FVector2D TopLeft = (Viewport - Size) * 0.5;
-        return FBox2D(TopLeft, TopLeft + Size);
-    }
-    const FBox2D Inventory = GetPanelBounds();
-    const FVector2D Position = Inventory.Min - FVector2D(Width + 8.0, 0.0);
-    return FBox2D(Position, Position + FVector2D(Width, EquipmentPanelHeight));
-}
-
 int32 FCoopRPGEquipmentPanel::FindTab(const FVector2D& Pointer) const
 {
     for (int32 Index = 0; Index < TabCount; ++Index)
@@ -767,6 +744,29 @@ void FCoopRPGEquipmentPanel::DrawRegion(AHUD& HUD, const FBox2D& Bounds, int32 R
 {
     const float SourceY = Row * AtlasRowHeight;
     DrawAtlas(HUD, Bounds, FBox2D(FVector2D(SourceX, SourceY), FVector2D(SourceX + SourceWidth, SourceY + 33.0f)));
+}
+
+void FCoopRPGEquipmentPanel::LogLayout(const FVector2D& ViewSize)
+{
+    const auto ServicePanel = GetServiceBounds();
+    const bool bInventoryVisible = ActiveService != ECoopRPGLobbyService::Job && ActiveTab == InventoryTab;
+    const auto Inventory = bInventoryVisible ? GetPanelBounds() : FBox2D(ForceInit);
+    const bool bStorage = ActiveService == ECoopRPGLobbyService::Storage;
+    const double ServiceTop = ServicePanel.Min.Y;
+    const double BagTop = Inventory.Min.Y;
+    const FString Layout = FString::Printf(TEXT("Service=%s Width=%.0f Height=%.0f ServiceX=%.0f ServiceRight=%.0f ServiceY=%.0f BagX=%.0f BagY=%.0f "
+        "InventoryVisible=%d ServiceBottom=%.0f BagBottom=%.0f ServiceTitleY=%.0f BagTitleY=%.0f ServiceRuleY=%.0f BagRuleY=%.0f "
+        "ServiceGridY=%.0f BagGridY=%.0f ServiceDetailY=%.0f BagDetailY=%.0f ServiceFooterY=%.0f BagFooterY=%.0f"),
+        *UEnum::GetValueAsString(ActiveService), ViewSize.X, ViewSize.Y, ServicePanel.Min.X, ServicePanel.Max.X, ServiceTop,
+        Inventory.Min.X, BagTop, bInventoryVisible, ServicePanel.Max.Y, Inventory.Max.Y, ServiceTop + PanelTitleY, BagTop + PanelTitleY,
+        ServiceTop + PanelRuleY, BagTop + PanelRuleY, bStorage ? StorageControlBounds(ServicePanel, ContentInset, 0).Min.Y : 0.0,
+        bInventoryVisible ? GetInventoryGridBounds().Min.Y : 0.0, ServiceTop + PairedDetailY, BagTop + PairedDetailY,
+        bStorage ? StorageControlBounds(ServicePanel, ContentInset, StorageDeposit).Min.Y : 0.0, BagTop + PairedFooterY);
+    if (Layout != LastServiceLayout)
+    {
+        LastServiceLayout = Layout;
+        UE_LOG(LogCoopRPGEquipmentHUD, Log, TEXT("LobbyServiceLayout %s"), *Layout);
+    }
 }
 
 void FCoopRPGEquipmentPanel::DrawStats(AHUD& HUD, UCanvas& Surface, const ACoopRPGPlayerController& Controller)

@@ -115,6 +115,9 @@ private:
     UFUNCTION()
     void OnRep_ShieldState();
 
+    UFUNCTION()
+    void OnRep_ShieldModel();
+
     UFUNCTION(Server, Reliable)
     void ServerCancelAttack();
 
@@ -221,9 +224,6 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_ShieldModel)
     bool bPersonalShieldModel = false;
-
-    UFUNCTION()
-    void OnRep_ShieldModel();
 
     UPROPERTY(ReplicatedUsing = OnRep_ShieldState)
     bool bGuarding = false;

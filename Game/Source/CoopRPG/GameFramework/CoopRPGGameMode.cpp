@@ -380,16 +380,6 @@ void ACoopRPGGameMode::BeginPlay()
     }
 }
 
-void ACoopRPGGameMode::InitializeTravelRound(ACoopRPGGameState& State)
-{
-    if (GetNetMode() == NM_DedicatedServer)
-    {
-        GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->EnterRound(State.GetRoundId(),
-            FName(*UGameplayStatics::GetCurrentLevelName(this)), bExpeditionLobby);
-    }
-    PublishReadySlots(State);
-}
-
 void ACoopRPGGameMode::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
@@ -646,6 +636,16 @@ void ACoopRPGGameMode::RestartPlayer(AController* NewPlayer)
             }
         }
     }
+}
+
+void ACoopRPGGameMode::InitializeTravelRound(ACoopRPGGameState& State)
+{
+    if (GetNetMode() == NM_DedicatedServer)
+    {
+        GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>()->EnterRound(State.GetRoundId(),
+            FName(*UGameplayStatics::GetCurrentLevelName(this)), bExpeditionLobby);
+    }
+    PublishReadySlots(State);
 }
 
 void ACoopRPGGameMode::PublishReadySlots(ACoopRPGGameState& State)
