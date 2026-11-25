@@ -14,6 +14,8 @@ class ACoopRPGEnemy;
 class ACoopRPGExtractionZone;
 class ACoopRPGGameState;
 class ACoopRPGPlayerController;
+class USceneCaptureComponent2D;
+class UTextureRenderTarget2D;
 
 UCLASS()
 class COOPRPG_API ACoopRPGLootHUD : public AHUD
@@ -48,6 +50,9 @@ private:
     void DrawExpeditionCombat(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, bool bBoss, bool bLegacyStatus);
     void DrawPuzzle(const ACoopRPGGameState& State, ACoopRPGPlayerController& Controller, bool bLegacyStatus);
     void DrawExpeditionNameplates(const ACoopRPGPlayerController& Controller, int32 Stage);
+    UTextureRenderTarget2D* UpdateNameplateHeroDepth(ACoopRPGCharacter& Hero);
+    void DrawMaskedNameplate(UTextureRenderTarget2D& HeroDepth, const FBox2D& Bounds, const FString& Label,
+        const FLinearColor& Color, float Health, bool bBadge, TFunctionRef<void(FVector2D)> DrawPlate);
     void DrawTauntPulse(const FVector& Origin, double Elapsed);
     void DrawTauntMarker(const ACoopRPGEnemy& Enemy);
     void DrawCounterTargetMarker(const ACoopRPGCharacter& Target);
@@ -138,6 +143,21 @@ private:
         FString Display;
     };
     FNameplatePlayerName NameplatePlayerNames[2];
+    UPROPERTY(Transient)
+    TObjectPtr<USceneCaptureComponent2D> NameplateHeroCapture;
+    TWeakObjectPtr<ACoopRPGCharacter> NameplateHero;
+    struct FMaskedNameplateLayer
+    {
+        TWeakObjectPtr<UTextureRenderTarget2D> Target;
+        FString Label;
+        FLinearColor Color = FLinearColor::Transparent;
+        float Health = -1.0f;
+        bool bBadge = false;
+    };
+    TArray<FMaskedNameplateLayer> MaskedNameplateLayers;
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UTextureRenderTarget2D>> MaskedNameplateTargets;
+    int32 MaskedNameplatesUsed = 0;
     TArray<FBox2D, TInlineAllocator<8>> WorldLabelBounds;
     int32 FixedHudBoundsCount = 0;
 };

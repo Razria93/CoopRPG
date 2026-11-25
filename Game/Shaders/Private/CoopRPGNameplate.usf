@@ -1,0 +1,26 @@
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Private/GammaCorrectionCommon.ush"
+
+Texture2D PlateTexture;
+SamplerState PlateSampler;
+Texture2D<float> HeroDepth;
+int2 ViewOrigin;
+uint UseHeroDepth;
+float DisplayGamma;
+
+float4 Main(float2 UV : TEXCOORD0, float4 Color : TEXCOORD1, float4 HitProxyId : TEXCOORD2, float4 Pixel : SV_Position) : SV_Target0
+{
+    if (UseHeroDepth != 0)
+    {
+        // The capture shows only the local hero. Background depth is beyond the playable camera range.
+        float Depth = HeroDepth.Load(int3(int2(Pixel.xy) - ViewOrigin, 0));
+        clip(Depth > 0.0 && Depth < 100000.0 ? -1.0 : 1.0);
+    }
+
+    float4 Plate = PlateTexture.Sample(PlateSampler, UV) * Color;
+    if (DisplayGamma != 1.0)
+    {
+        Plate.rgb = ApplyGammaCorrection(saturate(Plate.rgb), 2.2 * DisplayGamma);
+    }
+    return RETURN_COLOR(Plate);
+}

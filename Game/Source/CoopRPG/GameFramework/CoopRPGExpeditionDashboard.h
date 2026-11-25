@@ -44,8 +44,8 @@ public:
     void DrawPanel(AHUD& HUD, FVector2D Position, FVector2D Size) const;
     void DrawExpeditionIcon(AHUD& HUD, FVector2D Position, float Size) const;
     void DrawDivider(AHUD& HUD, FVector2D Position, float Width) const;
-    void DrawDarkPanel(AHUD& HUD, FVector2D Position, FVector2D Size) const;
-    void DrawHealthBar(AHUD& HUD, FVector2D Position, float Width, float HealthFraction) const;
+    void DrawDarkPanel(AHUD& HUD, FVector2D Position, FVector2D Size, UCanvas* AlphaTarget = nullptr) const;
+    void DrawHealthBar(AHUD& HUD, FVector2D Position, float Width, float HealthFraction, UCanvas* AlphaTarget = nullptr) const;
     void DrawResourceTrack(AHUD& HUD, FVector2D Position, FVector2D Size, float Fraction, ECoopRPGResourceTrack Resource) const;
     void DrawSkillSlot(AHUD& HUD, FVector2D Position, float Size) const;
     void DrawAttackIcon(AHUD& HUD, FVector2D Position, float Size, bool bDisabled) const;
@@ -75,8 +75,8 @@ private:
         const FVector2D& ViewSize, float Pad, float PanelWidth, bool bWide, bool bBossActive);
     void DrawBossHealth(AHUD& HUD, UCanvas& Canvas, const ACoopRPGGameState& State, bool bBossActive, bool bWide);
     void DrawNineSlice(AHUD& HUD, FVector2D Position, FVector2D Size, const FBox2D& Source,
-        FVector2D StartInset, FVector2D EndInset) const;
-    void DrawImage(AHUD& HUD, const FBox2D& Source, const FVector2D& Position, const FVector2D& Size) const;
+        FVector2D StartInset, FVector2D EndInset, UCanvas* AlphaTarget = nullptr) const;
+    void DrawImage(AHUD& HUD, const FBox2D& Source, const FVector2D& Position, const FVector2D& Size, UCanvas* AlphaTarget = nullptr) const;
 
 private:
     TStrongObjectPtr<UTexture2D> Skin;
