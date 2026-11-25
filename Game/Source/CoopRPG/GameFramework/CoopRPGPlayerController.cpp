@@ -98,6 +98,7 @@ void ACoopRPGPlayerController::FlushPressedKeys()
 
 bool ACoopRPGPlayerController::InputKey(const FInputKeyEventArgs& Params)
 {
+    const bool bPointerPressed = Params.Event == IE_Pressed || Params.Event == IE_DoubleClick;
     if (Params.Key == EKeys::LeftMouseButton)
     {
         if (auto* HUD = GetHUD<ACoopRPGLootHUD>(); HUD && HUD->HandleHudPrimaryButton(*this, Params))
@@ -107,6 +108,13 @@ bool ACoopRPGPlayerController::InputKey(const FInputKeyEventArgs& Params)
                 bAwaitFocusClick = false;
                 bConsumeFocusClickRelease = false;
             }
+            return true;
+        }
+    }
+    if (bPointerPressed && (Params.Key == EKeys::LeftMouseButton || Params.Key == EKeys::RightMouseButton))
+    {
+        if (const auto* HUD = GetHUD<ACoopRPGLootHUD>(); HUD && HUD->IsPointerOverHud(*this))
+        {
             return true;
         }
     }
@@ -204,8 +212,8 @@ void ACoopRPGPlayerController::RestoreTravelInventory(const FCoopRPGRecoverySnap
 {
     if (HasAuthority())
     {
-        SetRecoveryCount(Recovery.Personal.X);
-        StaminaRecoveryCount = Recovery.Personal.Y;
+        SetPersonalRecoveryCount(false, Recovery.Personal.X);
+        SetPersonalRecoveryCount(true, Recovery.Personal.Y);
         RecoveryRegistration = Recovery.Registration;
         RestoreSword(Sword);
         StatProgress = Stats;
@@ -264,6 +272,7 @@ void ACoopRPGPlayerController::InitializeStageInventory(FGuid RoundId)
     const auto* Identity = GetPlayerState<APlayerState>();
     const bool bCapacityReward = Mode && Identity && Mode->HasHealthPotionCapacityReward(Identity->GetUniqueId());
     StageRecoveryUsesRemaining = FIntPoint(bCapacityReward ? 2 : 1, 1);
+    RefreshPartyRecoveryUses();
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("MartialPowerStageEntered Round=%s MartialPower=%d Scrolls=%d %s"),
         *RoundId.ToString(), GetMartialPower(), StatProgress.MartialPower.ScrollCount,
         *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
@@ -353,6 +362,23 @@ int32 ACoopRPGPlayerController::GetStorageBagCount(ECoopRPGStorageItem Item) con
     }
 }
 
+int32 ACoopRPGPlayerController::GetBagSlotsUsed() const
+{
+    int32 Used = 0;
+    for (int32 Index = 0; Index < FCoopRPGStorageStock::ItemCount; ++Index)
+    {
+        const auto Item = static_cast<ECoopRPGStorageItem>(Index);
+        Used += CoopRPG::Bag::SlotsUsed(Item, GetStorageBagCount(Item));
+    }
+    return Used;
+}
+
+int32 ACoopRPGPlayerController::GetBagRoom(ECoopRPGStorageItem Item) const
+{
+    return static_cast<int32>(Item) < FCoopRPGStorageStock::ItemCount
+        ? CoopRPG::Bag::RoomFor(Item, GetStorageBagCount(Item), GetBagSlotsUsed()) : 0;
+}
+
 void ACoopRPGPlayerController::RequestStorageTransfer(ECoopRPGStorageItem Item, bool bPersonal, bool bDeposit)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -370,6 +396,21 @@ FCoopRPGRecoverySnapshot ACoopRPGPlayerController::GetTravelRecovery(bool bRetry
 bool ACoopRPGPlayerController::IsRecoveryRegistered(bool bStamina) const
 {
     return bStamina ? RecoveryRegistration.bStamina : RecoveryRegistration.bHealth;
+}
+
+int32 ACoopRPGPlayerController::GetSelectedRecoveryStock(bool bStamina) const
+{
+    if (IsRecoveryRegistered(bStamina))
+    {
+        return bStamina ? StaminaRecoveryCount : RecoveryCount;
+    }
+    return bStamina ? StageRecoverySupplies.Y : StageRecoverySupplies.X;
+}
+
+FIntPoint ACoopRPGPlayerController::GetAvailableRecoveryUses() const
+{
+    return FIntPoint(FMath::Min(StageRecoveryUsesRemaining.X, GetSelectedRecoveryStock(false)),
+        FMath::Min(StageRecoveryUsesRemaining.Y, GetSelectedRecoveryStock(true)));
 }
 
 int32 ACoopRPGPlayerController::GetStatScrollCount(ECoopRPGScrollStat Stat) const
@@ -689,6 +730,26 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
     }
     LastPickupRequest = Request;
 
+    const auto RejectFullBag = [&](ECoopRPGStorageItem BagItem)
+    {
+        if (GetBagRoom(BagItem) > 0)
+        {
+            return false;
+        }
+        LogChestRejection(Action, TEXT("BagFull"), Chest, RoundId, Request);
+        ClientGameplayFeedback({ECoopRPGFeedbackKind::BagFull, GetPawn()});
+        return true;
+    };
+
+    if (bTakingWeapon && CoopRPG::Expedition::IsExpedition(GetWorld()) && RejectFullBag(ECoopRPGStorageItem::UnboundSword))
+    {
+        return;
+    }
+    if (bTakingCapsule && RejectFullBag(ECoopRPGStorageItem::SlashCapsule))
+    {
+        return;
+    }
+
     if (bTakingWeapon)
     {
         // GetChestRejection has already checked the possessed character and its health.
@@ -697,6 +758,10 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
         if (bGoesIntoBag ? SwordOwnership != ECoopRPGSwordOwnership::None : CurrentCharacter->HasMeleeWeapon())
         {
             LogChestRejection(Action, bGoesIntoBag ? TEXT("AlreadyOwned") : TEXT("AlreadyEquipped"), Chest, RoundId, Request);
+            return;
+        }
+        if (bGoesIntoBag && RejectFullBag(ECoopRPGStorageItem::UnboundSword))
+        {
             return;
         }
         const int32 StockBefore = Chest->GetWeaponStock();
@@ -755,6 +820,10 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
             LogChestRejection(Action, TEXT("ScrollUnavailable"), Chest, RoundId, Request);
             return;
         }
+        if (RejectFullBag(bTakingProtection ? ECoopRPGStorageItem::ProtectionScroll : ECoopRPGStorageItem::MartialScroll))
+        {
+            return;
+        }
         const auto Stat = bTakingProtection ? ECoopRPGScrollStat::Protection : ECoopRPGScrollStat::MartialPower;
         const int32 StockBefore = Chest->GetStatScrollStock(Stat);
         if (!Chest->TryTakeStatScroll(Stat))
@@ -779,6 +848,10 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
         return;
     }
 
+    if (RejectFullBag(bTakingStamina ? ECoopRPGStorageItem::StaminaPotion : ECoopRPGStorageItem::HealthPotion))
+    {
+        return;
+    }
     const int32 StockBefore = bTakingStamina ? Chest->GetStaminaRecoveryStock() : Chest->GetRecoveryStock();
     if (!Chest->TryTakeRecovery(bTakingStamina))
     {
@@ -789,15 +862,14 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
     // Both mutations run in this server RPC before replication or the next RPC.
     if (bTakingStamina)
     {
-        ++StaminaRecoveryCount;
-        ForceNetUpdate();
+        SetPersonalRecoveryCount(true, StaminaRecoveryCount + 1);
         ClientGameplayFeedback({ECoopRPGFeedbackKind::StaminaRecoveryAcquired, GetPawn()});
         UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestStaminaGranted Chest=%s Round=%s Request=%u Stock=%d->%d PersonalSP=%d %s"),
             *GetNameSafe(Chest), *RoundId.ToString(), Request, StockBefore, Chest->GetStaminaRecoveryStock(), StaminaRecoveryCount,
             *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
         return;
     }
-    SetRecoveryCount(RecoveryCount + 1);
+    SetPersonalRecoveryCount(false, RecoveryCount + 1);
     ClientGameplayFeedback({ECoopRPGFeedbackKind::RecoveryAcquired, GetPawn()});
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("ChestGranted Chest=%s Round=%s Request=%u Stock=%d->%d Recovery=%d %s"),
         *GetNameSafe(Chest), *RoundId.ToString(), Request, StockBefore, Chest->GetRecoveryStock(), RecoveryCount,
@@ -889,6 +961,12 @@ void ACoopRPGPlayerController::ServerTransferStorage_Implementation(FGuid RoundI
         return;
     }
 
+    if (!bDeposit && GetBagRoom(Item) == 0)
+    {
+        Reject(TEXT("BagFull"), CoopRPG::Bag::FullMessage);
+        return;
+    }
+
     const int32 StorageDelta = bDeposit ? 1 : -1;
     FCoopRPGStorageStock& Updated = bPersonal ? Storage->EditPersonal(OwnerId) : Storage->EditShared();
     Updated.Adjust(Item, StorageDelta);
@@ -917,8 +995,8 @@ void ACoopRPGPlayerController::AdjustStorageBag(ECoopRPGStorageItem Item, int32 
 {
     switch (Item)
     {
-    case ECoopRPGStorageItem::HealthPotion: SetRecoveryCount(RecoveryCount + Delta); break;
-    case ECoopRPGStorageItem::StaminaPotion: StaminaRecoveryCount += Delta; break;
+    case ECoopRPGStorageItem::HealthPotion: SetPersonalRecoveryCount(false, RecoveryCount + Delta); break;
+    case ECoopRPGStorageItem::StaminaPotion: SetPersonalRecoveryCount(true, StaminaRecoveryCount + Delta); break;
     case ECoopRPGStorageItem::UnboundSword:
         SwordOwnership = Delta > 0 ? ECoopRPGSwordOwnership::Unbound : ECoopRPGSwordOwnership::None;
         break;
@@ -976,6 +1054,11 @@ void ACoopRPGPlayerController::ServerShopTrade_Implementation(FGuid RoundId, uin
         || (Item == ECoopRPGStorageItem::SlashCapsule && (HasSlashCapsule() || HasSlashRegistered()))))
     {
         Reject(TEXT("BagLimit"), TEXT("가방에 더 담을 수 없거나 이미 배운 스킬이에요."));
+        return;
+    }
+    if (bBuy && GetBagRoom(Item) == 0)
+    {
+        Reject(TEXT("BagFull"), CoopRPG::Bag::FullMessage);
         return;
     }
 
@@ -1036,7 +1119,7 @@ void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId, b
     const bool bUsesStageSupply = bExpedition && !IsRecoveryRegistered(bStamina);
     int32& StageStock = bStamina ? StageRecoverySupplies.Y : StageRecoverySupplies.X;
     int32& UsesRemaining = bStamina ? StageRecoveryUsesRemaining.Y : StageRecoveryUsesRemaining.X;
-    const int32 CountBefore = bUsesStageSupply ? StageStock : bStamina ? StaminaRecoveryCount : RecoveryCount;
+    const int32 CountBefore = bExpedition ? GetSelectedRecoveryStock(bStamina) : RecoveryCount;
     const int32 UsesBefore = UsesRemaining;
     if (CountBefore <= 0)
     {
@@ -1066,6 +1149,9 @@ void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId, b
         LogRecoveryRejection(TEXT("InvalidEffect"), RoundId, bStamina);
         return;
     }
+    const float RecoveryAmount = bExpedition && !bUsesStageSupply ? CoopRPG::Recovery::PersonalAmount
+        : CoopRPG::Recovery::SupplyAmount;
+    CoopRPG::Recovery::SetAmount(*Spec.Data.Get(), RecoveryAmount);
     ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
     const float ValueAfter = ASC->GetNumericAttribute(Attribute);
     if (ValueAfter <= ValueBefore)
@@ -1081,16 +1167,13 @@ void ACoopRPGPlayerController::ServerUseRecovery_Implementation(FGuid RoundId, b
     if (bUsesStageSupply)
     {
         --StageStock;
-    }
-    else if (bStamina)
-    {
-        --StaminaRecoveryCount;
+        RefreshPartyRecoveryUses();
+        ForceNetUpdate();
     }
     else
     {
-        SetRecoveryCount(CountBefore - 1);
+        SetPersonalRecoveryCount(bStamina, CountBefore - 1);
     }
-    ForceNetUpdate();
     ClientGameplayFeedback({ECoopRPGFeedbackKind::RecoveryUsed, CurrentCharacter});
     State->MulticastGameplayFeedback({bStamina ? ECoopRPGFeedbackKind::StaminaRecovery : ECoopRPGFeedbackKind::Recovery,
         CurrentCharacter, ValueAfter - ValueBefore});
@@ -1120,6 +1203,7 @@ void ACoopRPGPlayerController::ServerSetRecoveryRegistration_Implementation(FGui
     }
 
     Registered = bRegistered;
+    RefreshPartyRecoveryUses();
     ForceNetUpdate();
     UE_LOG(LogCoopRPGChestRequest, Log,
         TEXT("RecoveryRegistrationChanged Round=%s Resource=%s Registered=%d Personal=%d Supply=%d Uses=%d %s"),
@@ -1216,10 +1300,15 @@ void ACoopRPGPlayerController::ServerTakeEnemyLoot_Implementation(FGuid RoundId,
     const bool bPotion = IsValid(Potion) && Potion->GetDropId() == DropId;
     auto* Drop = bPotion ? Potion : (State ? State->GetEnemyLoot() : nullptr);
     const TCHAR* Failure = GetEnemyLootRejection(RoundId, DropId, Drop);
+    if (!Failure && bPotion && GetBagRoom(ECoopRPGStorageItem::HealthPotion) == 0)
+    {
+        Failure = TEXT("BagFull");
+        ClientGameplayFeedback({ECoopRPGFeedbackKind::BagFull, GetPawn()});
+    }
     if (!Failure && bPotion && Drop->TryClaim())
     {
         const int32 Previous = RecoveryCount;
-        SetRecoveryCount(Previous + 1);
+        SetPersonalRecoveryCount(false, Previous + 1);
         ClientGameplayFeedback({ECoopRPGFeedbackKind::RecoveryAcquired, GetPawn()});
         UE_LOG(LogCoopRPGEnemyLootRequest, Log, TEXT("EnemyPotionGranted Round=%s DropId=%s Recovery=%d->%d %s"),
             *RoundId.ToString(), *DropId.ToString(), Previous, RecoveryCount, *Context);
@@ -1267,15 +1356,28 @@ const TCHAR* ACoopRPGPlayerController::GetEnemyLootRejection(FGuid RoundId, FGui
     return Drop->IsClaimed() ? TEXT("AlreadyClaimed") : nullptr;
 }
 
-void ACoopRPGPlayerController::SetRecoveryCount(int32 Count)
+void ACoopRPGPlayerController::SetPersonalRecoveryCount(bool bStamina, int32 Count)
 {
     check(HasAuthority());
-    RecoveryCount = Count;
-    if (auto* PartyState = GetPlayerState<ACoopRPGPlayerState>())
-    {
-        PartyState->SetPartyRecoveryCount(Count);
-    }
+    int32& Stock = bStamina ? StaminaRecoveryCount : RecoveryCount;
+    Stock = Count;
+    RefreshPartyRecoveryUses();
     ForceNetUpdate();
+}
+
+void ACoopRPGPlayerController::RefreshPartyRecoveryUses()
+{
+    check(HasAuthority());
+    auto* Identity = GetPlayerState<ACoopRPGPlayerState>();
+    if (!Identity)
+    {
+        return;
+    }
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    const bool bHasStageInventory = State && StageInventoryRound.IsValid() && StageInventoryRound == State->GetRoundId();
+    const FIntPoint Uses = bHasStageInventory ? GetAvailableRecoveryUses() : FIntPoint(INDEX_NONE, INDEX_NONE);
+    Identity->SetPartyRecoveryUses(Uses);
 }
 
 void ACoopRPGPlayerController::LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId, bool bStamina) const

@@ -17,6 +17,7 @@ class UMaterialInterface;
 class UStaticMeshComponent;
 enum class ECoopRPGHero : uint8;
 struct FInputActionValue;
+struct FKey;
 struct FOnAttributeChangeData;
 
 USTRUCT()
@@ -67,10 +68,15 @@ public:
     UFUNCTION(NetMulticast, Reliable)
     void MulticastTauntPulse(FVector_NetQuantize Origin);
     bool IsGuarding() const;
+    bool EvaluateGuardForHit();
+    void RestoreGuardPointsOnBlock();
+    double GetGuardPoints() const { return GuardPoints; }
+    bool IsGuardExhausted() const { return bGuardExhausted; }
     void SetShieldEquipped(bool bEquipped);
     void ReleaseGuardInput();
     void ClearGuard();
     double GetGuardAngle(const FVector& SourcePosition) const;
+    FVector GetShieldImpactLocation() const;
     int32 GetDisplaySlot() const { return DisplaySlot; }
     void SetDisplaySlot(int32 Slot);
     void FlashPresentationHit();
@@ -88,17 +94,24 @@ protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 private:
+    void HandleGuardHealthChanged(const FOnAttributeChangeData& Change);
     void UpdatePartyStamina(const FOnAttributeChangeData& Change);
     void Move(const FInputActionValue& Value);
     void Attack();
     void CancelAttack();
     void UseSlash();
     void UseTaunt();
-    void PressGuardInput();
+    void PressGuardInput(FKey Key);
+    void ReleaseGuardInputKey(FKey Key);
     void SetGuarding(bool bGuarding);
+    bool CanUpdateGuardPoints() const;
+    void UpdateGuardPoints();
+    void ScheduleGuardPointsUpdate();
+    void LogGuardPoints(const TCHAR* Event) const;
 
     UFUNCTION(Server, Reliable)
     void ServerSetGuarding(FGuid RoundId, bool bRequested);
+    void UpdateGuardPose();
 
     UFUNCTION()
     void OnRep_ShieldState();
@@ -132,6 +145,8 @@ private:
     double TauntPulseStartedAt = -100.0;
 
 public:
+    static constexpr double MaxGuardPoints = 100.0;
+    static constexpr double GuardRestartPoints = 20.0;
     static constexpr double GuardHalfAngleDegrees = 45.0;
     static constexpr float GuardDamageMultiplier = 0.5f;
 
@@ -185,10 +200,14 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<UAnimSequence> HeroAttackClip;
 
+    UPROPERTY(Transient)
+    TObjectPtr<UAnimSequence> HeroGuardClip;
+
     UPROPERTY(ReplicatedUsing = OnRep_MeleePresentation)
     FCoopRPGMeleePresentation MeleePresentation;
 
     TWeakObjectPtr<UAnimMontage> LocalMeleeMontage;
+    TWeakObjectPtr<UAnimMontage> LocalGuardMontage;
     uint32 PresentedMeleeSequence = 0;
     uint32 LastHitStoppedMeleeSequence = 0;
     uint32 PendingHitStopSwing = 0;
@@ -204,5 +223,17 @@ private:
     UPROPERTY(ReplicatedUsing = OnRep_ShieldState)
     bool bGuarding = false;
 
+    UPROPERTY(Replicated)
+    double GuardPoints = MaxGuardPoints;
+
+    UPROPERTY(Replicated)
+    bool bGuardExhausted = false;
+
+    FTimerHandle GuardPointsTimer;
+    double GuardPointsUpdatedAt = 0.0;
+    double GuardRecoveryStartsAt = 0.0;
+    bool bGuardInputNeedsRelease = false;
+    FGuid PendingGuardRound;
     bool bGuardKeyHeld = false;
+    bool bGuardMouseHeld = false;
 };

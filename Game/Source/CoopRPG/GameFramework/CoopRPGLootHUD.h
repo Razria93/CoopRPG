@@ -24,6 +24,7 @@ public:
     void ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
     bool HandleHudPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     bool HandleHudWheel(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
+    bool IsPointerOverHud(const ACoopRPGPlayerController& Controller) const;
     void ReleaseHudPointer();
 
 private:
@@ -111,4 +112,5 @@ private:
     };
     FNameplatePlayerName NameplatePlayerNames[2];
     TArray<FBox2D, TInlineAllocator<8>> WorldLabelBounds;
+    int32 FixedHudBoundsCount = 0;
 };

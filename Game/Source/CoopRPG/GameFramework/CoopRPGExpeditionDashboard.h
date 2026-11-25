@@ -22,6 +22,13 @@ enum class ECoopRPGPartyCardAccent : uint8
     Unarmed
 };
 
+enum class ECoopRPGResourceTrack : uint8
+{
+    Health,
+    Stamina,
+    Guard
+};
+
 class FCoopRPGExpeditionDashboard
 {
 public:
@@ -36,7 +43,7 @@ public:
     void DrawDivider(AHUD& HUD, FVector2D Position, float Width) const;
     void DrawDarkPanel(AHUD& HUD, FVector2D Position, FVector2D Size) const;
     void DrawHealthBar(AHUD& HUD, FVector2D Position, float Width, float HealthFraction) const;
-    void DrawResourceTrack(AHUD& HUD, FVector2D Position, FVector2D Size, float Fraction, bool bStamina) const;
+    void DrawResourceTrack(AHUD& HUD, FVector2D Position, FVector2D Size, float Fraction, ECoopRPGResourceTrack Resource) const;
     void DrawSkillSlot(AHUD& HUD, FVector2D Position, float Size) const;
     void DrawAttackIcon(AHUD& HUD, FVector2D Position, float Size, bool bDisabled) const;
     void DrawBasicAttackGlyph(AHUD& HUD, UCanvas& Canvas, const FBox2D& Slot,

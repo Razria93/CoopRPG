@@ -164,10 +164,13 @@ public:
 
     void SetReadySlots(const FCoopRPGReadySlots& Slots);
     void SetLobbyDepartureDeadline(double Deadline);
+    void SetRoundStartDeadline(double Deadline);
     void SetPuzzleRewardDeadline(double Deadline);
     double GetPuzzleRewardDeadline() const { return PuzzleRewardDeadline; }
     bool IsLobbyDepartureScheduled() const { return LobbyDepartureDeadline > 0.0; }
     double GetLobbyDepartureRemainingSeconds() const;
+    bool IsRoundStartScheduled() const { return RoundStartDeadline > 0.0; }
+    double GetRoundStartRemainingSeconds() const;
     int32 RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated);
     bool RegisterEnemyLoot(ACoopRPGEnemyLoot* Drop);
     bool TryGrantEnemyLoot(ACoopRPGEnemyLoot* Drop);
@@ -247,6 +250,9 @@ private:
 
     UPROPERTY(Replicated)
     double LobbyDepartureDeadline = 0.0;
+
+    UPROPERTY(Replicated)
+    double RoundStartDeadline = 0.0;
 
     UPROPERTY(Replicated)
     double PuzzleRewardDeadline = 0.0;

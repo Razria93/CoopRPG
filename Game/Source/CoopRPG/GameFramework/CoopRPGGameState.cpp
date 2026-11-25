@@ -197,6 +197,7 @@ void ACoopRPGGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGGameState, RoundStatus);
     DOREPLIFETIME(ACoopRPGGameState, ReadySlots);
     DOREPLIFETIME(ACoopRPGGameState, LobbyDepartureDeadline);
+    DOREPLIFETIME(ACoopRPGGameState, RoundStartDeadline);
     DOREPLIFETIME(ACoopRPGGameState, PuzzleRewardDeadline);
     DOREPLIFETIME(ACoopRPGGameState, SharedStorage);
     DOREPLIFETIME(ACoopRPGGameState, PuzzleStatus);
@@ -471,6 +472,15 @@ void ACoopRPGGameState::SetLobbyDepartureDeadline(double Deadline)
     }
 }
 
+void ACoopRPGGameState::SetRoundStartDeadline(double Deadline)
+{
+    if (HasAuthority() && RoundStartDeadline != Deadline)
+    {
+        RoundStartDeadline = Deadline;
+        ForceNetUpdate();
+    }
+}
+
 void ACoopRPGGameState::SetPuzzleRewardDeadline(double Deadline)
 {
     if (HasAuthority())
@@ -483,6 +493,11 @@ void ACoopRPGGameState::SetPuzzleRewardDeadline(double Deadline)
 double ACoopRPGGameState::GetLobbyDepartureRemainingSeconds() const
 {
     return FMath::Max(0.0, LobbyDepartureDeadline - GetServerWorldTimeSeconds());
+}
+
+double ACoopRPGGameState::GetRoundStartRemainingSeconds() const
+{
+    return FMath::Max(0.0, RoundStartDeadline - GetServerWorldTimeSeconds());
 }
 
 int32 ACoopRPGGameState::RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated)
@@ -662,7 +677,15 @@ void ACoopRPGGameState::PresentGameplayFeedback(const FCoopRPGGameplayFeedback& 
         {
             HUD->ShowGameplayFeedback(Feedback);
         }
-        PlayMeleeEffect(Feedback.MeleeEffect, Feedback.MeleeEffectLocation, Feedback.MeleeEffectYaw,
+        FVector EffectLocation = Feedback.MeleeEffectLocation;
+        if (Feedback.MeleeEffect == ECoopRPGMeleeEffect::ShieldBlock)
+        {
+            if (const auto* Defender = Cast<ACoopRPGCharacter>(Feedback.Subject.Get()))
+            {
+                EffectLocation = Defender->GetShieldImpactLocation();
+            }
+        }
+        PlayMeleeEffect(Feedback.MeleeEffect, EffectLocation, Feedback.MeleeEffectYaw,
             Feedback.AttackerSlot, Feedback.MeleeSwing);
         if (Feedback.Kind == ECoopRPGFeedbackKind::Damage
             && (Feedback.MeleeEffect == ECoopRPGMeleeEffect::MushroomHit

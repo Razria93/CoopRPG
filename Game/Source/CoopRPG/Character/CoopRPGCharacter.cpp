@@ -48,11 +48,18 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGInput, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGEquipment, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGGuard, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGLocomotion, Log, All);
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGMeleeMotion, Log, All);
 
 namespace
 {
+    constexpr double GuardDrainPerSecond = 20.0;
+    constexpr double GuardBlockRecovery = 15.0;
+    constexpr double GuardRecoveryDelay = 1.0;
+    constexpr double GuardRecoveryPerSecond = 25.0;
+    constexpr double GuardPointsUpdateInterval = 0.1;
+
     constexpr float SwingEffectsLeadSeconds = 0.06f;
     constexpr float SwingEffectsCatchUpSeconds = 0.15f;
     constexpr int32 DefaultMeleeHitStopMs = 60;
@@ -185,6 +192,8 @@ void ACoopRPGCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACoopRPGCharacter, bHasMeleeWeapon);
     DOREPLIFETIME(ACoopRPGCharacter, bShieldEquipped);
     DOREPLIFETIME(ACoopRPGCharacter, bGuarding);
+    DOREPLIFETIME_CONDITION(ACoopRPGCharacter, GuardPoints, COND_OwnerOnly);
+    DOREPLIFETIME_CONDITION(ACoopRPGCharacter, bGuardExhausted, COND_OwnerOnly);
     DOREPLIFETIME(ACoopRPGCharacter, DisplaySlot);
     DOREPLIFETIME_CONDITION(ACoopRPGCharacter, PartyStamina, COND_SkipOwner);
     DOREPLIFETIME(ACoopRPGCharacter, MeleePresentation);
@@ -245,8 +254,26 @@ void ACoopRPGCharacter::MulticastTauntPulse_Implementation(FVector_NetQuantize O
 
 bool ACoopRPGCharacter::IsGuarding() const
 {
+    return bGuarding && bShieldEquipped && CanUpdateGuardPoints();
+}
+
+bool ACoopRPGCharacter::EvaluateGuardForHit()
+{
+    check(HasAuthority());
+    UpdateGuardPoints();
+    return IsGuarding();
+}
+
+void ACoopRPGCharacter::RestoreGuardPointsOnBlock()
+{
+    check(HasAuthority());
+    const double Before = GuardPoints;
+    GuardPoints = FMath::Min(MaxGuardPoints, GuardPoints + GuardBlockRecovery);
+    ForceNetUpdate();
+
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    return bGuarding && bShieldEquipped && GetHealth() > 0.0f && State && State->IsRoundPlaying();
+    UE_LOG(LogCoopRPGGuard, Log, TEXT("GuardPointsBlock Round=%s Slot=%d GPBefore=%.2f GPAfter=%.2f Time=%.3f"),
+        *State->GetRoundId().ToString(), DisplaySlot, Before, GuardPoints, GetWorld()->GetTimeSeconds());
 }
 
 void ACoopRPGCharacter::SetShieldEquipped(bool bEquipped)
@@ -255,17 +282,21 @@ void ACoopRPGCharacter::SetShieldEquipped(bool bEquipped)
     {
         return;
     }
+    if (!bEquipped)
+    {
+        ClearGuard();
+    }
     bShieldEquipped = bEquipped;
-    bGuarding = bEquipped && bGuarding;
     OnRep_ShieldState();
     ForceNetUpdate();
 }
 
 void ACoopRPGCharacter::ReleaseGuardInput()
 {
-    if (bGuardKeyHeld)
+    if (bGuardKeyHeld || bGuardMouseHeld)
     {
         bGuardKeyHeld = false;
+        bGuardMouseHeld = false;
         ServerSetGuarding(FGuid(), false);
     }
 }
@@ -274,6 +305,8 @@ void ACoopRPGCharacter::ClearGuard()
 {
     if (HasAuthority())
     {
+        PendingGuardRound.Invalidate();
+        UpdateGuardPoints();
         SetGuarding(false);
     }
 }
@@ -283,6 +316,16 @@ double ACoopRPGCharacter::GetGuardAngle(const FVector& SourcePosition) const
     const FVector Offset = (SourcePosition - GetActorLocation()).GetSafeNormal2D();
     const double Dot = FVector::DotProduct(GetActorForwardVector().GetSafeNormal2D(), Offset);
     return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Dot, -1.0, 1.0)));
+}
+
+FVector ACoopRPGCharacter::GetShieldImpactLocation() const
+{
+    const FVector Forward = GetActorForwardVector();
+    if (HeroShieldMesh->GetStaticMesh() && HeroShieldMesh->IsVisible())
+    {
+        return HeroShieldMesh->Bounds.Origin + Forward * 8.0;
+    }
+    return GetActorLocation() + Forward * 38.0 + FVector(0.0, 0.0, 25.0);
 }
 
 void ACoopRPGCharacter::SetDisplaySlot(int32 Slot)
@@ -355,6 +398,9 @@ void ACoopRPGCharacter::RefreshHeroAppearance()
                     LocomotionPath, *GetNameSafe(HeroMesh));
             }
         }
+        HeroGuardClip = Identity->GetSelectedHero() == ECoopRPGHero::AnimalHero
+            ? TSoftObjectPtr<UAnimSequence>(FSoftObjectPath(TEXT("/Game/ThirdParty/RPGHeroSquad/Animation/AnimalHero/Anim_Defend_AnimalHero.Anim_Defend_AnimalHero"))).LoadSynchronous()
+            : nullptr;
         SetPresentationTint(GetWorldTimerManager().IsTimerActive(HitFlashTimer));
         ConfigureHeroWeapon(Identity->GetSelectedHero());
         ConfigureHeroShield(Identity->GetSelectedHero());
@@ -437,6 +483,8 @@ void ACoopRPGCharacter::BeginPlay()
     AbilitySystem->InitAbilityActorInfo(this, this);
     if (HasAuthority())
     {
+        AbilitySystem->GetGameplayAttributeValueChangeDelegate(UCoopRPGCombatAttributes::GetHealthAttribute())
+            .AddUObject(this, &ThisClass::HandleGuardHealthChanged);
         if (CoopRPG::Expedition::IsExpedition(GetWorld()))
         {
             PartyStamina = FMath::CeilToInt(GetStamina());
@@ -473,11 +521,21 @@ void ACoopRPGCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
     {
         Input->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACoopRPGCharacter::Move);
         Input->BindAction(AttackAction, ETriggerEvent::Started, this, &ACoopRPGCharacter::Attack);
-        PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ACoopRPGCharacter::CancelAttack);
+        PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ACoopRPGCharacter::PressGuardInput);
+        PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_DoubleClick, this, &ACoopRPGCharacter::PressGuardInput);
+        PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &ACoopRPGCharacter::ReleaseGuardInputKey);
         PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACoopRPGCharacter::UseSlash);
         PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACoopRPGCharacter::UseTaunt);
         PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &ACoopRPGCharacter::PressGuardInput);
-        PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &ACoopRPGCharacter::ReleaseGuardInput);
+        PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &ACoopRPGCharacter::ReleaseGuardInputKey);
+    }
+}
+
+void ACoopRPGCharacter::HandleGuardHealthChanged(const FOnAttributeChangeData& Change)
+{
+    if (Change.NewValue <= 0.0f)
+    {
+        ClearGuard();
     }
 }
 
@@ -529,36 +587,145 @@ void ACoopRPGCharacter::UseTaunt()
     AbilitySystem->TryActivateAbilityByClass(UCoopRPGTauntAbility::StaticClass());
 }
 
-void ACoopRPGCharacter::PressGuardInput()
+void ACoopRPGCharacter::PressGuardInput(FKey Key)
 {
-    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    if (!bGuardKeyHeld && State && State->IsRoundPlaying())
+    const bool bMouse = Key == EKeys::RightMouseButton;
+    bool& bHeld = bMouse ? bGuardMouseHeld : bGuardKeyHeld;
+    if (bHeld)
     {
-        bGuardKeyHeld = true;
-        ServerSetGuarding(State->GetRoundId(), true);
+        return;
+    }
+
+    if (bMouse)
+    {
+        CancelAttack();
+    }
+
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    if (State && State->IsRoundPlaying())
+    {
+        const bool bGuardAlreadyHeld = bGuardKeyHeld || bGuardMouseHeld;
+        bHeld = true;
+        if (!bGuardAlreadyHeld)
+        {
+            ServerSetGuarding(State->GetRoundId(), true);
+        }
+    }
+}
+
+void ACoopRPGCharacter::ReleaseGuardInputKey(FKey Key)
+{
+    bool& bHeld = Key == EKeys::RightMouseButton ? bGuardMouseHeld : bGuardKeyHeld;
+    if (bHeld)
+    {
+        bHeld = false;
+        if (!bGuardKeyHeld && !bGuardMouseHeld)
+        {
+            ServerSetGuarding(FGuid(), false);
+        }
     }
 }
 
 void ACoopRPGCharacter::SetGuarding(bool bActive)
 {
-    if (bGuarding != bActive)
+    if (bGuarding == bActive)
     {
-        bGuarding = bActive;
-        OnRep_ShieldState();
-        ForceNetUpdate();
+        return;
     }
+    bGuarding = bActive;
+    GuardPointsUpdatedAt = GetWorld()->GetTimeSeconds();
+    if (!bActive)
+    {
+        GuardRecoveryStartsAt = GuardPointsUpdatedAt + GuardRecoveryDelay;
+    }
+
+    ScheduleGuardPointsUpdate();
+    OnRep_ShieldState();
+    ForceNetUpdate();
+    LogGuardPoints(bActive ? TEXT("Started") : TEXT("Stopped"));
+}
+
+bool ACoopRPGCharacter::CanUpdateGuardPoints() const
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    return State && State->IsRoundPlaying() && GetHealth() > 0.0f;
+}
+
+void ACoopRPGCharacter::UpdateGuardPoints()
+{
+    const double Now = GetWorld()->GetTimeSeconds();
+    const double Previous = GuardPointsUpdatedAt;
+    GuardPointsUpdatedAt = Now;
+
+    if (!CanUpdateGuardPoints())
+    {
+        GetWorldTimerManager().ClearTimer(GuardPointsTimer);
+        return;
+    }
+
+    if (bGuarding)
+    {
+        GuardPoints = FMath::Max(0.0, GuardPoints - (Now - Previous) * GuardDrainPerSecond);
+        if (GuardPoints <= UE_DOUBLE_SMALL_NUMBER)
+        {
+            GuardPoints = 0.0;
+            bGuardExhausted = true;
+            bGuardInputNeedsRelease = true;
+            PendingGuardRound.Invalidate();
+            LogGuardPoints(TEXT("Exhausted"));
+            SetGuarding(false);
+            return;
+        }
+    }
+    else if (GuardPoints < MaxGuardPoints)
+    {
+        const double RecoverySeconds = FMath::Max(0.0, Now - FMath::Max(Previous, GuardRecoveryStartsAt));
+        GuardPoints = FMath::Min(MaxGuardPoints, GuardPoints + RecoverySeconds * GuardRecoveryPerSecond);
+    }
+
+    if (bGuardExhausted && !bGuardInputNeedsRelease && GuardPoints >= GuardRestartPoints)
+    {
+        bGuardExhausted = false;
+        ForceNetUpdate();
+        LogGuardPoints(TEXT("Rearmed"));
+    }
+    ScheduleGuardPointsUpdate();
+}
+
+void ACoopRPGCharacter::ScheduleGuardPointsUpdate()
+{
+    auto& Timers = GetWorldTimerManager();
+    if (!CanUpdateGuardPoints() || (!bGuarding && GuardPoints >= MaxGuardPoints))
+    {
+        Timers.ClearTimer(GuardPointsTimer);
+        return;
+    }
+
+    const double Delay = bGuarding ? FMath::Min(GuardPointsUpdateInterval, GuardPoints / GuardDrainPerSecond)
+        : FMath::Max(GuardPointsUpdateInterval, GuardRecoveryStartsAt - GetWorld()->GetTimeSeconds());
+    Timers.SetTimer(GuardPointsTimer, this, &ThisClass::UpdateGuardPoints, static_cast<float>(Delay), false);
+}
+
+void ACoopRPGCharacter::LogGuardPoints(const TCHAR* Event) const
+{
+    const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+    UE_LOG(LogCoopRPGGuard, Log, TEXT("GuardPointsState Round=%s Slot=%d Event=%s GP=%.2f Locked=%d Time=%.3f"),
+        State ? *State->GetRoundId().ToString() : TEXT("None"), DisplaySlot, Event, GuardPoints, bGuardExhausted,
+        GetWorld()->GetTimeSeconds());
 }
 
 void ACoopRPGCharacter::ServerSetGuarding_Implementation(FGuid RoundId, bool bRequested)
 {
     if (!bRequested)
     {
-        SetGuarding(false);
+        ClearGuard();
+        bGuardInputNeedsRelease = false;
+        UpdateGuardPoints();
         return;
     }
 
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
-    if (!bShieldEquipped || GetHealth() <= 0.0f || bMeleeFacingLocked || !RoundId.IsValid()
+    if (!bShieldEquipped || GetHealth() <= 0.0f || !RoundId.IsValid()
         || !State || State->GetRoundId() != RoundId || !State->IsRoundPlaying())
     {
         UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerGuardRejected Slot=%d Equipped=%d Round=%s %s"),
@@ -566,12 +733,58 @@ void ACoopRPGCharacter::ServerSetGuarding_Implementation(FGuid RoundId, bool bRe
             *CoopRPG::Debug::DescribePlayerRequestContext(this, ANSI_TO_TCHAR(__FUNCTION__)));
         return;
     }
+    UpdateGuardPoints();
+    if (bGuardExhausted)
+    {
+        bGuardInputNeedsRelease = true;
+        LogGuardPoints(TEXT("StartRejected"));
+        return;
+    }
+    if (bMeleeFacingLocked)
+    {
+        PendingGuardRound = RoundId;
+        return;
+    }
+
+    PendingGuardRound.Invalidate();
     SetGuarding(true);
+}
+
+void ACoopRPGCharacter::UpdateGuardPose()
+{
+    auto* Animation = Cast<UCoopRPGHeroAnimInstance>(GetMesh()->GetAnimInstance());
+    if (!Animation)
+    {
+        LocalGuardMontage.Reset();
+        return;
+    }
+
+    if (!bShieldEquipped || !bGuarding || !HeroGuardClip)
+    {
+        if (LocalGuardMontage.IsValid())
+        {
+            Animation->Montage_Stop(0.12f, LocalGuardMontage.Get());
+            LocalGuardMontage.Reset();
+        }
+        return;
+    }
+
+    if (!LocalGuardMontage.IsValid() || !Animation->Montage_IsActive(LocalGuardMontage.Get()))
+    {
+        const float GuardHoldTime = HeroGuardClip->GetPlayLength() * 0.5f;
+        if (auto* Montage = Animation->PlaySlotAnimationAsDynamicMontage(HeroGuardClip,
+            UCoopRPGHeroAnimInstance::MeleeSlot, 0.10f, 0.12f, 1.0f, 1, -1.0f, GuardHoldTime))
+        {
+            Animation->Montage_Pause(Montage);
+            LocalGuardMontage = Montage;
+        }
+    }
 }
 
 void ACoopRPGCharacter::OnRep_ShieldState()
 {
     HeroShieldMesh->SetVisibility(bShieldEquipped && HeroShieldMesh->GetStaticMesh() != nullptr);
+    UpdateGuardPose();
     if (bShieldEquipped || GetDisplaySlot() > 0)
     {
         UE_LOG(LogCoopRPGEquipment, Log, TEXT("PlayerShieldState Slot=%d Equipped=%d Guard=%d Visible=%d Mesh=%s Socket=%s %s"),
@@ -664,7 +877,7 @@ void ACoopRPGCharacter::OnRep_MeleePresentation()
         return;
     }
 
-    if (!Animation || !HeroAttackClip || PresentedMeleeSequence == MeleePresentation.Sequence)
+    if (bGuarding || !Animation || !HeroAttackClip || PresentedMeleeSequence == MeleePresentation.Sequence)
     {
         return;
     }
@@ -822,6 +1035,12 @@ void ACoopRPGCharacter::ReleaseMeleeFacing()
     {
         GetCharacterMovement()->bOrientRotationToMovement = true;
         bMeleeFacingLocked = false;
+        if (HasAuthority() && PendingGuardRound.IsValid())
+        {
+            const FGuid RoundId = PendingGuardRound;
+            PendingGuardRound.Invalidate();
+            ServerSetGuarding_Implementation(RoundId, true);
+        }
     }
 }
 

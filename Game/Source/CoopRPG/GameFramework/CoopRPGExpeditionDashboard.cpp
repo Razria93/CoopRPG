@@ -23,7 +23,7 @@ enum class ECoopRPGDashboardLabel : uint8
     Lobby, Skirmish, Puzzle, Boss, Expedition, Ready, OpenChest, ChestActions, Mushrooms, Plates, Knight,
     Stone, Portal, WaitForPartner, Countdown, Start, Defeat, StoneGranted, CountStarted, CountReset,
     More, Fold, ReadyYes, ReadyWait, ReadyMissing, Objective, StoneAppeared, CloseChest, Departure, EquipSword,
-    BossRewards, BossRewardsOpened
+    BossRewards, BossRewardsOpened, PartyWaiting, StageStart
 };
 
 namespace
@@ -40,13 +40,20 @@ namespace
 
     ELabel GetGoal(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, int32 Stage)
     {
-        if (Stage == 0 && State.IsLobbyDepartureScheduled())
+        if (Stage == 0)
         {
-            return ELabel::Departure;
+            if (State.IsLobbyDepartureScheduled())
+            {
+                return ELabel::Departure;
+            }
         }
         if (!State.IsRoundPlaying())
         {
-            return ELabel::Ready;
+            if (State.IsRoundStartScheduled())
+            {
+                return ELabel::StageStart;
+            }
+            return Controller.IsRoundReady() ? ELabel::PartyWaiting : ELabel::Ready;
         }
         if (Stage == 2)
         {
@@ -121,9 +128,14 @@ namespace
         {
         case ELabel::Ready:
             return {TEXT("시작할 준비가 되면 [R] 키를 눌러 주세요.")};
+        case ELabel::PartyWaiting:
+            return {TEXT("준비가 완료됐어요."), TEXT("파티원이 준비할 때까지 기다려 주세요.")};
         case ELabel::Departure:
             return {TEXT("곧 [스테이지 1 · 버섯 군락]에 입장합니다!"),
                 FString::Printf(TEXT("남은 시간 %.1f초"), FMath::CeilToDouble(State.GetLobbyDepartureRemainingSeconds() * 10.0) / 10.0)};
+        case ELabel::StageStart:
+            return {TEXT("곧 스테이지가 시작돼요."),
+                FString::Printf(TEXT("남은 시간 %.1f초"), FMath::CeilToDouble(State.GetRoundStartRemainingSeconds() * 10.0) / 10.0)};
         case ELabel::OpenChest:
             return bBossActive
                 ? TArray<FString>{TEXT("상자에서 [E]로 장비·물약을 챙기세요.")}
@@ -349,7 +361,7 @@ void FCoopRPGExpeditionDashboard::DrawHealthBar(AHUD& HUD, FVector2D Position, f
 }
 
 void FCoopRPGExpeditionDashboard::DrawResourceTrack(AHUD& HUD, FVector2D Position, FVector2D Size,
-    float Fraction, bool bStamina) const
+    float Fraction, ECoopRPGResourceTrack Resource) const
 {
     const auto DrawRoundedRows = [](FVector2D Bounds, const auto& DrawRows)
     {
@@ -376,9 +388,14 @@ void FCoopRPGExpeditionDashboard::DrawResourceTrack(AHUD& HUD, FVector2D Positio
         return;
     }
 
-    const double SourceY = bStamina ? 376.0 : 313.0;
+    const double SourceY = Resource == ECoopRPGResourceTrack::Stamina ? 376.0 : 313.0;
     DrawRoundedRows(Fill, [&](double X, double Y, double Width, double Height)
     {
+        if (Resource == ECoopRPGResourceTrack::Guard)
+        {
+            HUD.DrawRect(FLinearColor::White, Position.X + 1.0 + X, Position.Y + 1.0 + Y, Width, Height);
+            return;
+        }
         const double AtlasX = 250.0 / (Size.X - 2.0);
         const double AtlasY = 13.0 / Fill.Y;
         const FVector2D CropMin(X * AtlasX, SourceY + Y * AtlasY);
@@ -536,7 +553,9 @@ void FCoopRPGExpeditionDashboard::Update(const ACoopRPGGameState& State, int32 S
     }
     if (!LastGoal.IsSet() || LastGoal.GetValue() != Goal)
     {
-        if (LastGoal.IsSet() && LastGoal.GetValue() == ELabel::Ready && State.IsRoundPlaying())
+        if (State.IsRoundPlaying() && LastGoal.IsSet()
+            && (LastGoal.GetValue() == ELabel::StageStart || LastGoal.GetValue() == ELabel::PartyWaiting
+                || LastGoal.GetValue() == ELabel::Ready))
         {
             AddRecord(ELabel::Start);
         }

@@ -30,6 +30,7 @@ namespace
     constexpr TCHAR RoundOneMapName[] = TEXT("L_Round_01");
     constexpr double ResultDisplaySeconds = 3.0;
     constexpr double LobbyDepartureSeconds = 3.0;
+    constexpr double RoundStartSeconds = 3.0;
     constexpr double PuzzleRewardSeconds = 30.0;
     constexpr int32 RoundCapacity = ACoopRPGGameState::RoundCapacity;
 
@@ -170,6 +171,28 @@ void ACoopRPGGameMode::UpdateLootRoundPhase(const AController* Leaving)
                 *State->GetRoundId().ToString(), RoundPlayers.Num());
         }
         return;
+    }
+
+    if (bExpeditionSkirmish || bExpeditionPuzzle || bExpeditionBoss)
+    {
+        if (!bAllReady || !State->GetRoundId().IsValid())
+        {
+            State->SetRoundStartDeadline(0.0);
+            return;
+        }
+        if (!State->IsRoundStartScheduled())
+        {
+            const double Now = State->GetServerWorldTimeSeconds();
+            State->SetRoundStartDeadline(Now + RoundStartSeconds);
+            UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("ExpeditionRoundStartScheduled Round=%s Time=%.3f Deadline=%.3f"),
+                *State->GetRoundId().ToString(), Now, Now + RoundStartSeconds);
+            return;
+        }
+        if (State->GetRoundStartRemainingSeconds() > 0.0)
+        {
+            return;
+        }
+        State->SetRoundStartDeadline(0.0);
     }
 
     if ((bEnemyCombat || bExpeditionPuzzle) && bAllReady)
@@ -370,6 +393,10 @@ void ACoopRPGGameMode::Tick(float DeltaSeconds)
     }
     if (!State->IsRoundPlaying())
     {
+        if (State->IsRoundStartScheduled() && State->GetRoundStartRemainingSeconds() <= 0.0)
+        {
+            UpdateLootRoundPhase();
+        }
         return;
     }
 
