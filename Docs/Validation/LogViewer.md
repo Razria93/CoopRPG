@@ -42,6 +42,8 @@ PowerShell에서 소스 에디터와 프로젝트를 연다. `L_Movement`를 열
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:/CoopRPG/Tools/Validation/Start-CombatManual.ps1" -PackageRoot "C:/CoopRPG/Artifacts/Validation/v02-manual-input-20261115-172824/final/Stage" -NoForeground
 ```
 
+전용 서버는 기본 실행에서 엔진의 일반 파일 로그를 사용한다. 강제 플러시 비교가 필요할 때만 `-ServerForceLogFlush`를 지정한다. 로컬 수동 실행기, 역할별 LAN 스크립트와 GUI 실행기가 같은 스위치를 받는다. 기존 클라이언트는 강제 플러시 설정을 유지한다. [기본·진단 모드 실행 결과](ForestExpedition.md#launcher-and-potion-boundary-verification)
+
 종료할 때는 클라이언트 두 창과 로그 뷰어를 닫은 뒤, 출력된 `Stop-Process -Id <이번 서버 PID>`를 실행한다. 모니터를 명시하려면 먼저 아래 목록을 확인한다.
 
 ```powershell

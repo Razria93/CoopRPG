@@ -81,22 +81,51 @@
 <a id="boss-reward-extraction"></a>
 ## 3차 MVP 후속 · 흑기사 보상과 공동 탈출
 
-흑기사 처치 후 보상 상자와 마법진을 열고 두 사람이 포탈에 머물렀을 때 원정 결과와 골드를 확정한다. 처음에는 HP·SP 회복 물약을 한 개씩 배치했다. 현재 보상은 무력·수호 스크롤 각 1장과 하급 방패 1개이며, 공동 탈출 뒤 각자 30골드를 받는다. [현재 보상 검증](Validation/ForestExpedition.md#loot-follow-up-verification) 11/24 전용 서버와 A·B에서 처치 뒤 잔류, 마지막 HP 물약 경합, 포탈 이탈·재진입 뒤 로비 복귀, 실패 후 같은 맵 재도전과 입장 재고 복원을 확인했다. [패키지 검증 근거](Validation/ForestExpedition.md#boss-reward-extraction-verification)
+흑기사 처치 후 보상 상자와 마법진을 열고 두 사람이 포탈에 머물렀을 때 원정 결과와 골드를 확정한다. 현행 상자에는 무력·수호 스크롤 각 한 장과 하급 방패 한 개가 있다. 초기판에서 마지막 HP 물약 경합과 같은 맵 재도전의 재고 복원을 확인했다. 현행 상자 검증에서는 새 보상 수령, 포탈 이탈·재진입, 공동 탈출과 각자 30골드 지급을 확인했다. [초기 통합 검증](Validation/ForestExpedition.md#boss-reward-extraction-verification) · [현행 보상 검증](Validation/ForestExpedition.md#boss-upgrade-rewards-verification)
 
 <a id="expedition-follow-up-work"></a>
 ### 누적 통합과 후속 구현 · 2026-11-24
 
-**통합 검증 대기** · 코드 정리 기준 위에 로딩 화면 → 직업 기본 장비 → 수호기사 도발 → 흑기사 보상 상자·공동 탈출 순서로 기존 구현을 쌓는다. 전용 서버와 A·B가 같은 패키지로 로비부터 보스 탈출 후 로비 복귀까지 진행하고, 같은 맵 재도전의 장착·재고 복원과 물약·골드 단일 지급을 확인한다. [협업 기준과 결정 경위](Development.md#expedition-follow-up-decision)
+**통합 검증 완료** · `94eb050`의 동일 패키지로 로딩 화면, 직업 기본 장비, 수호기사 도발, 흑기사 보상과 공동 탈출을 확인했다. 로비에서 출발해 같은 맵 재도전을 거쳐 흑기사 처치 후 같은 세션의 로비로 돌아왔다. 상자 마지막 HP 물약의 단일 지급과 플레이어당 30골드 지급도 확인했다. 이후 구현과 별개 PC 검증 상태는 아래 표와 기록에서 확인한다. [A·B 통합 검증](Validation/ForestExpedition.md#expedition-stack-94eb050-verification) · [협업 기준과 결정 경위](Development.md#expedition-follow-up-decision)
 
 | 순서 | 작업 | 요구와 완료 확인 |
 |---|---|---|
-| 1 | **로비 [R] 준비 안내** | 11/24 확인 기준으로 좌측 준비 상태는 갱신되며 중앙 안내 전환은 구현 대기다. 미준비 플레이어에게 [R]을 안내한다. 서버가 해당 플레이어의 준비를 확인하면 해당 화면에 “준비가 완료됐어요. 파티원이 준비할 때까지 기다려 주세요.”를 표시한다. A만 준비했을 때 B는 [R] 안내를 유지하고, 전원이 준비하면 양쪽이 기존 입장 카운트다운으로 전환되는지 확인한다. |
-| 2 | **플레이어 방패 우클릭 가드와 차단 피드백** | 구현 대기. 방패 장착 중 우클릭을 누르면 가드하고 떼면 해제한다. 공격 중 우클릭은 기존 취소 규칙을 적용하고, 가드 가능한 상태에서 입력을 계속 유지하면 가드한다. 가드 상태는 방패 자세와 체력바 아래 아이콘으로 표시한다. 서버가 정면 피해 경감을 확정한 순간 방패 표면에 짧은 효과와 소리를 재생한다. `NS_MRPG_Shield_Block`부터 비교한다. 전용 서버와 A·B에서 정면 경감, 측·후면 일반 피격, 버튼 해제·방패 해제·사망·라운드 종료 시 가드 해제, UI 위 클릭의 가드·공격 입력 차단을 확인한다. |
-| 3 | **물약 표시와 선택 UX** | 파티 카드에 HP·SP별 사용 가능 횟수를 표시하고, 내 단축키가 사용할 물약과 0개 상태를 알 수 있게 한다. 개인 물약 회복량 40은 조정 후보로 둔다. |
-| 4 | **퍼즐 보상 카드 UI와 SP 물약 패시브** | 종류·희귀도·선택 버튼을 적용했다. 직접 선택과 30초 자동 확정은 참가자별로 한 번씩 처리하고, 다음 구간에서 획득한 HP·SP 패시브의 사용 한도를 반영한다. [구현 기록](Development.md#puzzle-card-follow-up) · [시험 범위와 근거](Validation/ForestExpedition.md#puzzle-card-follow-up-verification) |
-| 5 | **로비 NPC와 직업 선택** | 창고·상점은 가방 왼쪽에, 직업 교관은 중앙에 연다. 직업 변경을 준비 상태·기본 장비·파티 배지에 연결했다. 직업 스킬을 2·3번으로 옮길 수 있고 같은 맵 재도전에서 배정을 복원한다. [구현 기록](Development.md#lobby-services-follow-up) · [시험 범위와 근거](Validation/ForestExpedition.md#lobby-services-follow-up-verification) |
-| 6 | **보급 상자·개인 방패·원정 보상** | 첫 전투 전 슬래시와 도발 캡슐을 한 개씩 확보할 수 있다. 개인 방패는 최초 장착 시 귀속되고 해제하면 기본 방패로 돌아간다. 버섯 금화는 팀원 각각 1골드를 더하며 버섯 군락 성공에서 확정한다. [구현 기록](Development.md#loot-follow-up) · [검증 근거](Validation/ForestExpedition.md#loot-follow-up-verification) |
-| 7 | **추가 성장 후보** | 기동·집중은 대표 기술을 정한 뒤 연결한다. 가방 16칸 한도는 #32에서, SP 물약 사용 한도 패시브는 #33에서 구현했다. |
+| 1 | **로비 [R] 준비 안내** | 11/24 구현·검증 완료. 미준비 상태에는 [R], 서버가 해당 플레이어의 준비를 확인하면 그 화면에 파티원 대기를 안내한다. A와 B가 각각 먼저 준비하는 회차에서 상대는 [R] 안내를 유지했고, 두 사람 모두 준비하면 양쪽에 입장 카운트다운이 표시됐다. [화면·원본 로그](Validation/ForestExpedition.md#lobby-ready-notice-verification) |
+| 2 | **플레이어 방패 우클릭 가드와 차단 피드백** | 11/24 구현·검증 완료. 우클릭 유지 가드, 기존 대기 중 공격 취소와 가드 전환, 체력바 아래 아이콘을 적용했다. 전용 서버와 A·B에서 정면 피해 5·측후면 피해 10, 차단 VFX·SFX, 입력·장비 해제 및 사망·시간 초과 초기화, 현황판 클릭 차단을 확인했다. [화면·원본 로그](Validation/ForestExpedition.md#player-shield-guard-verification) |
+| 3 | **가드 게이지와 물약 선택** | 구현·로컬 A·B 검증 완료. 가드 유지 소모·정면 차단 회복·0에서 해제, HP·SP 물약 등록·사용 횟수 표시·동일 맵 재도전 복원을 확인했다. [전투 자원 PR #32](https://github.com/Razria93/CoopRPG/pull/32) |
+| 4 | **퍼즐 보상 카드 UI** | 구현·로컬 A·B 검증 완료. 두 회차에서 직접 선택과 30초 자동 확정을 한 명씩 교대해 각 1회를 확인했다. [통합 근거](Validation/ForestExpedition.md#puzzle-card-follow-up-verification) |
+| 5 | **로비 NPC·직업·슬롯·패널** | 구현 및 통합 완료. 로컬 A·B에서 창고·상점·교관 상호작용과 직업·2/3번 슬롯의 동일 맵 재도전 유지를 확인했다. 패널은 926×521·960×540·1440×810 시험을 수행했다. 큰 창으로 연속 전환한 회차의 가드 툴팁 표본은 별도 1440×810 시작 회차로 확인했다. [통합 근거](Validation/ForestExpedition.md#lobby-services-follow-up-verification) |
+| 6 | **최초 접속 로딩** | 구현 및 통합 완료. 로컬 패키지의 정상 접속·맵 전환·재도전과 별개 PC의 최초 접속에서 확인했다. [통합 근거](Validation/ForestExpedition.md#expedition-travel-follow-up-verification) |
+| 7 | **SP 물약 패시브·가방 16칸** | 구현 및 통합 완료. SP 사용 한도 +1과 16칸 용량을 서버에 연결했다. A·B에서 패시브 표시와 SP 물약 2회 사용을 확인했다. 16칸이 찼을 때 HP 스택 여유에 따라 상자와 적 드롭 획득이 허용되거나 거절되는 네 경우도 확인했다. [16칸 경계 검증](Validation/ForestExpedition.md#launcher-and-potion-boundary-verification) · [가방 검증](Validation/ForestExpedition.md#stamina-passive-bag-capacity-verification) · [SP 사용 및 표시 검증](Validation/ForestExpedition.md#recovery-shortcut-available-uses-ab) [퍼즐·SP 패시브 PR #33](https://github.com/Razria93/CoopRPG/pull/33) |
+| 8 | **후속 TODO · 직업과 스탯 확장** | 11/24 사용자 결정으로 현재 범위에서 보류한다. 추가 직업과 대표 기술을 정할 때 기동·집중의 효과와 적용 대상을 함께 설계한다. |
+| 9 | **후속 · 원정 전리품과 스킬** | 아래 네 작업을 반영했다. [통합 근거](Validation/ForestExpedition.md#loot-follow-up-verification) |
+
+### 원정 전리품과 스킬 후속 작업
+
+1. **직업 스킬 캡슐 · 구현 및 로컬 2인 검증 완료** · 버섯 군락 보급 상자에 전사 전용 슬래시와 수호기사 전용 도발을 하나씩 배치했다. A·B에서 전투 전 습득·배정, 실제 발동, 같은 맵 재도전 시 입장 상태와 상자 재고 복원을 확인했다. [화면·원본 로그](Validation/ForestExpedition.md#job-skill-capsules-verification)
+2. **개인 방패 · 구현 및 로컬 2인 검증 완료** · 버섯 군락 보급 상자의 한손검 다음 행에 수호기사용 하급 방패를 한 개 배치했다. 최초 장착 귀속, 해제 시 기본 방패 복귀, 같은 맵 재도전의 입장 상태 복원을 확인했다. [화면·원본 로그](Validation/ForestExpedition.md#personal-shield-verification)
+3. **흑기사 보상 · 구현 및 로컬 2인 검증 완료** · 무력·수호 스크롤 각 한 장과 하급 방패 한 개를 수령했다. 포탈 이탈·재진입 후 공동 탈출과 사람마다 30골드 한 번 지급을 전용 서버와 A·B에서 확인했다. [화면·원본 로그](Validation/ForestExpedition.md#boss-upgrade-rewards-verification)
+4. **일반몹 금화 드롭 · 구현 및 로컬 2인 검증 완료** · 버섯당 금화 한 개를 배치하고 한 명이 가까이 가면 두 사람에게 1골드씩 표시한다. 동시 접근 단일 처리, 같은 맵 재도전의 임시 획득분 복원, 버섯 군락 성공 후 확정과 로비의 각 34골드를 확인했다. [화면·원본 로그](Validation/ForestExpedition.md#skirmish-gold-verification)
+
+직업 확대와 기동·집중, 경매, 4인·호스트 관리, 추가 웨이브, 퀘스트는 후속 TODO다. 재접속과 보스전 지연 분석은 각 작업 기록을 따른다.
+
+**별개 PC 검증 완료 범위** · `expedition-2pc-20261124`에서 버섯 군락 실패·동일 맵 재도전, 퍼즐 성공, 흑기사 처치 후 공동 탈출·양쪽 1점, 같은 서버의 로비 복귀를 확인했다. 퍼즐 대기 중 재접속한 B는 같은 슬롯으로 돌아왔고 개인 물약·캡슐·도발 슬롯 일부가 초기화됐다. 재접속 진행 상태의 기대 규칙과 보스전 지연 원인은 후속 확인으로 남긴다. [로그와 화면 근거](Validation/ForestExpedition.md#expedition-two-pc-20261124)
+
+**현재** · 전용 서버 강제 로그 플러시를 진단 옵션으로 옮겼다. 로컬 전용 서버와 A·B의 기본·진단 실행과 HP 물약 네 경계 사례를 확인했다. 별개 PC의 보스 지연 재측정은 후속으로 둔다. [시험 결과](Validation/ForestExpedition.md#launcher-and-potion-boundary-verification)
+
+**후속 완료** · 같은 로비 재접속과 대기 구간 참가자 상태 복원, 흑기사 결과 후 공용 복귀 재시도 1회를 적용했다. 최종 패키지 하나로 같은 맵 재도전·공동 탈출·로비 복귀와 양쪽 34골드를 확인했다. 재접속·최초 로딩은 PR #36으로 통합했다. [개발 기록](Development.md#expedition-reconnect-return) · [화면·원본 로그](Validation/ForestExpedition.md#expedition-reconnect-return-verification)
+
+**11/25 두 PC 완주** · 최신 재접속 풀패키지의 실제 데스크톱·노트북 회차에서 퍼즐 입장 시 개인 물약·도발 슬롯·골드 이월, 흑기사 공동 탈출·양쪽 1점·각 34골드와 같은 세션의 로비 복귀를 확인했다. [두 PC 원본 로그 대조](Validation/ForestExpedition.md#expedition-two-pc-0806-log-audit)
+
+**11/25 직업 제한과 아이템 보유** · 현재 직업의 장착·습득·발동 조건을 상자 획득·구매·창고 이동과 분리했다. 액티브 탭의 직업 기술과 장착 시 가드, 직업별 슬롯 복원과 실제 발동을 로컬 A·B에서 확인했다. [개발 기록](Development.md#job-item-ownership) · [화면·원본 로그](Validation/ForestExpedition.md#job-item-ownership-verification)
+
+**11/25 직업 제한 빌드 두 PC 완주** · 퍼즐 성공부터 흑기사전·공동 탈출·같은 서버의 로비 복귀를 대조했다. 맵 전환 시 B의 개인 물약·도발 2번 슬롯과 복귀 직후 양쪽 34골드를 확인했다. [양쪽 원본 로그](Validation/ForestExpedition.md#job-item-ownership-manual-2pc)
+
+**11/25 인게임 HUD 보완** · 로컬 A·B의 두 해상도에서 발밑 이름표와 내 캐릭터의 겹침을 확인했다. [2D 이름표 가림](Validation/ForestExpedition.md#hud-foot-nameplate-mask-verification) · [하급 방패 직업 제한 문구와 장착 상태](Validation/ForestExpedition.md#hud-local-hero-shield-caption-verification)
+
+**11/25 최신 패키지 로컬 2인 통합 검증** · 일반 패키징에서 이름표 셰이더 캐시를 확인했다. 로비부터 같은 군락 재도전, 퍼즐, 흑기사 보상·공동 탈출과 같은 서버 로비 복귀까지 한 회차로 진행했다. A·B 이름표와 수호기사 전용 문구의 두 해상도 검증을 마쳤다. [화면·원본 로그](Validation/ForestExpedition.md#expedition-latest-local-playthrough-verification)
+
+**다음 MVP 이월 · 사용자 결정** · 두 PC에서 퍼즐 대기 중 B 프로세스를 재실행해 상태 복원을 확인한다. 흑기사전의 프레임 시간·RTT·히트스탑 자동 반복 계측도 함께 넘긴다. 검증기의 입력·로그 대조를 재사용하고 두 제어 채팅은 실행·재접속·결과 수집을 조율한다. [기존 2PC 변경의 커밋 범위](Development.md#expedition-two-pc-20261124-record)
 
 <a id="phase2-current"></a>
 ## 2차 MVP 현행 작업 · 2026-11-18

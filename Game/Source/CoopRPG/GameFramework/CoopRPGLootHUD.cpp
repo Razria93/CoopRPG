@@ -1,13 +1,13 @@
 #include "CoopRPGLootHUD.h"
 
-#include "CoopRPGLobbyNpc.h"
-
 #include "CoopRPGExtractionZone.h"
 #include "CoopRPGExpeditionAttackHUD.h"
 #include "CoopRPGExpeditionMaps.h"
 #include "CoopRPGExpeditionHUDText.h"
 #include "CoopRPGGameState.h"
 #include "CoopRPGGameViewportClient.h"
+#include "CoopRPGLobbyNpc.h"
+#include "CoopRPGNameplateComposite.h"
 #include "CoopRPGPlayerController.h"
 #include "CoopRPGPlayerState.h"
 #include "CoopRPG/AbilitySystem/Abilities/CoopRPGMeleeAbility.h"
@@ -30,14 +30,18 @@
 #include "Engine/Font.h"
 #include "EngineUtils.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "Internationalization/BreakIterator.h"
 #include "InputKeyEventArgs.h"
 #include "Kismet/GameplayStatics.h"
-#include "Fonts/FontCache.h"
+#include "Kismet/KismetRenderingLibrary.h"
 #include "Fonts/FontMeasure.h"
-#include "Misc/ScopeExit.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Rendering/SlateRenderer.h"
+#include "SceneView.h"
 #include "GlobalRenderResources.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGGameplayFeedback, Log, All);
@@ -312,6 +316,7 @@ namespace
 void ACoopRPGLootHUD::DrawHUD()
 {
     Super::DrawHUD();
+    MaskedNameplatesUsed = 0;
     FixedHudBoundsCount = 0;
     PuzzleRewardPanelBounds = FBox2D(ForceInit);
     ChestPanelBounds = FBox2D(ForceInit);
@@ -1154,7 +1159,7 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
         }
         const auto* Player = *It;
         Plates.Add({Player, Player->GetCapsuleComponent(), Cached.Display, CoopRPG::Presentation::PlayerColor(Slot),
-            Player->GetHealth() / UCoopRPGCombatAttributes::MaxHealth, Player == LocalHero ? 0 : 2,
+            Player->GetHealth() / UCoopRPGCombatAttributes::MaxHealth, Player == LocalHero ? 0 : 1,
             FVector::DistSquared2D(Player->GetActorLocation(), ViewOrigin)});
     }
     const auto* GameState = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -1189,7 +1194,7 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
             const bool bNearbyOrTargeting = TargetSlot > 0 || (LocalHero && DistanceSquared <= FMath::Square(NearbyDistance));
             Plates.Add({Enemy, Enemy->GetCapsuleComponent(), Stage == 3 ? TEXT("흑기사") : TEXT("버섯"),
                 CoopRPG::Presentation::EnemyColor(), Enemy->GetHealth() / FMath::Max(1.0f, Enemy->GetMaxHealth()),
-                bNearbyOrTargeting ? 1 : 3, DistanceSquared});
+                bNearbyOrTargeting ? 2 : 3, DistanceSquared});
         }
     }
     if (CounterTargetSlot > 0)
@@ -1228,38 +1233,45 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
     const double NameHeight = Measure(*Canvas, TEXT("[가P]"), NameFont).Y;
     const double Height = TopPad + NameHeight + TextGap + BarHeight + BottomPad;
     const FBox2D View(FVector2D(EdgePad, EdgePad), FVector2D(Canvas->ClipX - EdgePad, Canvas->ClipY - EdgePad));
+
+    auto* LocalCharacter = Cast<ACoopRPGCharacter>(Controller.GetPawn());
+    auto* HeroDepth = LocalCharacter ? UpdateNameplateHeroDepth(*LocalCharacter) : nullptr;
+
     const auto Fits = [&View, this](const FBox2D& Bounds)
     {
         return View.IsInsideOrOn(Bounds.Min) && View.IsInsideOrOn(Bounds.Max)
             && !WorldLabelBounds.ContainsByPredicate([&Bounds](const FBox2D& Other) { return Bounds.Intersect(Other); });
     };
     TArray<FBox2D, TInlineAllocator<8>> Placed;
-    for (const FNameplate& Plate : Plates)
+    for (int32 Index = Plates.Num() - 1; Index >= 0; --Index)
     {
+        const FNameplate& Plate = Plates[Index];
         const FVector Feet = Plate.Pawn->GetActorLocation() - FVector(0.0, 0.0, Plate.Capsule->GetScaledCapsuleHalfHeight());
         const FVector Screen = Project(Feet);
         if (Screen.Z <= 0.0)
         {
             continue;
         }
-        const FVector2D Anchor(Screen.X - Width * 0.5, Screen.Y + 8.0);
+        const FVector2D Position(Screen.X - Width * 0.5, Screen.Y + 8.0);
         const FVector2D Size(Width, Height);
-        if (!Fits(FBox2D(Anchor, Anchor + Size)))
+        const FBox2D Bounds(Position, Position + Size);
+        if (!Fits(Bounds))
         {
             continue;
         }
-        for (const double Shift : {0.0, -16.0, 16.0, -32.0, 32.0})
+
+        constexpr double BadgeSide = 24.0;
+        const FVector2D BadgeOffset((Width - BadgeSide) * 0.5, Height + 3.0);
+        const FVector2D BadgePosition = Position + BadgeOffset;
+        const FBox2D Badge(BadgePosition, BadgePosition + FVector2D(BadgeSide));
+        const auto* Hero = Cast<ACoopRPGCharacter>(Plate.Pawn);
+        const bool bBadge = Hero && Hero->IsGuarding() && Fits(Badge);
+        const FString Label = FString::Printf(TEXT("[%s]"), *Plate.Name);
+        const float Health = FMath::Clamp(Plate.HealthFraction, 0.0f, 1.0f);
+        const auto DrawPlate = [&](FVector2D DrawPosition)
         {
-            const FVector2D Position = Anchor + FVector2D(Shift, 0.0);
-            const FBox2D Bounds(Position, Position + Size);
-            if (!Fits(Bounds) || Placed.ContainsByPredicate([&Bounds](const FBox2D& Other) { return Bounds.Intersect(Other); }))
-            {
-                continue;
-            }
-            ExpeditionDashboard.DrawDarkPanel(*this, Position, Size);
-            const auto* Hero = Cast<ACoopRPGCharacter>(Plate.Pawn);
-            const bool bGuarding = Hero && Hero->IsGuarding();
-            const FString Label = FString::Printf(TEXT("[%s]"), *Plate.Name);
+            UCanvas* AlphaTarget = Canvas->Canvas->IsWriteDestinationAlphaSet() ? Canvas.Get() : nullptr;
+            ExpeditionDashboard.DrawDarkPanel(*this, DrawPosition, Size, AlphaTarget);
             auto LabelFont = NameFont;
             FVector2D TextSize = Measure(*Canvas, Label, LabelFont);
             if (TextSize.X > Width - 2.0 * SidePad)
@@ -1267,24 +1279,32 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
                 LabelFont = Font(10.0f * (Width - 2.0 * SidePad) / TextSize.X, true);
                 TextSize = Measure(*Canvas, Label, LabelFont);
             }
-            Text(*Canvas, Label, Position + FVector2D((Width - TextSize.X) * 0.5,
+            Text(*Canvas, Label, DrawPosition + FVector2D((Width - TextSize.X) * 0.5,
                 TopPad + (NameHeight - TextSize.Y) * 0.5), LabelFont, Plate.Color);
-            ExpeditionDashboard.DrawHealthBar(*this, Position + FVector2D(SidePad, TopPad + NameHeight + TextGap),
-                Width - 2.0 * SidePad, FMath::Clamp(Plate.HealthFraction, 0.0f, 1.0f));
-            Placed.Add(Bounds);
-            if (bGuarding)
+            ExpeditionDashboard.DrawHealthBar(*this, DrawPosition + FVector2D(SidePad, TopPad + NameHeight + TextGap),
+                Width - 2.0 * SidePad, Health, AlphaTarget);
+            if (bBadge)
             {
-                constexpr double BadgeSide = 24.0;
-                const FVector2D BadgePosition(Bounds.GetCenter().X - BadgeSide * 0.5, Bounds.Max.Y + 3.0);
-                const FBox2D Badge(BadgePosition, BadgePosition + FVector2D(BadgeSide));
-                if (Fits(Badge) && !Placed.ContainsByPredicate([&Badge](const FBox2D& Other) { return Badge.Intersect(Other); }))
-                {
-                    ExpeditionDashboard.DrawDarkPanel(*this, Badge.Min, Badge.GetSize());
-                    DrawShieldOutline(*Canvas, Badge, FLinearColor(FColor(155, 216, 255)));
-                    Placed.Add(Badge);
-                }
+                const FVector2D GuardPosition = DrawPosition + BadgeOffset;
+                const FBox2D GuardBounds(GuardPosition, GuardPosition + FVector2D(BadgeSide));
+                ExpeditionDashboard.DrawDarkPanel(*this, GuardPosition, GuardBounds.GetSize(), AlphaTarget);
+                DrawShieldOutline(*Canvas, GuardBounds, FLinearColor(FColor(155, 216, 255)));
             }
-            break;
+        };
+
+        const FBox2D DrawBounds(Bounds.Min, FVector2D(Bounds.Max.X, bBadge ? Badge.Max.Y : Bounds.Max.Y));
+        if (HeroDepth && Plate.Pawn != LocalHero)
+        {
+            DrawMaskedNameplate(*HeroDepth, DrawBounds, Label, Plate.Color, Health, bBadge, DrawPlate);
+        }
+        else
+        {
+            DrawPlate(Position);
+        }
+        Placed.Add(Bounds);
+        if (bBadge)
+        {
+            Placed.Add(Badge);
         }
     }
     for (const FBox2D& Bounds : Placed)
@@ -1295,6 +1315,98 @@ void ACoopRPGLootHUD::DrawExpeditionNameplates(const ACoopRPGPlayerController& C
     {
         DrawTauntMarker(*Enemy);
     }
+}
+
+
+UTextureRenderTarget2D* ACoopRPGLootHUD::UpdateNameplateHeroDepth(ACoopRPGCharacter& Hero)
+{
+    if (!Canvas->SceneView || GetWorld()->GetFeatureLevel() < ERHIFeatureLevel::SM5)
+    {
+        return nullptr;
+    }
+
+    const FIntPoint Size = Canvas->SceneView->UnscaledViewRect.Size();
+    if (Size.X <= 0 || Size.Y <= 0)
+    {
+        return nullptr;
+    }
+
+    if (!NameplateHeroCapture)
+    {
+        NameplateHeroCapture = NewObject<USceneCaptureComponent2D>(this);
+        NameplateHeroCapture->TextureTarget = NewObject<UTextureRenderTarget2D>(NameplateHeroCapture);
+        NameplateHeroCapture->TextureTarget->ClearColor = FLinearColor(1000000.0f, 0, 0, 0);
+        NameplateHeroCapture->TextureTarget->InitCustomFormat(Size.X, Size.Y, PF_R32_FLOAT, true);
+        NameplateHeroCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+        NameplateHeroCapture->CaptureSource = SCS_SceneDepth;
+        NameplateHeroCapture->bRenderInMainRenderer = true;
+        NameplateHeroCapture->bMainViewCamera = true;
+        NameplateHeroCapture->bMainViewResolution = true;
+        NameplateHeroCapture->bIgnoreScreenPercentage = true;
+        NameplateHeroCapture->bCaptureOnMovement = false;
+        AddOwnedComponent(NameplateHeroCapture);
+        NameplateHeroCapture->RegisterComponent();
+    }
+
+    if (NameplateHero.Get() != &Hero)
+    {
+        NameplateHeroCapture->ClearShowOnlyComponents();
+        NameplateHeroCapture->ShowOnlyActorComponents(&Hero);
+        NameplateHero = &Hero;
+    }
+    return NameplateHeroCapture->TextureTarget;
+}
+
+void ACoopRPGLootHUD::DrawMaskedNameplate(UTextureRenderTarget2D& HeroDepth, const FBox2D& Bounds, const FString& Label,
+    const FLinearColor& Color, float Health, bool bBadge, TFunctionRef<void(FVector2D)> DrawPlate)
+{
+    const FIntPoint Size(FMath::CeilToInt(Bounds.GetSize().X), FMath::CeilToInt(Bounds.GetSize().Y));
+    const int32 LayerIndex = MaskedNameplatesUsed++;
+    if (!MaskedNameplateLayers.IsValidIndex(LayerIndex))
+    {
+        MaskedNameplateLayers.AddDefaulted();
+    }
+
+    auto& Layer = MaskedNameplateLayers[LayerIndex];
+    auto* Target = Layer.Target.Get();
+    if (!Target)
+    {
+        Target = NewObject<UTextureRenderTarget2D>(this);
+        Target->ClearColor = FLinearColor::Transparent;
+        Layer.Target = Target;
+        MaskedNameplateTargets.Add(Target);
+    }
+
+    const bool bResized = Target->SizeX != Size.X || Target->SizeY != Size.Y;
+    if (bResized)
+    {
+        Target->InitCustomFormat(Size.X, Size.Y, PF_B8G8R8A8, true);
+    }
+    if (bResized || Layer.Label != Label || Layer.Color != Color || Layer.Health != Health || Layer.bBadge != bBadge)
+    {
+        UKismetRenderingLibrary::ClearRenderTarget2D(this, Target, FLinearColor::Transparent);
+        UCanvas* TargetCanvas = nullptr;
+        FVector2D TargetSize;
+        FDrawToRenderTargetContext Context;
+        UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(this, Target, TargetCanvas, TargetSize, Context);
+        if (!TargetCanvas)
+        {
+            DrawPlate(Bounds.Min);
+            return;
+        }
+        TargetCanvas->Canvas->SetWriteDestinationAlpha(true);
+        {
+            TGuardValue<TObjectPtr<UCanvas>> ScopedCanvas(Canvas, TargetCanvas);
+            DrawPlate(FVector2D::ZeroVector);
+        }
+        UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(this, Context);
+        Layer.Label = Label;
+        Layer.Color = Color;
+        Layer.Health = Health;
+        Layer.bBadge = bBadge;
+    }
+
+    CoopRPG::Nameplate::DrawMaskedPlate(*Canvas, *Target, HeroDepth, Bounds);
 }
 
 void ACoopRPGLootHUD::DrawTauntPulse(const FVector& Origin, double Elapsed)

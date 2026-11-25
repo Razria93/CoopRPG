@@ -338,7 +338,202 @@ A·B는 War Cry 파동, 바닥 범위선과 적의 도발 표시로 발동을 �
 
 사용자가 로비 [R] 준비 완료 뒤 대기 안내로 바꾸는 작업의 누락을 지적했다. 에이전트는 현재 중앙 안내가 한 사람만 준비한 상태에도 [R] 입력을 안내하는 것을 코드에서 확인했다. 플레이어 방패에 마우스 가드와 이펙트도 요청했다. 현행 입력은 왼쪽 Shift 가드와 우클릭 공격 취소다. 우클릭 유지 가드와 방패 차단 이펙트의 적용·검증 기준을 후속 작업에 기록했다.
 
-**근거** · [브랜치와 PR 운영](../AGENTS.md#브랜치와-pr-운영) · [인계 양식](#handoff-template) · [통합 및 후속 구현 순서](Roadmap.md#expedition-follow-up-work)
+누적 브랜치의 `94eb050`으로 전용 서버·클라이언트를 새로 패키징했다. A·B에서 로비, 같은 맵 재도전과 장비 복원, 버섯 군락·퍼즐·흑기사, 도발과 보상 상자, 공동 탈출 후 같은 세션 로비 복귀를 확인했다. 다음은 로비에서 [R] 준비 완료 후 자신에게만 대기 안내를 표시하는 작업이다.
+
+**근거** · [브랜치와 PR 운영](../AGENTS.md#브랜치와-pr-운영) · [인계 양식](#handoff-template) · [누적 패키지 검증과 원본](Validation/ForestExpedition.md#expedition-stack-94eb050-verification) · [통합 및 후속 구현 순서](Roadmap.md#expedition-follow-up-work)
+
+<a id="lobby-ready-notice"></a>
+### 11/24 · 로비 개인 준비 안내
+
+통합 끝 `94eb050`에서 `feat/lobby-ready-notice`를 이어 만들었다. 중앙 안내는 자신의 컨트롤러에 복제된 준비 상태를 읽는다. 미준비 상태는 [R]을 안내하고, 준비를 확인받은 화면에는 파티원 대기를 표시한다. 서버가 출발을 예약하면 양쪽 중앙에 입장 카운트다운을 표시한다.
+
+전용 서버의 같은 패키지에서 A와 B가 각각 먼저 준비하는 두 회차를 검증했다. 두 회차 모두 먼저 준비한 쪽만 대기 안내가 표시됐고 두 번째 입력 뒤 양쪽이 카운트다운을 거쳐 버섯 군락에 입장했다. 다음은 플레이어 방패 우클릭 가드와 차단 피드백이다.
+
+**근거** · [로비 [R] 안내 검증](Validation/ForestExpedition.md#lobby-ready-notice-verification) · [후속 구현 순서](Roadmap.md#expedition-follow-up-work)
+
+<a id="player-shield-guard-implementation"></a>
+### 11/24 · 플레이어 방패 우클릭 가드
+
+누적 작업을 유지한 상태에서 `feat/lobby-ready-notice`에 이어 `feat/player-shield-guard`를 만들었다. 우클릭 유지 가드와 기존 공격 취소를 연결했다. 서버가 기존 각도·수호 규칙으로 경감한 타격만 방패의 차단 연출을 송신한다. 수호기사 방어 클립과 체력바 아래 아이콘은 가드를 유지하는 동안 표시한다.
+
+전용 서버와 A·B에서 가드 정면, 측·후면, 버튼 해제 후 정면을 대조했다. 방패 해제·사망·시간 초과 시 가드 해제와 현황판 위 공격·가드 입력 차단까지 확인했다. 다음은 파티 카드의 사용 가능 물약 수와 단축키 물약 선택을 정리하는 작업이다.
+
+**근거** · [방패 가드 규칙](Project.md#player-shield-guard) · [패키지 검증·원본 로그](Validation/ForestExpedition.md#player-shield-guard-verification) · [후속 구현 순서](Roadmap.md#expedition-follow-up-work)
+
+<a id="expedition-two-pc-20261124-record"></a>
+### 11/24 · 별개 PC 원정 검증과 로컬 커밋 범위
+
+사용자가 데스크톱과 노트북으로 원정을 플레이했다. 서버와 A·B 원본에서 버섯 군락 사망·같은 맵 재도전, 퍼즐 대기 중 B 종료·재접속, 흑기사 보상 개방·공동 탈출·로비 복귀를 대조했다. B는 퍼즐 라운드와 슬롯 2에 다시 입장했으며, 종료 전의 개인 물약·캡슐·도발 슬롯 일부가 복구되지 않았다. 지연 원인은 별도 분석 세션에서 확인한다.
+
+**근거** · [당시 패키지·화면·서버와 A·B 원본](Validation/ForestExpedition.md#expedition-two-pc-20261124) · [현행 후속 구현 상태](Roadmap.md#expedition-follow-up-work)
+
+#### 로컬 커밋 범위
+
+C: 작업본에서 문서 갱신 전 기존 변경은 34개였다. `5654393`의 detached HEAD에서 14개 파일에 이미 스테이징된 변경이 있었고, 일부 파일은 스테이징 이후에도 수정돼 있었다. D:의 `feat/player-shield-guard`도 같은 커밋을 가리킨다. 공통 코드 29개는 줄바꿈을 정규화해 대조했고 내용이 일치했다. D:에만 변경된 `Game/Content` 33개는 별도 에셋 변경으로 보존하고 커밋 범위 판정은 보류한다. 네 문서의 C·D 변경은 원래부터 차이가 있어 C:의 기존 기록을 기준으로 추가했다.
+
+| 순서 | 커밋 제목 | 파일·함수 범위 |
+|---|---|---|
+| 1 | `feat: 준비 안내와 방패 가드 게이지 적용` | `CoopRPGGameMode`, `CoopRPGGameState`, `CoopRPGPlayerController`의 준비·우클릭 및 판정 전달, `CoopRPGCharacter`의 가드·GP·공격 취소, `CoopRPGEnemy::ResolveAttack`, `CoopRPGCombatProbeComponent`의 가드 시험, `ExpeditionDashboard`·`LootHUD`의 준비·가드 표시, 장비 패널의 가드 입력 안내, 기존 준비·가드 문서 절 |
+| 2 | `feat: 물약 선택과 스테이지 사용 가능 횟수 표시` | `CoopRPGRecoveryEffect`, `CoopRPGPlayerState`의 파티 표시 복제, `CoopRPGPlayerController`의 재고·등록·사용·`RefreshPartyRecoveryUses`, `CoopRPGLootHUD::DrawPartyStatus`의 물약 수, `CoopRPGEquipmentPanel::DrawInventory` 및 등록 입력의 물약 전용 변경 |
+| 3 | `feat: 퍼즐 보상 카드 UI 정리` | `CoopRPGLootHUD::DrawPuzzleRewards`·`HandlePuzzleRewardPrimaryButton`, 보상 패널 공유 좌표와 관련 HUD 헤더·문구 |
+| 4 | `feat: 로비 NPC와 직업별 스킬 슬롯 적용` | `CoopRPGLobbyNpc` 두 파일, `CoopRPGGameMode`의 NPC·좌석 이월, `CoopRPGPlayerController`의 직업·NPC·입출고·수량 거래·스킬 등록, `CoopRPGPlayerState`의 직업 상태, `CoopRPGRoundTravelSeats.h`, `CoopRPGSessionEconomy.h`, `CoopRPGSlashProgress.h`, Slash·Taunt 어빌리티와 `CoopRPGCharacter`의 스킬 입력, `CoopRPGCombatProbeComponent`의 상점 시험. 인벤토리 위치·창고·상점 대비와 정렬, 직업 배지·P1/P2 및 슬롯 표시는 이 흐름에 포함한다. |
+| 5 | `fix: 최초 서버 접속 로딩 화면 추가` | `CoopRPGGameViewportClient.cpp`와 헤더의 접속 감지, 첫 프레임·최소 1초 표시, 카메라 준비·접속 실패 처리 |
+| 6 | `docs: 별개 PC 2인 원정 검증 기록` | 이번 검증·로드맵·개발 기록·협업 색인과 기존 `AGENTS.md`의 C: 작업·D: 보관 규칙 |
+
+`Character`의 입력 바인딩, `EquipmentPanel`의 그리기·클릭 처리, `PlayerController`의 인벤토리 초기화, `LootHUD`의 카드·슬롯에는 둘 이상의 기능이 섞여 있다. 같은 함수의 변경을 앞 커밋부터 순서대로 구성하고 최종 누적 결과를 C: 작업본과 대조한다. 4번에는 NPC와 함께 동작하는 패널 정렬까지 묶고, 5번은 변경 파일이 두 개로 독립된 최초 접속 로딩에 한정한다.
+
+B의 재접속 전후 개인 상태 차이를 로드맵에 남긴다. 다음 단계에서는 D: 기존 워크트리와 인덱스를 보존하면서 `feat/player-shield-guard`를 C: 작업본에 연결하고, 위 순서로 로컬 커밋한 뒤 Unity 빌드와 누적 diff를 비교한다. 새 패키지에서 최초 접속 오류 안내와 큰 창 전환 후 가드 툴팁을 다시 확인한다. 현재 범위는 문서 갱신과 커밋 목록이며 빌드·커밋은 미실행이다.
+
+**저장소 검사** · 6개 중 4개 통과. C: 워크트리의 기존 스킬 파일 누락과 에셋 링크 때문에 입력·문서 링크 검사 2개가 실패했다. 이번에 추가한 문서 링크와 Git diff는 별도로 확인했다. 원본 결과는 로컬 `Artifacts/Validation/20261124T102215754Z-512c9c05/result.json`에 있다.
+
+<a id="stamina-passive-bag-capacity-implementation"></a>
+### 11/24 · SP 물약 패시브와 가방 16칸 제한
+
+퍼즐에 SP 물약 사용 한도 +1 카드를 추가했다. 서버는 같은 세션의 캐릭터 식별자에 HP·SP 패시브를 각각 보관하고 다음 스테이지 입장 시 사용 한도를 계산한다. 획득한 패시브는 소유 클라이언트의 스킬 탭에 표시된다. 보상 자동 확정은 기존 HP 패시브를 유지한다.
+
+전투 인벤토리의 [H]·[J] 안내와 파티 카드는 선택한 물약의 재고와 남은 사용 한도 중 작은 값을 표시한다. 예를 들어 SP 패시브로 한도가 2회여도 스테이지 보급 물약 한 병을 선택하면 사용 가능 횟수는 1회다. 사용 가능한 개인 물약이 두 병이면 등록 후 2회가 표시된다.
+
+가방 표시와 서버의 획득 판정에 같은 16칸 계산을 사용한다. 물약·스크롤은 같은 종류를 10개씩 묶고, 검·캡슐은 한 칸씩 쓴다. 등록된 개인 물약이 0개로 내려가면 가방을 차지하지 않아도 인벤토리 상단에서 등록을 해제할 수 있다. 입수할 공간이 부족하면 상자·드롭·창고 재고와 구매 골드를 차감하기 전에 거절한다.
+
+이번 두 변경은 앞서 정리한 6개 로컬 커밋의 범위를 확장한다. 커밋할 때 물약 패시브와 가방 제한을 기능별로 나눈다.
+
+**근거** · [게임 규칙](Project.md#expedition-potion-passives-and-bag-capacity) · [Unity 빌드·A·B 실행·용량 경계 검사](Validation/ForestExpedition.md#stamina-passive-bag-capacity-verification)
+
+<a id="job-skill-capsules-implementation"></a>
+### 11/24 · 버섯 군락 보급 상자의 직업 캡슐
+
+버섯 군락의 전투 전 준비 단계에서 보급 상자를 열 수 있게 했다. 전사는 슬래시, 수호기사는 도발 캡슐을 하나씩 가져가 가방에서 습득한 뒤 2번 또는 3번에 배정한다. 서버는 직업, 보유 상태, 상자 재고를 확인하며 같은 맵 재도전에서 입장 시점의 캡슐·습득·슬롯을 복원한다. 이전 Cook 콘텐츠와 새 상자 클래스의 맵 로딩 호환 문제가 있어 Editor·Client·Server 빌드 뒤 원정 맵을 새로 Cook했다.
+
+**근거** · [정책](Project.md#guardian-taunt) · [전용 서버와 A·B 검증](Validation/ForestExpedition.md#job-skill-capsules-verification)
+
+<a id="personal-shield-implementation"></a>
+### 11/24 · 수호기사 개인 방패와 장비 배치
+
+버섯 군락 보급 상자에서 한손검 바로 아래에 수호기사용 하급 방패를 배치했다. 장비 탭과 가방·창고에서 한손검과 방패를 이어서 표시한다. 하급 방패는 최초 장착 시 귀속되고 해제하면 가방으로 돌아가며 기본 방패가 다시 붙는다. 두 방패는 기존 가드 수치를 공유하고 메시와 장비 이름으로 구분한다. 재도전은 개인 검과 같은 장비 스냅샷 규칙을 사용한다.
+
+**근거** · [장비 규칙](Project.md#expedition-default-equipment) · [전용 서버와 A·B 검증](Validation/ForestExpedition.md#personal-shield-verification)
+
+<a id="boss-upgrade-rewards-implementation"></a>
+### 11/24 · 흑기사 보상 상자의 스크롤과 하급 방패
+
+흑기사 처치 후 열리는 상자의 물약을 무력·수호 스크롤 각 한 장과 하급 방패 한 개로 바꿨다. 기존 가방 용량, 수호기사의 방패 보유 한도, 공유 재고 판정을 재사용했다. 물약 단축키 안내를 뺐고 세 보상의 재고를 각 행에 표시한다. 공동 탈출을 완료한 사람마다 세션 골드 30을 지급하고 상자에서 챙긴 보상을 로비까지 가져간다.
+
+**근거** · [전용 서버와 A·B 화면 및 원본 로그](Validation/ForestExpedition.md#boss-upgrade-rewards-verification)
+
+<a id="skirmish-gold-implementation"></a>
+### 11/24 · 버섯 군락 금화와 세션 잔액 확정
+
+서버가 처음 집계한 버섯 사망마다 바닥에 금화 한 개를 만든다. 안착한 금화에 한 명이 닿으면 서버가 금화를 한 번 제거하고 두 사람의 가방에 표시하는 골드를 각각 1 올린다. 획득 알림은 각 클라이언트에 보낸다. 공동 탈출 성공 시 획득분을 세션 장부에 반영하고 실패하면 확정 잔액으로 되돌린다. 물약과 마법석은 기존 방식으로 획득한다.
+
+초기 Unity 빌드에서 로컬 이름이 엔진 멤버와 겹쳤고 Pawn 반환값의 타입 추론이 실패했다. 변수 이름과 포인터 타입을 고치고 새 금화 클래스 때문에 분리된 Unity 오브젝트를 모두 링크했다. Client·Server·Editor를 빌드하고 원정 맵 Cook·Stage를 마친 뒤 전용 서버와 A·B에서 검증했다.
+
+**근거** · [금화 규칙](Project.md#skirmish-gold) · [전용 서버와 A·B 화면 및 원본 로그](Validation/ForestExpedition.md#skirmish-gold-verification)
+
+<a id="launcher-and-potion-boundary"></a>
+### 11/24 · 전용 서버 로그 옵션과 물약 획득 경계
+
+로컬 수동 실행기와 LAN 실행기에서 전용 서버의 강제 로그 플러시를 기본 해제하고 `-ServerForceLogFlush`로 진단 시 켤 수 있게 했다. 원정 대기소를 기존 LAN 패키지 매니페스트에서 읽고 서버 참가자 상태와 연결하도록, 앞서 두 PC 배포본에 적용했던 설정을 저장소 실행기에 반영했다.
+
+전용 서버와 A·B에서 기본·진단의 입장, 실시간 뷰어, 종료 후 로그 파일을 확인했다. 기존 16칸 가방의 HP 물약 획득은 상자와 적 드롭의 허용·거절 네 경우를 검증했다. 검증 전용 서버에 시작 재고만 넣고 기존 클라이언트 입력과 획득 코드를 사용했다. 임시 서버 설정을 소스에서 복원했으며 물약 획득 로직은 그대로다.
+
+다음 작업은 같은 로비 재접속, 대기 구간 참가자 복원과 보스 결과에서 로비 이동 실패 복구다. 실제 두 PC에서 보스 타격 지연을 다시 측정하는 작업은 남아 있다.
+
+**근거** · [기본·진단 실행, 물약 경계와 원본 로그](Validation/ForestExpedition.md#launcher-and-potion-boundary-verification)
+
+<a id="expedition-reconnect-return"></a>
+### 11/24 · 원정 참가자 재접속과 흑기사 결과 복귀
+
+코드 검토 세션의 로비 가방 복원, 참가자 상태 보존, 흑기사 복귀 실패 처리를 현재 기능 워크트리에 맞춰 적용했다. 연결 ID에 현재 상태와 최초 입장 스냅샷을 저장하고, 좌석 예약과 별도로 복원한다. 골드는 기존 세션 장부에서 읽는다. 결과창에서 재시도를 누르면 서버가 파티 공용 기회 한 번을 소비하고, 다시 실패해도 성공 결과를 유지한다.
+
+동일한 Win64 Development 패키지에서 반복 로비 재접속, 준비 중 재접속과 첫 입장 상태로의 재도전, 30초 경과 뒤 다른 좌석의 데이터 복원, 복귀 재시도 성공과 실패를 확인했다. 로비 출발부터 버섯 군락 첫 실패·재도전, 퍼즐, 흑기사, 같은 세션 로비 복귀까지 이어졌고 거래 전 두 가방 모두 출발보다 34골드 늘었다.
+
+**근거** · [최종 패키지의 화면·원본 로그](Validation/ForestExpedition.md#expedition-reconnect-return-verification)
+
+<a id="expedition-two-pc-reconnect-20261125"></a>
+### 11/25 · 별개 PC 퍼즐 재접속과 흑기사전 수동 확인
+
+사용자는 일반 LAN 실행기로 두 PC에서 퍼즐 대기 중 B가 재접속한 뒤 흑기사전과 로비 복귀까지 플레이했다고 보고했다. 데스크톱에서 확인할 수 있는 최신 패키지의 7787 회차는 02:47 KST의 A 로비 입장까지만 기록돼 있다. 그 회차에서 B 입장, 퍼즐 재접속, 흑기사전 이벤트는 확인되지 않았다. 노트북의 B 첫 실행·재접속 원본과 실제 본편 회차의 서버·A 원본을 대조하기 전까지 물약 재고·도발 슬롯·골드 유지와 흑기사전 지연 판정을 보류한다.
+
+**현재 원본** · `Artifacts/Validation/expedition-reconnect-return/Manual2PC-20261125-024702/`의 `20261125-024702-895-server-9489b144.log` 742·750줄과 `20261125-024704-109-a-b53417b4.log` 980·1017줄에서 A의 원정 대기소 입장을 확인했다. [직전 동일 패키지의 로컬 A·B 검증](Validation/ForestExpedition.md#expedition-reconnect-return-verification)
+
+
+<a id="expedition-reconnect-2pc-launcher-package"></a>
+### 11/25 · 재접속 빌드의 두 PC 실행 패키지
+
+최신 재접속 빌드의 Win64 Development 전용 서버와 클라이언트에 GUI 실행기, 실시간 로그 뷰어, 두 PC 안내를 묶었다. 두 PC에서 ZIP을 풀고 폴더 맨 위의 Open-CoopRPG-2PC.cmd를 열면 동봉한 Stage를 선택한다. Windows PowerShell 5.1의 프로세스 실행 정책을 Restricted로 둔 시험에서 CMD로 GUI가 열렸고, 빌드 ID와 기본 서버 맵 L_ExpeditionLobby를 확인했다.
+
+ZIP을 다시 풀어 103개 파일의 SHA-256을 확인했다. 한 Windows PC의 별도 루프백 포트에서 실행기 호스트·접속 전용 경로로 서버와 A·B를 열고, 양쪽 최초 로딩 화면과 같은 로비의 두 참가자를 확인했다. 패키지에 포함된 로그 뷰어로 해당 회차의 원본 로그를 열었다.
+
+**근거** · D:의 CoopRPG-Validation/expedition-follow-up/Packages/Expedition-Reconnect-2PC-20261125에 배포 ZIP, archive-verification.json과 Verification의 서버·A·B 원본 로그를 보관했다. [재접속 빌드 기능 검증](Validation/ForestExpedition.md#expedition-reconnect-return-verification)
+
+
+<a id="expedition-two-pc-0806-log-audit"></a>
+### 11/25 · 두 PC 풀패키지 완주 원본 대조
+
+08:06~08:19 KST에 데스크톱의 전용 서버·A와 노트북 B가 최신 재접속 패키지의 GUI 실행기로 같은 원정을 진행했다. 서버와 양쪽 클라이언트 로그에서 퍼즐 성공, 흑기사 처치·보상 수령·공동 탈출, 양쪽 성공 1점과 같은 세션의 로비 복귀를 대조했다. 플레이어별로 버섯 군락 골드 4에 보스 보상 30을 한 번 더해, 상점 거래 전 모두 34골드를 받았다.
+
+버섯 군락에서 퍼즐로 넘어갈 때 B의 개인 HP 물약 0·SP 물약 1, 도발 2번, 골드 4가 이어졌다. 제출된 B 실행은 퍼즐 대기 중 게임을 다시 실행한 이벤트 없이 로비 복귀까지 진행됐으므로, 같은 퍼즐에서 B를 재실행한 뒤의 복원은 미확인으로 남긴다. 보스전의 60ms 히트스탑 실측은 A 8건 60.61~64.06ms, B 2건 65.62~65.69ms였다. 해당 로그에는 프레임 시간·RTT 표본이 없어 체감 끊김 판정은 자동 반복 계측까지 보류한다.
+
+**근거** · [서버·A·B 로그 대조와 범위](Validation/ForestExpedition.md#expedition-two-pc-0806-log-audit)
+
+
+<a id="job-item-ownership"></a>
+### 11/25 · 직업 제한과 아이템 보유 분리
+
+11/25 두 PC 로그에서 직업 변경 뒤 골드 34와 가방 재고 0인데도 상점이 CapsuleLearned로 슬래시 구매를 막았다. 상자 획득 및 상점·창고 이동에서는 가방 여유, 실제 재고·잔액·보유 한도를 확인한다. 방패 장착과 캡슐 습득·스킬 발동은 현재 직업으로 판정한다. 방패는 최초 장착에 귀속되고 직업 변경으로 장착을 해제해도 가방과 귀속에 남는다. 스킬창은 기존 액티브·패시브 구조에 현재 직업 스킬과 방패 장착 시 가드 행을 표시한다. 슬래시와 도발의 슬롯 배정을 각각 보존한다.
+
+Win64 Development 서버와 클라이언트 게임 모듈을 C:에서 컴파일·링크했다. 새 실행 파일과 기존 쿠킹 데이터를 사용한 한 PC의 전용 서버·A·B에서 전사 방패 수령, 수호기사의 슬래시 구매, 이미 학습한 캡슐 재구매·창고 이동, 두 직업의 2번 슬롯 복원과 실제 발동을 확인했다. 1440×810과 960×540의 화면, 서버·A·B 원본 로그를 D:에 보관했다.
+
+**근거** · [게임 규칙](Project.md#expedition-default-equipment) · [실행 검증](Validation/ForestExpedition.md#job-item-ownership-verification)
+
+
+<a id="job-item-ownership-manual-2pc-record"></a>
+### 11/25 · 직업 제한 빌드의 두 PC 완주
+
+데스크톱 전용 서버·A와 노트북 B에서 퍼즐 성공, 흑기사 처치·하급 방패 획득·공동 탈출, 양쪽 1점과 같은 세션의 로비 복귀를 원본 로그로 대조했다. B의 물약·도발 2번 배정은 맵 전환 때 유지됐고 양쪽은 흑기사 보상 확정 후 각각 34골드를 확인했다. 사용자가 퍼즐 대기 중 별도 B 재실행과 흑기사전 자동 반복 계측을 다음 MVP로 이월했다.
+
+**근거** · [양쪽 원본과 검증 범위](Validation/ForestExpedition.md#job-item-ownership-manual-2pc)
+
+
+<a id="hud-local-hero-shield-caption"></a>
+### 11/25 · 동료 이름표 겹침과 하급 방패 문구 보완
+
+사용자 화면에서 동료 이름표가 내 캐릭터를 가리고 인벤토리의 수호기사 전용 문구가 잘렸다. Canvas 이름표 위치를 결정할 때 로컬 메시의 화면 영역을 확인하고 본인·동료·적 순서로 표시 위치를 확보했다. 직업 제한 문구의 글자 폭과 좌우 여백을 계산해 비활성 배지 폭에 반영했다.
+
+게임 모듈 증분 빌드 후 같은 서버·쿠킹 콘텐츠의 A·B에서 두 해상도와 포탈 앞뒤 구도를 확인했다. 전사 방패 보유 및 수호기사 장착·해제는 서버 로그로 확인했다.
+
+저장소 검사 6개 중 diff를 포함한 4개가 통과했다. 이 워크트리의 스킬 문서 누락과 재분석 지점으로 연결된 에셋 때문에 입력 목록과 링크 검사가 실패했다. 검사 원본은 HUD 근거 폴더의 repository-checks.json에 보관했다.
+
+**근거** · [화면·원본 로그](Validation/ForestExpedition.md#hud-local-hero-shield-caption-verification)
+
+
+<a id="hud-foot-nameplate-depth"></a>
+### 11/25 · 발밑 이름표의 캐릭터 가림
+
+사용자가 이름표가 옆으로 움직이면서 가독성이 떨어진다고 지적했다. 발밑에 기존 이름표를 고정하고, 내 캐릭터와 화면 영역이 겹치는 동료·적 이름표는 씬 깊이를 사용해 그린다. 캐릭터 모델에 실제로 가려지는 부분에서만 이름표가 잘린다. 초기 월드 합성에서 메시 뒷면으로 이름표가 검게 나오고, 면 방향 수정 후 감마 변환 때문에 밝아졌다. 앞면 방향과 선형 렌더 타깃을 적용한 뒤 두 해상도에서 짙은 배경·이름·체력바를 확인했다.
+
+**근거** · [군락·포탈 A·B 화면과 서버 로그](Validation/ForestExpedition.md#hud-foot-nameplate-depth-verification)
+
+
+<a id="hud-foot-nameplate-mask"></a>
+### 11/25 · 2D 이름표의 캐릭터 가림
+
+사용자가 포탈의 동료 이름표가 3D 장면에서 뿌옇게 보인다고 지적했다. 3D 판을 제거했다. 메인 카메라의 깊이 전용 캡처가 로컬 캐릭터를 기록하고, Canvas에서 각 이름표를 합성할 때 해당 픽셀만 가린다. 흑기사 반격 표시가 읽는 Custom Depth와 별도의 텍스처를 사용한다.
+
+에디터·클라이언트 Unity 빌드와 Win64 전역 셰이더 쿠킹을 완료했다. 초기 DX12 실행에서는 Canvas의 정점 셰이더와 이름표 픽셀 셰이더 사이에서 입력 시그니처가 맞지 않아 종료됐다. 입력을 맞춘 뒤 두 해상도에서 이름표 가림과 배경색을 재검증했다.
+
+**근거** · [군락·포탈 A·B 화면과 GPU 프로파일](Validation/ForestExpedition.md#hud-foot-nameplate-mask-verification)
+
+
+<a id="expedition-latest-local-playthrough"></a>
+### 11/25 · 최신 정식 패키지의 로컬 2인 완주
+
+현재 `5654393` 워크트리의 로컬 변경을 포함해 C:에서 UE 5.8.4 Editor·Client·Server 모듈을 빌드하고 원정 네 맵을 BuildCookRun으로 쿠킹·스테이징했다. 첫 WindowsClient 실행 인자를 바로잡고 스테이징에 필요한 기존 DX12·DirectML·TBB 런타임 파일을 로컬 빌드에서 공급했다. 최종 Client PAK에 SM5 전역 셰이더 캐시가 포함됐으며 실행 시 별도 덮어쓰기 캐시를 사용하지 않았다.
+
+같은 전용 서버와 A·B의 한 회차에서 첫 군락 실패, 동일 맵 재도전, 퍼즐 보상 확정, 흑기사 보상 획득과 공동 탈출, 같은 서버로의 로비 복귀를 확인했다. 이름표와 하급 방패 직업 제한 문구도 두 해상도에서 확인했다. 작업 전후 HEAD와 Git 인덱스 해시, 빌드 입력 85개를 대조했다.
+
+**근거** · [원정 경로와 원본 보관](Validation/ForestExpedition.md#expedition-latest-local-playthrough-verification)
+
 
 <a id="gates"></a>
 ## 중간 목표의 최초 기한과 실제 판정

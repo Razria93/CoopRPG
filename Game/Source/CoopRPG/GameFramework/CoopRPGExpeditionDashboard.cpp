@@ -249,7 +249,7 @@ void FCoopRPGExpeditionDashboard::Draw(AHUD& HUD, UCanvas& Canvas, const ACoopRP
     DrawPanel(HUD, StatusBounds.Min, StatusBounds.GetSize());
 
     const float IconY = HeaderTop + (TitleBottom - HeaderTop - Icon) * 0.5f;
-    DrawImage(HUD, FBox2D(FVector2D(284, 200), FVector2D(316, 232)), FVector2D(Left, IconY), FVector2D(Icon, Icon));
+    DrawExpeditionIcon(HUD, FVector2D(Left, IconY), Icon);
     Text(Canvas, TEXT("숲 원정"), FVector2D(TitleX, HeaderTop + (HeaderRowHeight - SmallHeight) * 0.5f), SmallFont, DashboardTextColor);
     Text(Canvas, StageTitle(Stage), FVector2D(TitleX, TitleTop), StageFont, DashboardTextColor);
 
@@ -355,20 +355,20 @@ void FCoopRPGExpeditionDashboard::DrawDivider(AHUD& HUD, FVector2D Position, flo
     DrawImage(HUD, FBox2D(FVector2D(0, 285), FVector2D(250, 293)), Position, FVector2D(Width, 8.0f));
 }
 
-void FCoopRPGExpeditionDashboard::DrawDarkPanel(AHUD& HUD, FVector2D Position, FVector2D Size) const
+void FCoopRPGExpeditionDashboard::DrawDarkPanel(AHUD& HUD, FVector2D Position, FVector2D Size, UCanvas* AlphaTarget) const
 {
     DrawNineSlice(HUD, Position, Size, FBox2D(FVector2D(0, 200), FVector2D(272, 252)),
-        FVector2D(11.0, 11.0), FVector2D(11.0, 11.0));
+        FVector2D(11.0, 11.0), FVector2D(11.0, 11.0), AlphaTarget);
 }
 
-void FCoopRPGExpeditionDashboard::DrawHealthBar(AHUD& HUD, FVector2D Position, float Width, float HealthFraction) const
+void FCoopRPGExpeditionDashboard::DrawHealthBar(AHUD& HUD, FVector2D Position, float Width, float HealthFraction, UCanvas* AlphaTarget) const
 {
     constexpr double Height = 7.0;
     HUD.DrawRect(FLinearColor(FColor(53, 34, 24)), Position.X - 1.0, Position.Y - 1.0, Width + 2.0, Height + 2.0);
     if (HealthFraction * Width >= 1.0f)
     {
         const FBox2D Source(FVector2D(0, 313), FVector2D(250.0 * HealthFraction, 327));
-        DrawImage(HUD, Source, Position, FVector2D(Width * HealthFraction, Height));
+        DrawImage(HUD, Source, Position, FVector2D(Width * HealthFraction, Height), AlphaTarget);
     }
 }
 
@@ -843,7 +843,7 @@ void FCoopRPGExpeditionDashboard::DrawBossHealth(AHUD& HUD, UCanvas& Canvas, con
 }
 
 void FCoopRPGExpeditionDashboard::DrawNineSlice(AHUD& HUD, FVector2D Position, FVector2D Size, const FBox2D& Source,
-    FVector2D StartInset, FVector2D EndInset) const
+    FVector2D StartInset, FVector2D EndInset, UCanvas* AlphaTarget) const
 {
     const double SourceX[] = {Source.Min.X, Source.Min.X + StartInset.X, Source.Max.X - EndInset.X, Source.Max.X};
     const double SourceY[] = {Source.Min.Y, Source.Min.Y + StartInset.Y, Source.Max.Y - EndInset.Y, Source.Max.Y};
@@ -854,13 +854,23 @@ void FCoopRPGExpeditionDashboard::DrawNineSlice(AHUD& HUD, FVector2D Position, F
         for (int32 Col = 0; Col < 3; ++Col)
         {
             DrawImage(HUD, FBox2D(FVector2D(SourceX[Col], SourceY[Row]), FVector2D(SourceX[Col + 1], SourceY[Row + 1])),
-                Position + FVector2D(X[Col], Y[Row]), FVector2D(X[Col + 1] - X[Col], Y[Row + 1] - Y[Row]));
+                Position + FVector2D(X[Col], Y[Row]), FVector2D(X[Col + 1] - X[Col], Y[Row + 1] - Y[Row]), AlphaTarget);
         }
     }
 }
 
-void FCoopRPGExpeditionDashboard::DrawImage(AHUD& HUD, const FBox2D& Source, const FVector2D& Position, const FVector2D& Size) const
+void FCoopRPGExpeditionDashboard::DrawImage(AHUD& HUD, const FBox2D& Source, const FVector2D& Position, const FVector2D& Size, UCanvas* AlphaTarget) const
 {
+    if (AlphaTarget && Skin.IsValid())
+    {
+        const FVector2D AtlasSize(512.0, 768.0);
+        const FVector2D Inset(0.5, 0.5);
+        FCanvasTileItem Tile(Position, Skin->GetResource(), Size, (Source.Min + Inset) / AtlasSize,
+            (Source.Max - Inset) / AtlasSize, FLinearColor::White);
+        Tile.BlendMode = SE_BLEND_AlphaBlend;
+        AlphaTarget->DrawItem(Tile);
+        return;
+    }
     HUD.DrawTexture(Skin.Get(), Position.X, Position.Y, Size.X, Size.Y, (Source.Min.X + 0.5) / 512.0,
         (Source.Min.Y + 0.5) / 768.0, (Source.GetSize().X - 1.0) / 512.0, (Source.GetSize().Y - 1.0) / 768.0);
 }
