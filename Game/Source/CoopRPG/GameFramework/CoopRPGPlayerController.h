@@ -99,9 +99,6 @@ public:
     void TakeStaminaRecoveryItem();
     void TakeMeleeWeapon();
     void TakePersonalShield();
-    bool HasSlashCapsule() const { return HasSkillCapsule(ECoopRPGActiveSkill::Slash); }
-    bool HasSlashRegistered() const { return HasLearnedSkill(ECoopRPGActiveSkill::Slash); }
-    void TakeSlashCapsule() { TakeSkillCapsule(ECoopRPGActiveSkill::Slash); }
     void CloseOpenedChest(FGuid RoundId, const TCHAR* Reason);
     void RequestRecoveryRegistration(bool bStamina, bool bRegistered);
     void TakeStatScroll(ECoopRPGScrollStat Stat);

@@ -355,7 +355,8 @@ void ACoopRPGLootHUD::DrawHUD()
             }
         }
     }
-    const bool bShowChestPanel = bShowCombat && IsValid(Controller->GetOpenedChest())
+    const bool bPreparingSupply = bShowEquipment && MapName == CoopRPG::Expedition::SkirmishMap && !State->HasRoundResult();
+    const bool bShowChestPanel = (bShowCombat || bPreparingSupply) && IsValid(Controller->GetOpenedChest())
         && Controller->GetOpenedChest() == State->GetSharedChest();
     if (!bShowChestPanel)
     {
@@ -709,15 +710,15 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
         {
             return EChestControl::None;
         }
-        if (ChestPotionBounds.IsInsideOrOn(Pointer))
+        if (ChestPotionBounds.bIsValid && ChestPotionBounds.IsInsideOrOn(Pointer))
         {
             return EChestControl::Potion;
         }
-        if (ChestSwordBounds.IsInsideOrOn(Pointer))
+        if (ChestSwordBounds.bIsValid && ChestSwordBounds.IsInsideOrOn(Pointer))
         {
             return EChestControl::Sword;
         }
-        if (ChestStaminaBounds.IsInsideOrOn(Pointer))
+        if (ChestStaminaBounds.bIsValid && ChestStaminaBounds.IsInsideOrOn(Pointer))
         {
             return EChestControl::StaminaPotion;
         }
@@ -733,6 +734,14 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
         {
             return EChestControl::SlashCapsule;
         }
+        if (ChestTauntBounds.bIsValid && ChestTauntBounds.IsInsideOrOn(Pointer))
+        {
+            return EChestControl::TauntCapsule;
+        }
+        if (ChestShieldBounds.bIsValid && ChestShieldBounds.IsInsideOrOn(Pointer))
+        {
+            return EChestControl::PersonalShield;
+        }
         return ChestTakeBounds.IsInsideOrOn(Pointer) ? EChestControl::Take : EChestControl::None;
     };
     if (bOwnsChestPointer)
@@ -742,7 +751,8 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
             const EChestControl Released = ControlAt();
             if (Released == PressedChestControl && (Released == EChestControl::Potion || Released == EChestControl::Sword
                 || Released == EChestControl::StaminaPotion || Released == EChestControl::MartialPowerScroll
-                || Released == EChestControl::ProtectionScroll || Released == EChestControl::SlashCapsule))
+                || Released == EChestControl::ProtectionScroll || Released == EChestControl::SlashCapsule
+                || Released == EChestControl::TauntCapsule || Released == EChestControl::PersonalShield))
             {
                 SelectedChestItem = Released;
             }
@@ -751,6 +761,10 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
                 if (SelectedChestItem == EChestControl::Sword)
                 {
                     Controller.TakeMeleeWeapon();
+                }
+                else if (SelectedChestItem == EChestControl::PersonalShield)
+                {
+                    Controller.TakePersonalShield();
                 }
                 else if (SelectedChestItem == EChestControl::StaminaPotion)
                 {
@@ -761,9 +775,10 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
                     Controller.TakeStatScroll(SelectedChestItem == EChestControl::ProtectionScroll
                         ? ECoopRPGScrollStat::Protection : ECoopRPGScrollStat::MartialPower);
                 }
-                else if (SelectedChestItem == EChestControl::SlashCapsule)
+                else if (SelectedChestItem == EChestControl::SlashCapsule || SelectedChestItem == EChestControl::TauntCapsule)
                 {
-                    Controller.TakeSlashCapsule();
+                    Controller.TakeSkillCapsule(SelectedChestItem == EChestControl::TauntCapsule
+                        ? ECoopRPGActiveSkill::Taunt : ECoopRPGActiveSkill::Slash);
                 }
                 else
                 {
@@ -786,13 +801,18 @@ bool ACoopRPGLootHUD::HandleChestPrimaryButton(ACoopRPGPlayerController& Control
         PressedChestControl = ControlAt();
         if (PressedChestControl == EChestControl::Take)
         {
+            const bool bTaunt = SelectedChestItem == EChestControl::TauntCapsule;
+            const auto CapsuleSkill = bTaunt ? ECoopRPGActiveSkill::Taunt : ECoopRPGActiveSkill::Slash;
             const bool bAvailable = SelectedChestItem == EChestControl::Sword
                 ? Chest->GetWeaponStock() > 0 && Controller.GetSwordOwnership() == ECoopRPGEquipmentOwnership::None
+                : SelectedChestItem == EChestControl::PersonalShield ? Chest->GetPersonalShieldStock() > 0
+                    && Controller.GetShieldOwnership() == ECoopRPGEquipmentOwnership::None
                 : SelectedChestItem == EChestControl::StaminaPotion ? Chest->GetStaminaRecoveryStock() > 0
                 : SelectedChestItem == EChestControl::MartialPowerScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::MartialPower) > 0
                 : SelectedChestItem == EChestControl::ProtectionScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::Protection) > 0
-                : SelectedChestItem == EChestControl::SlashCapsule ? Chest->GetSlashCapsuleStock() > 0
-                    && !Controller.HasSlashCapsule() && !Controller.HasSlashRegistered()
+                : SelectedChestItem == EChestControl::SlashCapsule || bTaunt
+                    ? (bTaunt ? Chest->GetTauntCapsuleStock() : Chest->GetSlashCapsuleStock()) > 0
+                        && !Controller.HasSkillCapsule(CapsuleSkill)
                 : SelectedChestItem == EChestControl::Potion && Chest->GetRecoveryStock() > 0;
             if (!bAvailable)
             {
@@ -813,29 +833,38 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     const int32 StaminaStock = Chest->GetStaminaRecoveryStock();
     const int32 BagStamina = Controller.GetStaminaRecoveryCount();
     const bool bBossReward = State.AreBossRewardsAvailable();
-    const bool bShowsScroll = CoopRPG::Expedition::IsSkirmish(Controller.GetWorld());
-    const int32 ScrollStock = bShowsScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::MartialPower) : 0;
-    const int32 ProtectionStock = bShowsScroll ? Chest->GetStatScrollStock(ECoopRPGScrollStat::Protection) : 0;
-    const int32 SlashStock = bShowsScroll ? Chest->GetSlashCapsuleStock() : 0;
-    const bool bOwnsSlash = Controller.HasSlashCapsule() || Controller.HasSlashRegistered();
+    const bool bSkirmish = CoopRPG::Expedition::IsSkirmish(Controller.GetWorld());
+    const bool bShowsUpgrades = bSkirmish;
+    const int32 ScrollStock = bShowsUpgrades ? Chest->GetStatScrollStock(ECoopRPGScrollStat::MartialPower) : 0;
+    const int32 ProtectionStock = bShowsUpgrades ? Chest->GetStatScrollStock(ECoopRPGScrollStat::Protection) : 0;
+    const int32 SlashStock = bSkirmish ? Chest->GetSlashCapsuleStock() : 0;
+    const int32 TauntStock = bSkirmish ? Chest->GetTauntCapsuleStock() : 0;
+    const int32 ShieldStock = bShowsUpgrades ? Chest->GetPersonalShieldStock() : 0;
+    const bool bOwnsShield = Controller.GetShieldOwnership() != ECoopRPGEquipmentOwnership::None;
     const bool bOwnsSword = Controller.GetSwordOwnership() != ECoopRPGEquipmentOwnership::None;
     const bool bSwordSelected = !bBossReward && SelectedChestItem == EChestControl::Sword;
     const bool bPotionSelected = SelectedChestItem == EChestControl::Potion;
     const bool bStaminaSelected = SelectedChestItem == EChestControl::StaminaPotion;
-    const bool bScrollSelected = bShowsScroll && SelectedChestItem == EChestControl::MartialPowerScroll;
-    const bool bProtectionSelected = bShowsScroll && SelectedChestItem == EChestControl::ProtectionScroll;
-    const bool bSlashSelected = bShowsScroll && SelectedChestItem == EChestControl::SlashCapsule;
+    const bool bScrollSelected = bShowsUpgrades && SelectedChestItem == EChestControl::MartialPowerScroll;
+    const bool bProtectionSelected = bShowsUpgrades && SelectedChestItem == EChestControl::ProtectionScroll;
+    const bool bSlashSelected = bSkirmish && SelectedChestItem == EChestControl::SlashCapsule;
+    const bool bTauntSelected = bSkirmish && SelectedChestItem == EChestControl::TauntCapsule;
+    const bool bShieldSelected = bShowsUpgrades && SelectedChestItem == EChestControl::PersonalShield;
+    const bool bCapsuleSelected = bSlashSelected || bTauntSelected;
+    const auto CapsuleSkill = bTauntSelected ? ECoopRPGActiveSkill::Taunt : ECoopRPGActiveSkill::Slash;
+    const bool bPreparing = bSkirmish && !State.IsRoundPlaying();
     const FBox2D& Status = ExpeditionDashboard.GetPanelBounds();
-    const double Left = Status.bIsValid ? Status.Min.X : PanelPad;
-    const double Top = Status.bIsValid ? Status.Max.Y + 8.0 : 136.0;
-    const double RewardOffset = bBossReward ? -26.0 : 0.0;
-    const double FooterOffset = bShowsScroll ? 24.0 : RewardOffset;
+    const FBox2D& Notice = ExpeditionDashboard.GetNoticeBounds();
+    const double Left = Status.bIsValid ? (bPreparing ? Status.Max.X + 8.0 : Status.Min.X) : PanelPad;
+    const double Top = bPreparing && Notice.bIsValid ? Notice.Max.Y + 8.0
+        : Status.bIsValid ? Status.Max.Y + 8.0 : 136.0;
+    const double FooterOffset = bSkirmish ? 45.0 : 0.0;
     const double Height = 190.0 + FooterOffset;
     constexpr double Width = 252.0;
     // Keep the chest above the party cards in the compact viewport.
     ChestPanelBounds = FBox2D(FVector2D(Left, Top), FVector2D(Left + Width, Top + Height));
-    const double RowPitch = bShowsScroll ? 18.0 : 26.0;
-    const double RowHeight = bShowsScroll ? 17.0 : 23.0;
+    const double RowPitch = bSkirmish ? 16.0 : 26.0;
+    const double RowHeight = bSkirmish ? 15.0 : 23.0;
     const auto RowBounds = [&](int32 Row)
     {
         const double RowTop = Top + 33.0 + Row * RowPitch;
@@ -844,10 +873,12 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     ChestPotionBounds = RowBounds(0);
     ChestStaminaBounds = RowBounds(1);
     ChestSwordBounds = bBossReward ? FBox2D(ForceInit) : RowBounds(2);
-    ChestScrollBounds = bShowsScroll ? RowBounds(3) : FBox2D(ForceInit);
-    ChestProtectionBounds = bShowsScroll ? RowBounds(4) : FBox2D(ForceInit);
-    ChestSlashBounds = bShowsScroll ? RowBounds(5) : FBox2D(ForceInit);
-    const double TakeTop = Top + (bShowsScroll ? 158.0 : 130.0 + RewardOffset);
+    ChestShieldBounds = bShowsUpgrades ? RowBounds(bBossReward ? 2 : 3) : FBox2D(ForceInit);
+    ChestScrollBounds = bShowsUpgrades ? RowBounds(bBossReward ? 0 : 4) : FBox2D(ForceInit);
+    ChestProtectionBounds = bShowsUpgrades ? RowBounds(bBossReward ? 1 : 5) : FBox2D(ForceInit);
+    ChestSlashBounds = bSkirmish ? RowBounds(6) : FBox2D(ForceInit);
+    ChestTauntBounds = bSkirmish ? RowBounds(7) : FBox2D(ForceInit);
+    const double TakeTop = Top + (bSkirmish ? 179.0 : 130.0);
     ChestTakeBounds = FBox2D(FVector2D(Left + Width - 105.0, TakeTop),
         FVector2D(Left + Width - 13.0, TakeTop + 25.0));
 
@@ -865,12 +896,12 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     };
 
     EquipmentPanel.DrawPanelFrame(*this, ChestPanelBounds);
-    const TCHAR* ChestTitle = bBossReward ? TEXT("흑기사 보상 상자") : TEXT("공용 상자");
+    const TCHAR* ChestTitle = bBossReward ? TEXT("흑기사 보상 상자") : bSkirmish ? TEXT("보급 상자") : TEXT("공용 상자");
     Text(*Canvas, ChestTitle, FVector2D(Left + 14.0, Top + 11.0), Font(13.0f, true), Ink);
     const auto DrawChestRow = [&](const FBox2D& Bounds, const TCHAR* Name, int32 Remaining, bool bSelected)
     {
         Fill(Bounds, bSelected ? FColor(221, 207, 160) : FColor(236, 221, 181));
-        const double LabelInset = bShowsScroll ? 1.5 : 5.0;
+        const double LabelInset = bSkirmish ? 0.5 : 5.0;
         Text(*Canvas, Name, Bounds.Min + FVector2D(9.0, LabelInset), Emphasis, Ink);
         const FString StockLabel = FString::Printf(TEXT("남은 수량 %d"), Remaining);
         Text(*Canvas, StockLabel, FVector2D(Bounds.Max.X - 9.0 - Measure(*Canvas, StockLabel, Body).X,
@@ -882,43 +913,64 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
     {
         DrawChestRow(ChestSwordBounds, TEXT("한손검"), WeaponStock, bSwordSelected);
     }
-    if (bShowsScroll)
+    if (bShowsUpgrades)
     {
+        DrawChestRow(ChestShieldBounds, TEXT("하급 방패"), ShieldStock, bShieldSelected);
         DrawChestRow(ChestScrollBounds, TEXT("무력 스크롤"), ScrollStock, bScrollSelected);
         DrawChestRow(ChestProtectionBounds, TEXT("수호 스크롤"), ProtectionStock, bProtectionSelected);
+    }
+    if (bSkirmish)
+    {
         DrawChestRow(ChestSlashBounds, TEXT("슬래시 캡슐"), SlashStock, bSlashSelected);
+        DrawChestRow(ChestTauntBounds, TEXT("도발 캡슐"), TauntStock, bTauntSelected);
     }
     const FString Detail = bSwordSelected ? FString(TEXT("가방에서 장착 · 최초 장착 시 귀속"))
+        : bShieldSelected ? FString(TEXT("수호기사만 장착 · 장착 시 귀속"))
         : bPotionSelected ? FString::Printf(TEXT("HP %d 회복"), CoopRPG::Recovery::PersonalAmount)
         : bStaminaSelected ? FString::Printf(TEXT("SP %d 회복"), CoopRPG::Recovery::PersonalAmount)
         : bScrollSelected || bProtectionSelected ? FString::Printf(TEXT("가방에서 사용 · %s +%d"),
             bProtectionSelected ? TEXT("수호") : TEXT("무력"), FCoopRPGStatProgress::PointsPerScroll)
-        : bSlashSelected ? FString(TEXT("사용하면 2번 슬롯에 등록"))
+        : bCapsuleSelected ? (bTauntSelected ? FString(TEXT("수호기사만 습득 가능"))
+            : FString(TEXT("전사만 습득 가능")))
         : FString(TEXT("아이템을 선택해 주세요."));
-    Text(*Canvas, Detail, FVector2D(Left + 15.0, Top + (bShowsScroll ? 142.0 : 112.0 + RewardOffset)), Body, Muted);
-    const int32 OwnedCount = bSwordSelected ? (bOwnsSword ? 1 : 0) : bStaminaSelected ? BagStamina
-        : bSlashSelected ? static_cast<int32>(Controller.HasSlashCapsule())
+    Text(*Canvas, Detail, FVector2D(Left + 15.0, Top + (bSkirmish ? 163.0 : 112.0)), Body, Muted);
+    const int32 OwnedCount = bSwordSelected ? static_cast<int32>(bOwnsSword)
+        : bShieldSelected ? static_cast<int32>(bOwnsShield) : bStaminaSelected ? BagStamina
+        : bCapsuleSelected ? static_cast<int32>(Controller.HasSkillCapsule(CapsuleSkill))
         : bScrollSelected || bProtectionSelected ? Controller.GetStatScrollCount(
             bProtectionSelected ? ECoopRPGScrollStat::Protection : ECoopRPGScrollStat::MartialPower) : BagCount;
     Text(*Canvas, FString::Printf(TEXT("내 가방 ×%d"), OwnedCount), FVector2D(Left + 15.0, Top + 136.0 + FooterOffset), Emphasis, Ink);
-    const int32 Remaining = bSwordSelected ? WeaponStock : bStaminaSelected ? StaminaStock : bScrollSelected ? ScrollStock : bProtectionSelected ? ProtectionStock : bSlashSelected ? SlashStock : Stock;
-    const bool bAlreadyOwned = (bSwordSelected && bOwnsSword) || (bSlashSelected && bOwnsSlash);
+    const int32 Remaining = bSwordSelected ? WeaponStock : bStaminaSelected ? StaminaStock : bScrollSelected ? ScrollStock : bProtectionSelected ? ProtectionStock : bSlashSelected ? SlashStock : bTauntSelected ? TauntStock
+        : bShieldSelected ? ShieldStock : Stock;
+    const bool bAlreadyOwned = (bSwordSelected && bOwnsSword) || (bShieldSelected && bOwnsShield) || (bCapsuleSelected && Controller.HasSkillCapsule(CapsuleSkill));
     const bool bHasSelection = bSwordSelected || bPotionSelected || bStaminaSelected || bScrollSelected
-        || bProtectionSelected || bSlashSelected;
-    const bool bCanTake = bHasSelection && Remaining > 0 && !bAlreadyOwned;
+        || bProtectionSelected || bCapsuleSelected || bShieldSelected;
+    const auto BagItem = bSwordSelected ? ECoopRPGStorageItem::UnboundSword
+        : bShieldSelected ? ECoopRPGStorageItem::UnboundShield
+        : bStaminaSelected ? ECoopRPGStorageItem::StaminaPotion
+        : bScrollSelected ? ECoopRPGStorageItem::MartialScroll
+        : bProtectionSelected ? ECoopRPGStorageItem::ProtectionScroll
+        : bSlashSelected ? ECoopRPGStorageItem::SlashCapsule
+        : bTauntSelected ? ECoopRPGStorageItem::TauntCapsule : ECoopRPGStorageItem::HealthPotion;
+    const bool bBagFull = bHasSelection && Controller.GetBagRoom(BagItem) == 0;
+    const bool bCanTake = bHasSelection && Remaining > 0 && !bAlreadyOwned && !bBagFull;
     Fill(ChestTakeBounds, bCanTake ? FColor(67, 87, 55) : FColor(215, 196, 157));
     Centered(ChestTakeBounds, bAlreadyOwned ? TEXT("이미 보유")
-        : bHasSelection && Remaining <= 0 ? TEXT("품절") : TEXT("가방에 담기"), Emphasis,
+        : bHasSelection && Remaining <= 0 ? TEXT("품절") : bBagFull ? TEXT("가방 가득 참") : TEXT("가방에 담기"), Emphasis,
         bCanTake ? FLinearColor(FColor(255, 243, 208)) : Muted);
-    Text(*Canvas, bBossReward ? TEXT("[F] HP 물약  [Q] 닫기") : TEXT("[G] 검 받기  [F] HP 물약  [Q] 닫기"),
+    Text(*Canvas, bBossReward ? TEXT("[Q] 닫기") : TEXT("[G] 검 받기  [F] HP 물약  [Q] 닫기"),
         FVector2D(Left + 15.0, Top + 164.0 + FooterOffset), Font(10.0f), Muted);
 
-    FString Display = FString::Printf(TEXT("Round=%s Stock=%d BagRecovery=%d Selected=%d X=%.0f Y=%.0f Width=%.0f WeaponStock=%d BagSword=%d StaminaStock=%d BagStamina=%d ScrollStock=%d BagScrolls=%d ProtectionStock=%d BagProtection=%d ProtectionRowY=%.0f TakeY=%.0f SlashStock=%d BagSlash=%d SlashRowY=%.0f"),
+    FString Display = FString::Printf(TEXT("Round=%s Stock=%d BagRecovery=%d Selected=%d X=%.0f Y=%.0f Width=%.0f WeaponStock=%d BagSword=%d StaminaStock=%d BagStamina=%d ScrollStock=%d BagScrolls=%d ProtectionStock=%d BagProtection=%d ProtectionRowY=%.0f TakeY=%.0f SlashStock=%d BagSlash=%d SlashRowY=%.0f TauntStock=%d BagTaunt=%d TauntRowY=%.0f ShieldStock=%d BagShield=%d ShieldRowY=%.0f SwordRowY=%.0f ScrollRowY=%.0f"),
         *State.GetRoundId().ToString(), Stock, BagCount, static_cast<int32>(SelectedChestItem), Left, Top, Width, WeaponStock,
         bOwnsSword, StaminaStock, BagStamina, ScrollStock, Controller.GetStatScrollCount(ECoopRPGScrollStat::MartialPower),
         ProtectionStock, Controller.GetStatScrollCount(ECoopRPGScrollStat::Protection),
-        bShowsScroll ? ChestProtectionBounds.GetCenter().Y : 0.0, ChestTakeBounds.GetCenter().Y,
-        SlashStock, Controller.HasSlashCapsule(), bShowsScroll ? ChestSlashBounds.GetCenter().Y : 0.0);
+        bShowsUpgrades ? ChestProtectionBounds.GetCenter().Y : 0.0, ChestTakeBounds.GetCenter().Y,
+        SlashStock, Controller.HasSkillCapsule(ECoopRPGActiveSkill::Slash), bSkirmish ? ChestSlashBounds.GetCenter().Y : 0.0,
+        TauntStock, Controller.HasSkillCapsule(ECoopRPGActiveSkill::Taunt), bSkirmish ? ChestTauntBounds.GetCenter().Y : 0.0,
+        ShieldStock, bOwnsShield, bShowsUpgrades ? ChestShieldBounds.GetCenter().Y : 0.0,
+        ChestSwordBounds.bIsValid ? ChestSwordBounds.GetCenter().Y : 0.0,
+        bShowsUpgrades ? ChestScrollBounds.GetCenter().Y : 0.0);
     if (LastChestPanelDisplay != Display)
     {
         UE_LOG(LogCoopRPGChestHUD, Log, TEXT("ChestPanelPresented %s"), *Display);

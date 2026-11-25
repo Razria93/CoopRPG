@@ -41,7 +41,7 @@ private:
         bool bAtContact = false;
     };
 
-    enum class EChestControl : uint8 { None, Potion, Sword, Take, StaminaPotion, MartialPowerScroll, ProtectionScroll, SlashCapsule };
+    enum class EChestControl : uint8 { None, Potion, Sword, Take, StaminaPotion, MartialPowerScroll, ProtectionScroll, SlashCapsule, TauntCapsule, PersonalShield };
 
     bool HandleChestPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     void DrawChestPanel(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller);
@@ -79,6 +79,8 @@ private:
     FBox2D ChestScrollBounds{ForceInit};
     FBox2D ChestProtectionBounds{ForceInit};
     FBox2D ChestSlashBounds{ForceInit};
+    FBox2D ChestTauntBounds{ForceInit};
+    FBox2D ChestShieldBounds{ForceInit};
     FBox2D ChestTakeBounds{ForceInit};
     FString LastChestPanelDisplay;
     EChestControl SelectedChestItem = EChestControl::None;

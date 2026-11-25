@@ -348,6 +348,10 @@ void ACoopRPGGameMode::BeginPlay()
             && (bExpeditionBoss ? !Zone && Enemy->IsBlackKnight() : IsValid(Zone)),
             TEXT("Round map %s has missing or incompatible round actors."), *MapName))
         {
+            if (bExpeditionSkirmish)
+            {
+                Chest->SetPersonalShieldStock(1);
+            }
             State->InitializeLootRound(Chest, Zone);
             InitializeTravelRound(*State);
             const TCHAR* Event = MapName == ForestMapName ? TEXT("ForestStageReady") : TEXT("RoundStageReady");

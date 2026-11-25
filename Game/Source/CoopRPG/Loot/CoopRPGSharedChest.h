@@ -76,7 +76,7 @@ private:
     int32 SlashCapsuleStock = 1;
 
     UPROPERTY(Transient, Replicated)
-    int32 TauntCapsuleStock = 0;
+    int32 TauntCapsuleStock = 1;
 
     UPROPERTY(Transient, Replicated)
     int32 PersonalShieldStock = 0;
