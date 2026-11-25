@@ -72,7 +72,7 @@ public:
     void RestoreGuardPointsOnBlock();
     double GetGuardPoints() const { return GuardPoints; }
     bool IsGuardExhausted() const { return bGuardExhausted; }
-    void SetShieldEquipped(bool bEquipped);
+    void SetShieldEquipped(bool bEquipped, bool bPersonal = false);
     void ReleaseGuardInput();
     void ClearGuard();
     double GetGuardAngle(const FVector& SourcePosition) const;
@@ -99,8 +99,7 @@ private:
     void Move(const FInputActionValue& Value);
     void Attack();
     void CancelAttack();
-    void UseSlash();
-    void UseTaunt();
+    void UseActiveSkillSlot(FKey Key);
     void PressGuardInput(FKey Key);
     void ReleaseGuardInputKey(FKey Key);
     void SetGuarding(bool bGuarding);
@@ -115,6 +114,9 @@ private:
 
     UFUNCTION()
     void OnRep_ShieldState();
+
+    UFUNCTION()
+    void OnRep_ShieldModel();
 
     UFUNCTION(Server, Reliable)
     void ServerCancelAttack();
@@ -219,6 +221,9 @@ private:
 
     UPROPERTY(ReplicatedUsing = OnRep_ShieldState)
     bool bShieldEquipped = false;
+
+    UPROPERTY(ReplicatedUsing = OnRep_ShieldModel)
+    bool bPersonalShieldModel = false;
 
     UPROPERTY(ReplicatedUsing = OnRep_ShieldState)
     bool bGuarding = false;

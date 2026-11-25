@@ -1,5 +1,7 @@
 #include "CoopRPGTauntAbility.h"
 
+#include "CoopRPG/GameFramework/CoopRPGPlayerController.h"
+
 #include "CoopRPG/AbilitySystem/Effects/CoopRPGMeleeEffects.h"
 #include "CoopRPG/AbilitySystem/CoopRPGAreaTargeting.h"
 #include "CoopRPG/Character/CoopRPGCharacter.h"
@@ -53,9 +55,11 @@ void UCoopRPGTauntAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     const auto* Mode = World ? World->GetAuthGameMode<ACoopRPGGameMode>() : nullptr;
     const bool bSkirmish = CoopRPG::Expedition::IsSkirmish(World);
     const bool bCombat = bSkirmish || CoopRPG::Expedition::IsBoss(World);
+    const auto* Player = Caster ? Caster->GetController<ACoopRPGPlayerController>() : nullptr;
     const TCHAR* Rejection = !Caster || !Caster->HasAuthority() || !State || !State->IsRoundPlaying() || !Mode || !bCombat
-        ? TEXT("NotPlaying") : !Caster->IsGuardian() ? TEXT("WrongRole") : !Caster->HasShieldEquipped()
-        ? TEXT("NoShield") : Caster->GetHealth() <= 0.0f || Caster->IsMeleeWindupActive() ? TEXT("Busy") : nullptr;
+        ? TEXT("NotPlaying") : !Caster->IsGuardian() ? TEXT("WrongRole")
+        : !Player || !Player->GetActiveSkillSlot(ECoopRPGActiveSkill::Taunt) ? TEXT("Unregistered")
+        : !Caster->HasShieldEquipped() ? TEXT("NoShield") : Caster->GetHealth() <= 0.0f || Caster->IsMeleeWindupActive() ? TEXT("Busy") : nullptr;
     if (Rejection)
     {
         TauntLog::Rejected(Caster, Rejection);

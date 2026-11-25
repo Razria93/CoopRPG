@@ -4,15 +4,37 @@
 #include "CoopRPGSwordInventory.generated.h"
 
 UENUM()
-enum class ECoopRPGSwordOwnership : uint8
+enum class ECoopRPGEquipmentOwnership : uint8
 {
     None,
     Unbound,
     Bound
 };
 
-struct FCoopRPGSwordSnapshot
+USTRUCT()
+struct FCoopRPGPersonalEquipment
 {
-    ECoopRPGSwordOwnership Ownership = ECoopRPGSwordOwnership::None;
+    GENERATED_BODY()
+
+    UPROPERTY()
+    ECoopRPGEquipmentOwnership Ownership = ECoopRPGEquipmentOwnership::None;
+
+    UPROPERTY()
     bool bEquipped = false;
+
+    FCoopRPGPersonalEquipment RestoreForRetry(const FCoopRPGPersonalEquipment& Current) const
+    {
+        FCoopRPGPersonalEquipment Restored = *this;
+        if (Ownership != ECoopRPGEquipmentOwnership::None && Current.Ownership == ECoopRPGEquipmentOwnership::Bound)
+        {
+            Restored.Ownership = Current.Ownership;
+        }
+        return Restored;
+    }
+};
+
+struct FCoopRPGEquipmentSnapshot
+{
+    FCoopRPGPersonalEquipment Sword;
+    FCoopRPGPersonalEquipment Shield;
 };

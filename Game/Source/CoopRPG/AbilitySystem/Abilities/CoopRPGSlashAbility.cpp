@@ -72,7 +72,8 @@ void UCoopRPGSlashAbility::ActivateAbility(FGameplayAbilitySpecHandle Handle, co
     const bool bPlayingCombat = State && State->IsRoundPlaying()
         && (CoopRPG::Expedition::IsSkirmish(Hero->GetWorld()) || CoopRPG::Expedition::IsBoss(Hero->GetWorld()));
     const TCHAR* Reason = !Hero || !Hero->HasAuthority() || !bPlayingCombat ? TEXT("NotPlaying")
-        : !Player || !Player->HasSlashRegistered() ? TEXT("Unregistered")
+        : Hero->IsGuardian() ? TEXT("WrongRole")
+        : !Player || !Player->GetActiveSkillSlot(ECoopRPGActiveSkill::Slash) ? TEXT("Unregistered")
         : !Hero->HasMeleeWeapon() ? TEXT("Unarmed")
         : Hero->GetHealth() <= 0.0f || Hero->IsGuarding() || Hero->IsMeleeWindupActive() ? TEXT("Busy") : nullptr;
     if (Reason)

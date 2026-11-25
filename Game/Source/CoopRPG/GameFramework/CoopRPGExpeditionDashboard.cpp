@@ -9,11 +9,16 @@
 #include "CoopRPG/Character/CoopRPGEnemy.h"
 #include "CoopRPG/Loot/CoopRPGEnemyLoot.h"
 #include "CoopRPG/Loot/CoopRPGSharedChest.h"
+
+#include "CanvasItem.h"
+#include "Engine/Canvas.h"
 #include "Engine/Texture2D.h"
 #include "EngineUtils.h"
 #include "GameFramework/HUD.h"
 #include "ImageUtils.h"
 #include "InputKeyEventArgs.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCoopRPGExpeditionHUD, Log, All);
@@ -82,7 +87,7 @@ namespace
         const auto* Pawn = Cast<ACoopRPGCharacter>(Controller.GetPawn());
         if (!IsValid(Pawn) || !Pawn->HasMeleeWeapon())
         {
-            return Controller.GetSwordOwnership() != ECoopRPGSwordOwnership::None ? ELabel::EquipSword : ELabel::OpenChest;
+            return Controller.GetSwordOwnership() != ECoopRPGEquipmentOwnership::None ? ELabel::EquipSword : ELabel::OpenChest;
         }
         return Stage == 3 ? ELabel::Knight : ELabel::Mushrooms;
     }
@@ -451,6 +456,73 @@ void FCoopRPGExpeditionDashboard::DrawBasicAttackGlyph(AHUD& HUD, UCanvas& Canva
     }
 }
 
+void FCoopRPGExpeditionDashboard::DrawJobBadge(AHUD& HUD, UCanvas& Canvas, const FBox2D& Bounds,
+    ECoopRPGHero Hero, bool bShowLabel) const
+{
+    using namespace CoopRPG::ExpeditionUI;
+    const bool bGuardian = Hero == ECoopRPGHero::AnimalHero;
+    const bool bWarrior = Hero == ECoopRPGHero::Adventurer;
+    const FLinearColor Border(bGuardian ? FColor(38, 64, 84) : bWarrior ? FColor(90, 48, 40) : FColor(79, 71, 55));
+    const FLinearColor Fill(bGuardian ? FColor(50, 88, 117) : bWarrior ? FColor(131, 68, 59) : FColor(99, 88, 66));
+    const FLinearColor Inset(bGuardian ? FColor(103, 150, 178) : bWarrior ? FColor(181, 111, 94) : FColor(143, 128, 99));
+    const FLinearColor Ink(bGuardian ? FColor(227, 246, 255) : FColor(255, 239, 203));
+    const double Side = Bounds.GetSize().X;
+    const auto Layer = [&](double Edge, const FLinearColor& Tint)
+    {
+        const double Inner = Side - 2.0 * Edge;
+        const double Corner = FMath::Max(1.0, FMath::RoundToDouble(Side / 12.0 - Edge));
+        const FVector2D Start = Bounds.Min + FVector2D(Edge);
+        HUD.DrawRect(Tint, Start.X, Start.Y + Corner, Inner, Inner - 2.0 * Corner);
+        for (int32 Row = 0; Row < static_cast<int32>(Corner); ++Row)
+        {
+            const double Vertical = Corner - Row - 0.5;
+            const double InsetX = FMath::RoundToDouble(Corner - FMath::Sqrt(Corner * Corner - Vertical * Vertical));
+            HUD.DrawRect(Tint, Start.X + InsetX, Start.Y + Row, Inner - 2.0 * InsetX, 1.0);
+            HUD.DrawRect(Tint, Start.X + InsetX, Start.Y + Inner - Row - 1.0, Inner - 2.0 * InsetX, 1.0);
+        }
+    };
+    Layer(0.0, Border);
+    Layer(1.5, Inset);
+    Layer(3.0, Fill);
+
+    const double IconSide = Side * (bShowLabel ? 0.51 : 0.59);
+    const FVector2D Center(Bounds.GetCenter().X, Bounds.Min.Y + Side * (bShowLabel ? 0.39 : 0.50));
+    const FVector2D Origin = Center - FVector2D(IconSide * 0.5);
+    const auto Stroke = [&](FVector2D Start, FVector2D End, double Weight)
+    {
+        FCanvasLineItem Segment(Origin + Start * IconSide, Origin + End * IconSide);
+        Segment.SetColor(Ink);
+        Segment.LineThickness = FMath::Max(1.0, IconSide * Weight);
+        Canvas.DrawItem(Segment);
+    };
+    if (bGuardian)
+    {
+        const FVector2D Outline[] = {{0.10, 0.19}, {0.50, 0.06}, {0.90, 0.19}, {0.82, 0.63},
+            {0.50, 0.91}, {0.18, 0.63}};
+        for (int32 Index = 0; Index < UE_ARRAY_COUNT(Outline); ++Index)
+        {
+            Stroke(Outline[Index], Outline[(Index + 1) % UE_ARRAY_COUNT(Outline)], 0.075);
+        }
+        Stroke({0.50, 0.28}, {0.50, 0.66}, 0.080);
+        Stroke({0.33, 0.46}, {0.67, 0.46}, 0.080);
+    }
+    else if (bWarrior)
+    {
+        Stroke({0.23, 0.84}, {0.73, 0.20}, 0.13);
+        Stroke({0.44, 0.55}, {0.78, 0.15}, 0.20);
+        Stroke({0.23, 0.48}, {0.57, 0.72}, 0.09);
+    }
+    if (bShowLabel)
+    {
+        const TCHAR* Label = bGuardian ? TEXT("수호기사") : bWarrior ? TEXT("전사") : TEXT("미선택");
+        const float Size = Side >= 52.0 ? 10.0f : 8.5f;
+        const auto Face = Measure(Canvas, Label, Font(Size, true)).X <= Side - 8.0
+            ? Font(Size, true) : Font(Size - 1.0f, true);
+        const FVector2D TextSize = Measure(Canvas, Label, Face);
+        Text(Canvas, Label, Bounds.Min + FVector2D((Side - TextSize.X) * 0.5, Side * 0.78 - TextSize.Y * 0.5), Face, Ink);
+    }
+}
+
 void FCoopRPGExpeditionDashboard::DrawPartyCardAccent(AHUD& HUD, FVector2D Position, FVector2D Size,
     ECoopRPGPartyCardAccent Accent) const
 {
@@ -607,9 +679,11 @@ void FCoopRPGExpeditionDashboard::DrawReadyParty(AHUD& HUD, UCanvas& Canvas, con
         const FString Badge = FString::Printf(TEXT("P%d"), Index + 1);
         const FVector2D BadgePos(Left, Y);
         const FVector2D BadgeSize(BadgeSide, BadgeSide);
-        const FLinearColor BadgeColor = Index == 0 ? FLinearColor(FColor(106, 73, 37)) : FLinearColor(FColor(40, 79, 111));
-        HUD.DrawRect(BadgeColor, BadgePos.X, BadgePos.Y, BadgeSize.X, BadgeSize.Y);
-        Text(Canvas, Badge, BadgePos + (BadgeSize - Measure(Canvas, Badge, SmallFont)) * 0.5, SmallFont, NoticeInk);
+        const FVector2D BadgeInkBounds = InkBounds(Canvas, Badge, SmallFont);
+        const FVector2D BadgeTextOffset((BadgeSize.X - Measure(Canvas, Badge, SmallFont).X) * 0.5,
+            (BadgeSize.Y - BadgeInkBounds.X - BadgeInkBounds.Y) * 0.5);
+        HUD.DrawRect(FLinearColor(PartySlotBadgeFill), BadgePos.X, BadgePos.Y, BadgeSize.X, BadgeSize.Y);
+        Text(Canvas, Badge, BadgePos + BadgeTextOffset, SmallFont, PartySlotBadgeInk);
         const float NameX = Left + BadgeSide + 8.0f;
         if (Statuses[Index] != ECoopRPGReadyStatus::Disconnected && !Names[Index].IsEmpty())
         {
@@ -681,11 +755,27 @@ void FCoopRPGExpeditionDashboard::DrawNotice(AHUD& HUD, UCanvas& Canvas, const A
     const double LineHeight = Measure(Canvas, TEXT("가"), NoticeFont).Y;
     const double Height = 2.0 * Inset + TitleSize.Y + TitleGap + Lines.Num() * LineHeight
         + FMath::Max(0, Lines.Num() - 1) * LineGap;
-    const double X = FMath::Clamp((ViewSize.X - Width) * 0.5, MinX, MaxX - Width);
-    NoticeBounds = FBox2D(FVector2D(X, Pad), FVector2D(X + Width, Pad + Height));
-    DrawDarkPanel(HUD, NoticeBounds.Min, NoticeBounds.GetSize());
-    Text(Canvas, Title, FVector2D(X + (Width - TitleSize.X) * 0.5, Pad + Inset), CaptionFont, NoticeInk);
-    double Y = Pad + Inset + TitleSize.Y + TitleGap;
+    const FVector2D Position(FMath::Clamp((ViewSize.X - Width) * 0.5, MinX, MaxX - Width), Pad);
+    const FVector2D Size(Width, Height);
+    NoticeBounds = FBox2D(Position, Position + Size);
+    DrawDarkPanel(HUD, Position, Size);
+    const double X = Position.X;
+    Text(Canvas, Title, FVector2D(X + (Width - TitleSize.X) * 0.5, Position.Y + Inset), CaptionFont, NoticeInk);
+    double Y = Position.Y + Inset + TitleSize.Y + TitleGap;
+#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
+    static const bool bLogNoticeLayout = FParse::Param(FCommandLine::Get(), TEXT("CoopCombatTest"));
+    if (bLogNoticeLayout)
+    {
+        FString Layout = FString::Printf(TEXT("Round=%s Goal=%d Width=%.0f Height=%.0f X=%.0f Y=%.0f Right=%.0f Bottom=%.0f"),
+            *State.GetRoundId().ToString(), static_cast<int32>(Goal), ViewSize.X, ViewSize.Y, X, Position.Y,
+            NoticeBounds.Max.X, NoticeBounds.Max.Y);
+        if (Layout != LastNoticeLayout)
+        {
+            LastNoticeLayout = MoveTemp(Layout);
+            UE_LOG(LogCoopRPGExpeditionHUD, Log, TEXT("ExpeditionNoticeLayout %s"), *LastNoticeLayout);
+        }
+    }
+#endif
     for (FString& Line : Lines)
     {
         Line = Fit(Canvas, MoveTemp(Line), NoticeFont, ContentWidth);
