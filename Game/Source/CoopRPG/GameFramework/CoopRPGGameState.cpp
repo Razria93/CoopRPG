@@ -669,6 +669,16 @@ FString ACoopRPGGameState::GetRoundTravelDestination() const
     }
 }
 
+void ACoopRPGGameState::SetBossReturnStatus(ECoopRPGBossReturnStatus Status)
+{
+    check(HasAuthority());
+    if (RoundStatus.BossReturnStatus != Status)
+    {
+        RoundStatus.BossReturnStatus = Status;
+        ForceNetUpdate();
+    }
+}
+
 void ACoopRPGGameState::PresentGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback)
 {
     if (GetNetMode() != NM_DedicatedServer)
@@ -798,16 +808,6 @@ void ACoopRPGGameState::OnRep_SkirmishDefeats()
 {
     UE_LOG(LogCoopRPGRound, Log, TEXT("SkirmishDefeatsReplicated Round=%s Defeated=%d Total=%d"),
         *RoundId.ToString(), SkirmishDefeats, CoopRPG::Expedition::SkirmishEnemyCount);
-}
-
-void ACoopRPGGameState::SetBossReturnStatus(ECoopRPGBossReturnStatus Status)
-{
-    check(HasAuthority());
-    if (RoundStatus.BossReturnStatus != Status)
-    {
-        RoundStatus.BossReturnStatus = Status;
-        ForceNetUpdate();
-    }
 }
 
 void ACoopRPGGameState::OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousStatus)

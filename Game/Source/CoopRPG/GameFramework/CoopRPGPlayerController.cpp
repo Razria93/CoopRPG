@@ -185,6 +185,14 @@ void ACoopRPGPlayerController::AcknowledgeRoundResult(FGuid RoundId)
     }
 }
 
+void ACoopRPGPlayerController::ServerRetryBossReturn_Implementation(FGuid RoundId)
+{
+    if (auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>())
+    {
+        Mode->RequestBossReturnRetry(*this, RoundId);
+    }
+}
+
 bool ACoopRPGPlayerController::FinalizePuzzleReward(ECoopRPGPuzzleReward Reward)
 {
     if (!HasAuthority() || PuzzleReward != ECoopRPGPuzzleReward::None)
@@ -731,14 +739,6 @@ void ACoopRPGPlayerController::ServerAcknowledgeRoundResult_Implementation(FGuid
     if (auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>())
     {
         Mode->AcknowledgeRoundResult(this, RoundId);
-    }
-}
-
-void ACoopRPGPlayerController::ServerRetryBossReturn_Implementation(FGuid RoundId)
-{
-    if (auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>())
-    {
-        Mode->RequestBossReturnRetry(*this, RoundId);
     }
 }
 
