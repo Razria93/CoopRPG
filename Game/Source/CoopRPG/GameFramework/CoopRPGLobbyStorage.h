@@ -15,6 +15,9 @@ enum class ECoopRPGStorageItem : uint8
     MartialScroll,
     ProtectionScroll,
     SlashCapsule,
+    TauntCapsule,
+    UnboundShield,
+    BoundShield,
     Count UMETA(Hidden)
 };
 

@@ -4,7 +4,6 @@
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/OnlineReplStructs.h"
 #include "CoopRPGPuzzleReward.h"
-#include "CoopRPGSwordInventory.h"
 #include "CoopRPGGameMode.generated.h"
 
 class ACoopRPGAttackTarget;
@@ -43,6 +42,7 @@ protected:
     virtual void RestartPlayer(AController* NewPlayer) override;
 
 private:
+    void InitializeTravelRound(ACoopRPGGameState& State);
     void PublishReadySlots(ACoopRPGGameState& State);
     FString GetRoundJoinRejection(const FString& Options, const FUniqueNetIdRepl& UniqueId);
     bool ReserveRoundTravelSeats(const ACoopRPGGameState& State, const FString& Destination) const;
@@ -63,8 +63,6 @@ private:
     UPROPERTY()
     TArray<TObjectPtr<ACoopRPGEnemy>> SkirmishEnemies;
 
-    // A player may reconnect while the stage is still waiting for readiness.
-    TMap<FUniqueNetIdRepl, FCoopRPGSwordSnapshot> WaitingPlayerSwords;
     TWeakObjectPtr<APlayerController> PlayerSlots[2];
     FString ValidationClientLabels[2];
     FString LastValidationParticipants;

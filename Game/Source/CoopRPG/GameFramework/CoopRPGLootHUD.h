@@ -6,6 +6,7 @@
 #include "CoopRPGExpeditionDashboard.h"
 #include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGPuzzleReward.h"
+#include "CoopRPGPlayerState.h"
 #include "CoopRPGLootHUD.generated.h"
 
 class ACoopRPGCharacter;
@@ -90,7 +91,17 @@ private:
     FGuid LastPresentedPuzzleRewardsRound;
     FGuid LastPresentedExpeditionResult;
     FGuid LastPresentedPartyRound;
-    TOptional<FIntVector4> PartyCardValues[2];
+    struct FPartyCardValues
+    {
+        int32 Health;
+        int32 Stamina;
+        bool bArmed;
+        ECoopRPGHero Hero;
+        FIntPoint RecoveryUses;
+
+        bool operator==(const FPartyCardValues& Other) const = default;
+    };
+    TOptional<FPartyCardValues> PartyCardValues[2];
     struct FPartyCardId
     {
         FString Raw;
@@ -100,10 +111,18 @@ private:
         int32 Characters = 0;
     };
     FPartyCardId PartyCardIds[2];
+    FIntPoint LastPartyCardViewport{0, 0};
     FGuid LastLocalCombatRound;
     // Log sampled visual changes for comparison with authoritative attack and cooldown events.
     FIntVector4 LastLocalCombatSample{-1, -1, -1, -1};
+    FIntPoint LastLocalSkillBindings{-1, -1};
     FIntPoint LastLocalSlashSample{-1, -1};
+    FIntPoint LastLocalGuardSample{-1, -1};
+#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
+    FIntPoint LastGuardHudSample{-2, -1};
+    FIntPoint LastGuardHelpViewport{0, 0};
+    bool bLastGuardHelpVisible = false;
+#endif
     TArray<FFeedbackEntry> FeedbackEntries;
     struct FNameplatePlayerName
     {

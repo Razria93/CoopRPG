@@ -117,7 +117,7 @@ namespace
         }));
 
     FAutoConsoleCommandWithWorldAndArgs ShopRequestCommand(TEXT("Coop.Test.ShopRequest"),
-        TEXT("Coop.Test.ShopRequest repeat-buy|supplied-hp|reward-ack: send existing RPCs for shop validation."),
+        TEXT("Coop.Test.ShopRequest repeat-buy|supplied-hp|over-buy|over-sell|over-capsule|zero-quantity|reward-ack: validate shop requests."),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
         {
             if (UCoopRPGCombatProbeComponent* Probe = GetLocalProbe(World); Probe && Args.Num() == 1)
@@ -263,12 +263,12 @@ void UCoopRPGCombatProbeComponent::RequestSlashValidation(FName Action)
     }
     if (Action == TEXT("capsule"))
     {
-        Player->ServerUseSlashCapsule(State->GetRoundId());
-        Player->ServerUseSlashCapsule(State->GetRoundId());
+        Player->ServerUseSkillCapsule(State->GetRoundId(), ECoopRPGActiveSkill::Slash);
+        Player->ServerUseSkillCapsule(State->GetRoundId(), ECoopRPGActiveSkill::Slash);
     }
     else if (Action == TEXT("take"))
     {
-        Player->TakeSlashCapsule();
+        Player->TakeSkillCapsule(ECoopRPGActiveSkill::Slash);
     }
     else if (Action == TEXT("cast"))
     {
@@ -291,11 +291,20 @@ void UCoopRPGCombatProbeComponent::RequestShopValidation(FName Scenario)
     }
     if (Scenario == TEXT("repeat-buy") && Player->NextShopRequest > 0)
     {
-        Player->ServerShopTrade(State->GetRoundId(), Player->NextShopRequest, ECoopRPGStorageItem::HealthPotion, true);
+        Player->ServerShopTrade(State->GetRoundId(), Player->NextShopRequest, ECoopRPGStorageItem::HealthPotion, true, 2);
     }
     else if (Scenario == TEXT("supplied-hp"))
     {
-        Player->ServerShopTrade(State->GetRoundId(), ++Player->NextShopRequest, ECoopRPGStorageItem::HealthPotion, false);
+        Player->ServerShopTrade(State->GetRoundId(), ++Player->NextShopRequest, ECoopRPGStorageItem::HealthPotion, false, 1);
+    }
+    else if (Scenario == TEXT("over-buy") || Scenario == TEXT("over-sell") || Scenario == TEXT("over-capsule")
+        || Scenario == TEXT("zero-quantity"))
+    {
+        const bool bCapsule = Scenario == TEXT("over-capsule");
+        const int32 Quantity = Scenario == TEXT("zero-quantity") ? 0 : bCapsule ? 2 : 4;
+        Player->ServerShopTrade(State->GetRoundId(), ++Player->NextShopRequest,
+            bCapsule ? ECoopRPGStorageItem::SlashCapsule : ECoopRPGStorageItem::HealthPotion,
+            Scenario != TEXT("over-sell"), Quantity);
     }
     else if (Scenario == TEXT("reward-ack"))
     {

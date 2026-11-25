@@ -13,12 +13,14 @@ class UTexture2D;
 struct FInputKeyEventArgs;
 
 enum class ECoopRPGDashboardLabel : uint8;
+enum class ECoopRPGHero : uint8;
 
 enum class ECoopRPGPartyCardAccent : uint8
 {
     Local,
     HealthPotion,
-    Equipped = 3, // Keep the equipped and unarmed cells at their atlas positions.
+    StaminaPotion,
+    Equipped,
     Unarmed
 };
 
@@ -49,6 +51,7 @@ public:
     void DrawAttackIcon(AHUD& HUD, FVector2D Position, float Size, bool bDisabled) const;
     void DrawBasicAttackGlyph(AHUD& HUD, UCanvas& Canvas, const FBox2D& Slot,
         const CoopRPG::ExpeditionUI::FAttackHudStatus& Attack, bool bSlash = false) const;
+    void DrawJobBadge(AHUD& HUD, UCanvas& Canvas, const FBox2D& Bounds, ECoopRPGHero Hero, bool bShowLabel) const;
     void DrawPartyCardAccent(AHUD& HUD, FVector2D Position, FVector2D Size, ECoopRPGPartyCardAccent Accent) const;
     const FBox2D& GetPanelBounds() const { return StatusBounds; }
     const FBox2D& GetNoticeBounds() const { return NoticeBounds; }
@@ -81,6 +84,9 @@ private:
     FGuid Round;
     FBox2D StatusBounds{ForceInit};
     FBox2D NoticeBounds{ForceInit};
+#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
+    FString LastNoticeLayout;
+#endif
     FBox2D BossHealthBounds{ForceInit};
     TOptional<FIntPoint> DisplayedBossHealth;
     FBox2D LogBounds{ForceInit};

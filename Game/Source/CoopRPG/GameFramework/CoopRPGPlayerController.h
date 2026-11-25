@@ -4,11 +4,10 @@
 #include "GameFramework/PlayerController.h"
 #include "CoopRPGGameplayFeedback.h"
 #include "CoopRPGLobbyStorage.h"
-#include "CoopRPGRecoveryInventory.h"
+#include "CoopRPGLobbyNpc.h"
+#include "CoopRPGPlayerState.h"
+#include "CoopRPGExpeditionInventory.h"
 #include "CoopRPGPuzzleReward.h"
-#include "CoopRPGStatProgress.h"
-#include "CoopRPGSlashProgress.h"
-#include "CoopRPGSwordInventory.h"
 #include "CoopRPGPlayerController.generated.h"
 
 class ACoopRPGEnemyLoot;
@@ -24,7 +23,9 @@ enum class ECoopRPGChestItem : uint8
     StaminaRecovery,
     MartialPowerScroll,
     ProtectionScroll,
-    SlashCapsule
+    SlashCapsule,
+    TauntCapsule,
+    PersonalShield
 };
 
 UCLASS()
@@ -50,18 +51,23 @@ public:
 
     bool IsRoundReady() const { return bRoundReady; }
     void ResetLobbyReady();
-    void RestoreTravelInventory(const FCoopRPGRecoverySnapshot& Recovery, const FCoopRPGSwordSnapshot& Sword,
-        const FCoopRPGStatProgress& Stats, const FCoopRPGSlashProgress& Slash, bool bPowerReward);
-    void RestoreSword(const FCoopRPGSwordSnapshot& Sword);
+    void RestoreTravelInventory(const FCoopRPGExpeditionInventory& Inventory,
+        const TOptional<FCoopRPGExpeditionInventory>& StageEntry);
+    FCoopRPGExpeditionInventory GetTravelInventory(bool bRetry) const;
+    TOptional<FCoopRPGExpeditionInventory> GetStageEntryInventory(FGuid RoundId) const;
     void ApplyExpeditionEquipment();
     void InitializeStageInventory(FGuid RoundId);
     void LoadSessionGold(FGuid RoundId);
     void AwardBossGold(FGuid RoundId);
     int32 GetSessionGold() const { return SessionGold; }
-    void RequestShopTrade(ECoopRPGStorageItem Item, bool bBuy);
+    void RequestShopTrade(ECoopRPGStorageItem Item, bool bBuy, int32 Quantity);
     const FString& GetShopFeedback() const { return ShopFeedback; }
+    void ClearShopFeedback() { ShopFeedback.Reset(); }
     bool IsShopTradePending() const { return bShopTradePending; }
     void LoadPersonalStorage();
+    ACoopRPGLobbyNpc* GetOpenedLobbyNpc() const { return OpenedLobbyNpc.Get(); }
+    void CloseLobbyService();
+    void RequestLobbyJob(ECoopRPGHero Hero);
     const FCoopRPGStorageStock& GetPersonalStorage() const { return PersonalStorage; }
     const FString& GetStorageFeedback() const { return StorageFeedback; }
     void ClearStorageFeedback() { StorageFeedback.Reset(); }
@@ -69,7 +75,6 @@ public:
     int32 GetBagSlotsUsed() const;
     int32 GetBagRoom(ECoopRPGStorageItem Item) const;
     void RequestStorageTransfer(ECoopRPGStorageItem Item, bool bPersonal, bool bDeposit);
-    FCoopRPGRecoverySnapshot GetTravelRecovery(bool bRetry) const;
     void RefreshPotionCapacityBonus();
     FIntPoint GetPotionCapacityBonus() const { return PotionCapacityBonus; }
     FIntPoint GetStageRecoverySupplies() const { return StageRecoverySupplies; }
@@ -80,9 +85,11 @@ public:
     int32 GetMartialPower() const { return StatProgress.MartialPower.Level + static_cast<int32>(bExpeditionPowerReward); }
     int32 GetProtection() const { return StatProgress.Protection.Level; }
     int32 GetStatScrollCount(ECoopRPGScrollStat Stat) const;
-    const FCoopRPGStatProgress& GetTravelStats(bool bRetry) const;
-    ECoopRPGSwordOwnership GetSwordOwnership() const { return SwordOwnership; }
-    FCoopRPGSwordSnapshot GetTravelSword(bool bRetry) const;
+    ECoopRPGEquipmentOwnership GetSwordOwnership() const { return SwordOwnership; }
+    ECoopRPGEquipmentOwnership GetShieldOwnership() const { return Shield.Ownership; }
+    bool IsPersonalShieldEquipped() const { return Shield.bEquipped; }
+    bool CanUsePersonalShield() const;
+    void RequestShieldEquipped(bool bEquipped);
     void RequestSwordEquipped(bool bEquipped);
     bool IsPersonalSwordEquipped() const;
     ACoopRPGSharedChest* GetOpenedChest() const { return OpenedChest.Get(); }
@@ -91,14 +98,23 @@ public:
     void TakeRecoveryItem();
     void TakeStaminaRecoveryItem();
     void TakeMeleeWeapon();
+    void TakePersonalShield();
+    bool HasSlashCapsule() const { return HasSkillCapsule(ECoopRPGActiveSkill::Slash); }
+    bool HasSlashRegistered() const { return HasLearnedSkill(ECoopRPGActiveSkill::Slash); }
+    void TakeSlashCapsule() { TakeSkillCapsule(ECoopRPGActiveSkill::Slash); }
     void CloseOpenedChest(FGuid RoundId, const TCHAR* Reason);
     void RequestRecoveryRegistration(bool bStamina, bool bRegistered);
     void TakeStatScroll(ECoopRPGScrollStat Stat);
-    void TakeSlashCapsule();
-    void RequestUseSlashCapsule();
-    bool HasSlashCapsule() const { return SlashProgress.bHasCapsule; }
-    bool HasSlashRegistered() const { return SlashProgress.bRegistered; }
-    const FCoopRPGSlashProgress& GetTravelSlash(bool bRetry) const { return bRetry ? EntrySlash : SlashProgress; }
+    void TakeSkillCapsule(ECoopRPGActiveSkill Skill);
+    void RequestUseSkillCapsule(ECoopRPGActiveSkill Skill);
+    bool HasSkillCapsule(ECoopRPGActiveSkill Skill) const;
+    bool HasLearnedSkill(ECoopRPGActiveSkill Skill) const;
+    bool CanLearnSkill(ECoopRPGActiveSkill Skill) const;
+    bool IsJobEligibleForSkill(ECoopRPGActiveSkill Skill) const;
+    uint8 GetActiveSkillSlot(ECoopRPGActiveSkill Skill) const;
+    ECoopRPGActiveSkill GetSkillInSlot(uint8 Slot) const;
+    void RequestActiveSkillSlot(ECoopRPGActiveSkill Skill, uint8 Slot);
+    void UseActiveSkillSlot(uint8 Slot);
     void RequestUseStatScroll(ECoopRPGScrollStat Stat);
 
 protected:
@@ -114,6 +130,15 @@ private:
     void ServerAcknowledgeRoundResult(FGuid RoundId);
     void OpenSharedChest();
     void CloseSharedChest();
+    bool CanUseLobbyService(ECoopRPGLobbyService Service) const;
+    void EndLobbyService(const TCHAR* Reason);
+
+    UFUNCTION(Server, Reliable)
+    void ServerSetLobbyNpc(FGuid RoundId, ACoopRPGLobbyNpc* Npc);
+
+    UFUNCTION(Server, Reliable)
+    void ServerSelectLobbyJob(FGuid RoundId, ECoopRPGHero Hero);
+
     void UseRecoveryItem();
     void UseStaminaRecoveryItem();
     void RequestRecoveryUse(bool bStamina);
@@ -132,6 +157,9 @@ private:
     void ServerSetSwordEquipped(FGuid RoundId, bool bEquipped);
 
     UFUNCTION(Server, Reliable)
+    void ServerSetShieldEquipped(FGuid RoundId, bool bEquipped);
+
+    UFUNCTION(Server, Reliable)
     void ServerTransferStorage(FGuid RoundId, ECoopRPGStorageItem Item, bool bPersonal, bool bDeposit);
 
     UFUNCTION(Client, Reliable)
@@ -140,7 +168,7 @@ private:
     void AdjustStorageBag(ECoopRPGStorageItem Item, int32 Delta);
 
     UFUNCTION(Server, Reliable)
-    void ServerShopTrade(FGuid RoundId, uint32 Request, ECoopRPGStorageItem Item, bool bBuy);
+    void ServerShopTrade(FGuid RoundId, uint32 Request, ECoopRPGStorageItem Item, bool bBuy, int32 Quantity);
 
     UFUNCTION(Client, Reliable)
     void ClientFinishShopTrade(uint32 Request, const FString& Message);
@@ -155,7 +183,13 @@ private:
     void ServerUseStatScroll(FGuid RoundId, ECoopRPGScrollStat Stat, int32 ExpectedScrollCount);
 
     UFUNCTION(Server, Reliable)
-    void ServerUseSlashCapsule(FGuid RoundId);
+    void ServerUseSkillCapsule(FGuid RoundId, ECoopRPGActiveSkill Skill);
+
+    UFUNCTION(Server, Reliable)
+    void ServerSetActiveSkillSlot(FGuid RoundId, ECoopRPGActiveSkill Skill, uint8 Slot);
+
+    UFUNCTION(Server, Reliable)
+    void ServerActivateSkillSlot(FGuid RoundId, uint8 Slot);
 
     UFUNCTION(Client, Unreliable)
     void ClientGameplayFeedback(const FCoopRPGGameplayFeedback& Feedback);
@@ -191,6 +225,9 @@ private:
     void OnRep_PuzzleReward();
 
 private:
+    UPROPERTY(Replicated)
+    TObjectPtr<ACoopRPGLobbyNpc> OpenedLobbyNpc;
+
     UPROPERTY(ReplicatedUsing = OnRep_OpenedChest)
     TObjectPtr<ACoopRPGSharedChest> OpenedChest;
 
@@ -226,19 +263,20 @@ private:
     bool bShopTradePending = false;
     FString ShopFeedback;
     FGuid StageInventoryRound;
-    FCoopRPGRecoverySnapshot EntryRecovery;
-    FCoopRPGSwordSnapshot EntrySword;
+    FCoopRPGExpeditionInventory EntryInventory;
+    TOptional<FCoopRPGExpeditionInventory> RejoiningStageEntry;
 
     UPROPERTY(Replicated)
-    ECoopRPGSwordOwnership SwordOwnership = ECoopRPGSwordOwnership::None;
+    FCoopRPGPersonalEquipment Shield;
+
+    UPROPERTY(Replicated)
+    ECoopRPGEquipmentOwnership SwordOwnership = ECoopRPGEquipmentOwnership::None;
 
     UPROPERTY(Replicated)
     bool bPersonalSwordEquipped = false;
 
     UPROPERTY(Replicated)
     FCoopRPGStatProgress StatProgress;
-
-    FCoopRPGStatProgress EntryStats;
 
     UPROPERTY(ReplicatedUsing = OnRep_PuzzleReward)
     ECoopRPGPuzzleReward PuzzleReward = ECoopRPGPuzzleReward::None;
@@ -247,9 +285,10 @@ private:
     bool bExpeditionPowerReward = false;
 
     UPROPERTY(Replicated)
-    FCoopRPGSlashProgress SlashProgress;
+    FCoopRPGSkillCapsuleProgress SkillProgress;
 
-    FCoopRPGSlashProgress EntrySlash;
+    UPROPERTY(Replicated)
+    FCoopRPGActiveSkillSlots ActiveSkillSlots;
 
     UPROPERTY(Replicated)
     bool bRoundReady = false;

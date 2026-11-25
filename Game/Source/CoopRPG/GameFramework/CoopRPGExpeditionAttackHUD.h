@@ -22,6 +22,7 @@ namespace CoopRPG::ExpeditionUI
 
     FAttackHudStatus ReadAttackHud(const ACoopRPGGameState& State, const ACoopRPGCharacter& Hero, bool bCombatStage, bool bSlash = false);
     FAttackHudStatus ReadTauntHud(const ACoopRPGGameState& State, const ACoopRPGCharacter& Hero, bool bCombatStage);
+    void DrawShieldOutline(UCanvas& Canvas, const FBox2D& Bounds, const FLinearColor& Tint);
     void DrawTauntGlyph(UCanvas& Canvas, const FBox2D& Bounds, const FAttackHudStatus& Status);
     const TCHAR* AttackHudLabel(EAttackHudState State);
     const TCHAR* AttackHudLogState(EAttackHudState State);

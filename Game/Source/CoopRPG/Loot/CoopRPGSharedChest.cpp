@@ -73,6 +73,8 @@ void ACoopRPGSharedChest::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
     DOREPLIFETIME(ACoopRPGSharedChest, MartialPowerScrollStock);
     DOREPLIFETIME(ACoopRPGSharedChest, ProtectionScrollStock);
     DOREPLIFETIME(ACoopRPGSharedChest, SlashCapsuleStock);
+    DOREPLIFETIME(ACoopRPGSharedChest, TauntCapsuleStock);
+    DOREPLIFETIME(ACoopRPGSharedChest, PersonalShieldStock);
     DOREPLIFETIME(ACoopRPGSharedChest, FirstOpenedAt);
 }
 
@@ -101,6 +103,11 @@ bool ACoopRPGSharedChest::TryTakeSlashCapsule()
     return TryTakeStock(SlashCapsuleStock);
 }
 
+bool ACoopRPGSharedChest::TryTakeTauntCapsule()
+{
+    return TryTakeStock(TauntCapsuleStock);
+}
+
 void ACoopRPGSharedChest::RecordFirstOpen()
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -114,6 +121,20 @@ void ACoopRPGSharedChest::RecordFirstOpen()
         *State->GetRoundId().ToString(), *GetName(), FirstOpenedAt);
     ForceNetUpdate();
     OnRep_FirstOpenedAt();
+}
+
+bool ACoopRPGSharedChest::TryTakePersonalShield()
+{
+    return TryTakeStock(PersonalShieldStock);
+}
+
+void ACoopRPGSharedChest::SetPersonalShieldStock(int32 Stock)
+{
+    if (HasAuthority())
+    {
+        PersonalShieldStock = Stock;
+        ForceNetUpdate();
+    }
 }
 
 void ACoopRPGSharedChest::SetBossRewardStock()

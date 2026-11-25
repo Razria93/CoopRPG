@@ -13,6 +13,7 @@
 #include "CoopRPG/GameFramework/CoopRPGGameplayFeedback.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 
+#include "CoopRPG/GameFramework/CoopRPGPlayerController.h"
 #include "CoopRPG/GameFramework/CoopRPGPlayerState.h"
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
@@ -191,6 +192,7 @@ void ACoopRPGCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopRPGCharacter, bHasMeleeWeapon);
     DOREPLIFETIME(ACoopRPGCharacter, bShieldEquipped);
+    DOREPLIFETIME(ACoopRPGCharacter, bPersonalShieldModel);
     DOREPLIFETIME(ACoopRPGCharacter, bGuarding);
     DOREPLIFETIME_CONDITION(ACoopRPGCharacter, GuardPoints, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ACoopRPGCharacter, bGuardExhausted, COND_OwnerOnly);
@@ -276,9 +278,10 @@ void ACoopRPGCharacter::RestoreGuardPointsOnBlock()
         *State->GetRoundId().ToString(), DisplaySlot, Before, GuardPoints, GetWorld()->GetTimeSeconds());
 }
 
-void ACoopRPGCharacter::SetShieldEquipped(bool bEquipped)
+void ACoopRPGCharacter::SetShieldEquipped(bool bEquipped, bool bPersonal)
 {
-    if (!HasAuthority() || bShieldEquipped == bEquipped)
+    bPersonal = bEquipped && bPersonal;
+    if (!HasAuthority() || (bShieldEquipped == bEquipped && bPersonalShieldModel == bPersonal))
     {
         return;
     }
@@ -287,7 +290,15 @@ void ACoopRPGCharacter::SetShieldEquipped(bool bEquipped)
         ClearGuard();
     }
     bShieldEquipped = bEquipped;
-    OnRep_ShieldState();
+    if (bPersonalShieldModel != bPersonal)
+    {
+        bPersonalShieldModel = bPersonal;
+        OnRep_ShieldModel();
+    }
+    else
+    {
+        OnRep_ShieldState();
+    }
     ForceNetUpdate();
 }
 
@@ -524,8 +535,8 @@ void ACoopRPGCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
         PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ACoopRPGCharacter::PressGuardInput);
         PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_DoubleClick, this, &ACoopRPGCharacter::PressGuardInput);
         PlayerInputComponent->BindKey(EKeys::RightMouseButton, IE_Released, this, &ACoopRPGCharacter::ReleaseGuardInputKey);
-        PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACoopRPGCharacter::UseSlash);
-        PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACoopRPGCharacter::UseTaunt);
+        PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACoopRPGCharacter::UseActiveSkillSlot);
+        PlayerInputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACoopRPGCharacter::UseActiveSkillSlot);
         PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &ACoopRPGCharacter::PressGuardInput);
         PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &ACoopRPGCharacter::ReleaseGuardInputKey);
     }
@@ -577,14 +588,12 @@ void ACoopRPGCharacter::CancelAttack()
     ServerCancelAttack();
 }
 
-void ACoopRPGCharacter::UseSlash()
+void ACoopRPGCharacter::UseActiveSkillSlot(FKey Key)
 {
-    AbilitySystem->TryActivateAbilityByClass(UCoopRPGSlashAbility::StaticClass());
-}
-
-void ACoopRPGCharacter::UseTaunt()
-{
-    AbilitySystem->TryActivateAbilityByClass(UCoopRPGTauntAbility::StaticClass());
+    if (auto* Player = GetController<ACoopRPGPlayerController>())
+    {
+        Player->UseActiveSkillSlot(Key == EKeys::Two ? 2 : 3);
+    }
 }
 
 void ACoopRPGCharacter::PressGuardInput(FKey Key)
@@ -1088,6 +1097,14 @@ void ACoopRPGCharacter::RefreshWeaponVisibility()
     }
 }
 
+void ACoopRPGCharacter::OnRep_ShieldModel()
+{
+    if (const auto* Identity = GetPlayerState<ACoopRPGPlayerState>())
+    {
+        ConfigureHeroShield(Identity->GetSelectedHero());
+    }
+}
+
 void ACoopRPGCharacter::ConfigureHeroShield(ECoopRPGHero Hero)
 {
     HeroShieldMesh->SetStaticMesh(nullptr);
@@ -1095,7 +1112,7 @@ void ACoopRPGCharacter::ConfigureHeroShield(ECoopRPGHero Hero)
     const FName Socket = bAdventurer ? FName(TEXT("Shield")) : FName(TEXT("ShieldSocket"));
     if (GetMesh()->DoesSocketExist(Socket))
     {
-        const TCHAR* ShieldPath = bAdventurer
+        const TCHAR* ShieldPath = bAdventurer || bPersonalShieldModel
             ? TEXT("/Game/ThirdParty/RPGHeroSquad/Mesh/Weapon/SM_RPGHero_Shield01_Polyart.SM_RPGHero_Shield01_Polyart")
             : TEXT("/Game/ThirdParty/RPGHeroSquad/Mesh/Weapon/SM_AnimalHero_Shield01_Polyart.SM_AnimalHero_Shield01_Polyart");
         UStaticMesh* Shield = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(ShieldPath)).LoadSynchronous();

@@ -29,7 +29,12 @@ public:
     bool TryTakeStatScroll(ECoopRPGScrollStat Stat);
     int32 GetSlashCapsuleStock() const { return SlashCapsuleStock; }
     bool TryTakeSlashCapsule();
+    int32 GetTauntCapsuleStock() const { return TauntCapsuleStock; }
+    bool TryTakeTauntCapsule();
     void RecordFirstOpen();
+    int32 GetPersonalShieldStock() const { return PersonalShieldStock; }
+    bool TryTakePersonalShield();
+    void SetPersonalShieldStock(int32 Stock);
     void SetBossRewardStock();
 
 private:
@@ -68,5 +73,11 @@ private:
     int32 ProtectionScrollStock = 1;
 
     UPROPERTY(Transient, Replicated)
-    int32 SlashCapsuleStock = 2;
+    int32 SlashCapsuleStock = 1;
+
+    UPROPERTY(Transient, Replicated)
+    int32 TauntCapsuleStock = 0;
+
+    UPROPERTY(Transient, Replicated)
+    int32 PersonalShieldStock = 0;
 };
