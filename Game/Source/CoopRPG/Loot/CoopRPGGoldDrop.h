@@ -27,6 +27,7 @@ private:
     UFUNCTION()
     void OnRep_DropId();
 
+private:
     UPROPERTY()
     TObjectPtr<UStaticMeshComponent> Rim;
 
