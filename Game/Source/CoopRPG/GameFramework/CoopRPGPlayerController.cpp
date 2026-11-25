@@ -342,6 +342,50 @@ void ACoopRPGPlayerController::AwardBossGold(FGuid RoundId)
     }
 }
 
+void ACoopRPGPlayerController::PreviewSkirmishGold(FGuid RoundId, FGuid DropId, int32 PendingGold)
+{
+    const auto* Identity = GetPlayerState<APlayerState>();
+    if (!HasAuthority() || !Identity || !Identity->GetUniqueId().IsValid())
+    {
+        return;
+    }
+
+    const auto* Economy = GetGameInstance()->GetSubsystem<UCoopRPGSessionEconomy>();
+    const int32 Balance = Economy->GetGold(Identity->GetUniqueId());
+    const int32 PreviousGold = SessionGold;
+    SessionGold = Balance + FMath::Min(PendingGold, MAX_int32 - Balance);
+    ForceNetUpdate();
+    if (APawn* CurrentHero = GetPawn(); CurrentHero && SessionGold > PreviousGold)
+    {
+        ClientGameplayFeedback({ECoopRPGFeedbackKind::GoldAcquired, CurrentHero, static_cast<float>(SessionGold - PreviousGold)});
+    }
+    UE_LOG(LogCoopRPGShop, Log, TEXT("SkirmishGoldPreview Round=%s DropId=%s Gold=%d->%d Pending=%d %s"),
+        *RoundId.ToString(), *DropId.ToString(), PreviousGold, SessionGold, PendingGold,
+        *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::SettleSkirmishGold(FGuid RoundId, int32 PendingGold, bool bCommit)
+{
+    const auto* Identity = GetPlayerState<APlayerState>();
+    if (!HasAuthority() || !Identity || !Identity->GetUniqueId().IsValid())
+    {
+        return;
+    }
+
+    auto* Economy = GetGameInstance()->GetSubsystem<UCoopRPGSessionEconomy>();
+    const FUniqueNetIdRepl& OwnerId = Identity->GetUniqueId();
+    const int32 PreviousBalance = Economy->GetGold(OwnerId);
+    if (bCommit)
+    {
+        Economy->TryChangeGold(OwnerId, FMath::Min(PendingGold, MAX_int32 - PreviousBalance));
+    }
+    SessionGold = Economy->GetGold(OwnerId);
+    ForceNetUpdate();
+    UE_LOG(LogCoopRPGShop, Log, TEXT("SkirmishGoldSettled Round=%s Outcome=%s Gold=%d->%d Pending=%d %s"),
+        *RoundId.ToString(), bCommit ? TEXT("Committed") : TEXT("Discarded"), PreviousBalance, SessionGold, PendingGold,
+        *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
 void ACoopRPGPlayerController::RequestShopTrade(ECoopRPGStorageItem Item, bool bBuy, int32 Quantity)
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
@@ -1061,7 +1105,8 @@ void ACoopRPGPlayerController::ServerTakeChestItem_Implementation(ACoopRPGShared
 
     if (bTakingScroll)
     {
-        const bool bUpgradeChest = CoopRPG::Expedition::IsSkirmish(GetWorld());
+        const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+        const bool bUpgradeChest = CoopRPG::Expedition::IsSkirmish(GetWorld()) || (State && State->AreBossRewardsAvailable());
         if (StageInventoryRound != RoundId || !bUpgradeChest)
         {
             LogChestRejection(Action, TEXT("ScrollUnavailable"), Chest, RoundId, Request);

@@ -59,6 +59,8 @@ public:
     void InitializeStageInventory(FGuid RoundId);
     void LoadSessionGold(FGuid RoundId);
     void AwardBossGold(FGuid RoundId);
+    void PreviewSkirmishGold(FGuid RoundId, FGuid DropId, int32 PendingGold);
+    void SettleSkirmishGold(FGuid RoundId, int32 PendingGold, bool bCommit);
     int32 GetSessionGold() const { return SessionGold; }
     void RequestShopTrade(ECoopRPGStorageItem Item, bool bBuy, int32 Quantity);
     const FString& GetShopFeedback() const { return ShopFeedback; }

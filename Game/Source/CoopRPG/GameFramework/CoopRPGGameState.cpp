@@ -502,7 +502,7 @@ double ACoopRPGGameState::GetRoundStartRemainingSeconds() const
 
 int32 ACoopRPGGameState::RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated)
 {
-    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+    auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
     if (!HasAuthority() || !IsRoundPlaying() || !IsValid(Defeated) || !Defeated->IsDead()
         || !Mode || !Mode->IsSkirmishEnemy(Defeated))
     {
@@ -517,6 +517,7 @@ int32 ACoopRPGGameState::RegisterSkirmishDefeat(ACoopRPGEnemy* Defeated)
     }
 
     SkirmishDefeats = DefeatedSkirmishEnemies.Num();
+    Mode->SpawnSkirmishGold(*Defeated);
     UE_LOG(LogCoopRPGRound, Log, TEXT("SkirmishDefeat Round=%s Enemy=%s Defeated=%d Total=%d"),
         *RoundId.ToString(), *Defeated->GetName(), SkirmishDefeats, CoopRPG::Expedition::SkirmishEnemyCount);
     ForceNetUpdate();
