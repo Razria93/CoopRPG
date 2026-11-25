@@ -36,6 +36,7 @@ public:
 private:
     bool IsActive(FName Map) const;
 
+private:
     FGuid CurrentRound;
     FName ReservedMap;
     TArray<FUniqueNetIdRepl> ReservedSlotOwners;
