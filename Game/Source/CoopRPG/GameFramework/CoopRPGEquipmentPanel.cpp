@@ -262,6 +262,14 @@ void FCoopRPGEquipmentPanel::DrawPanelFrame(AHUD& HUD, const FBox2D& Bounds) con
     }
 }
 
+void FCoopRPGEquipmentPanel::DrawRecoveryIcon(AHUD& HUD, FVector2D Position, double Size) const
+{
+    if (Skin.IsValid())
+    {
+        DrawItemIcon(HUD, 0, Position, Size, FLinearColor::White);
+    }
+}
+
 void FCoopRPGEquipmentPanel::Hide()
 {
     bVisible = false;
@@ -1097,14 +1105,6 @@ void FCoopRPGEquipmentPanel::DrawEquipment(AHUD& HUD, UCanvas& Surface, const AC
             bEquipped, bShieldEquipped, FirstEquipmentRow + 1, VisibleEquipmentRows, EquipmentRows, Panel.Min.X, Panel.Min.Y,
             Panel.GetSize().X, Panel.GetSize().Y, bGuarding, 0.0, 0.0, 0, 0, 0, 0.0, 0.0,
             *CoopRPG::Debug::DescribeLogContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
-    }
-}
-
-void FCoopRPGEquipmentPanel::DrawRecoveryIcon(AHUD& HUD, FVector2D Position, double Size) const
-{
-    if (Skin.IsValid())
-    {
-        DrawItemIcon(HUD, 0, Position, Size, FLinearColor::White);
     }
 }
 

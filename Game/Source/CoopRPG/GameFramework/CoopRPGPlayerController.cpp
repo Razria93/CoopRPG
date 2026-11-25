@@ -288,15 +288,6 @@ void ACoopRPGPlayerController::InitializeStageInventory(FGuid RoundId)
         *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
 }
 
-void ACoopRPGPlayerController::RefreshPotionCapacityBonus()
-{
-    check(HasAuthority());
-    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
-    const auto* Identity = GetPlayerState<APlayerState>();
-    PotionCapacityBonus = Mode && Identity ? Mode->GetPotionCapacityBonus(Identity->GetUniqueId()) : FIntPoint::ZeroValue;
-    ForceNetUpdate();
-}
-
 void ACoopRPGPlayerController::LoadSessionGold(FGuid RoundId)
 {
     const auto* Identity = GetPlayerState<APlayerState>();
@@ -400,6 +391,15 @@ void ACoopRPGPlayerController::RequestStorageTransfer(ECoopRPGStorageItem Item, 
 FCoopRPGRecoverySnapshot ACoopRPGPlayerController::GetTravelRecovery(bool bRetry) const
 {
     return bRetry ? EntryRecovery : FCoopRPGRecoverySnapshot{FIntPoint(RecoveryCount, StaminaRecoveryCount), RecoveryRegistration};
+}
+
+void ACoopRPGPlayerController::RefreshPotionCapacityBonus()
+{
+    check(HasAuthority());
+    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+    const auto* Identity = GetPlayerState<APlayerState>();
+    PotionCapacityBonus = Mode && Identity ? Mode->GetPotionCapacityBonus(Identity->GetUniqueId()) : FIntPoint::ZeroValue;
+    ForceNetUpdate();
 }
 
 bool ACoopRPGPlayerController::IsRecoveryRegistered(bool bStamina) const
