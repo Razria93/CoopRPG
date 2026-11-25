@@ -27,8 +27,8 @@ class UCoopRPGRoundTravelSeats : public UGameInstanceSubsystem
 public:
     void Reserve(FName Destination, TArray<FCoopRPGRoundTravelParticipant> Participants);
     void Clear();
-    bool HasHealthPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId) const;
-    void GrantHealthPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId);
+    FIntPoint GetPotionCapacityBonus(const FUniqueNetIdRepl& ConnectionId) const;
+    void GrantPotionCapacityReward(const FUniqueNetIdRepl& ConnectionId, bool bStamina);
     bool Allows(FName Map, const FUniqueNetIdRepl& ConnectionId) const;
     int32 Admit(FName Map, const FUniqueNetIdRepl& ConnectionId, FCoopRPGRoundTravelParticipant& OutParticipant);
 
@@ -40,5 +40,5 @@ private:
     TArray<FUniqueNetIdRepl> AwaitingPlayers;
     TArray<FCoopRPGRoundTravelParticipant> ReservedPlayers;
     double ExpiresAt = 0.0;
-    TArray<FUniqueNetIdRepl> HealthPotionCapacityOwners;
+    TMap<FUniqueNetIdRepl, FIntPoint> PotionCapacityBonuses;
 };

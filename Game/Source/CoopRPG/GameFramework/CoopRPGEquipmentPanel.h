@@ -23,6 +23,7 @@ public:
         const CoopRPG::ExpeditionUI::FAttackHudStatus& Attack, const FCoopRPGExpeditionDashboard& Dashboard);
     FBox2D GetVisibleBounds() const;
     void DrawPanelFrame(AHUD& HUD, const FBox2D& Bounds) const;
+    void DrawRecoveryIcon(AHUD& HUD, FVector2D Position, double Size) const;
     void Hide();
     bool HandlePrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     bool HandleWheel(const ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);

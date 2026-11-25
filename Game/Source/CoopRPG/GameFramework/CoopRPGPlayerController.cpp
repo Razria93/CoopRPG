@@ -155,6 +155,7 @@ void ACoopRPGPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProper
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, StaminaRecoveryCount, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, RecoveryRegistration, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, StageRecoveryUsesRemaining, COND_OwnerOnly);
+    DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, PotionCapacityBonus, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, StageRecoverySupplies, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, PersonalStorage, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ACoopRPGPlayerController, SessionGold, COND_OwnerOnly);
@@ -268,10 +269,8 @@ void ACoopRPGPlayerController::InitializeStageInventory(FGuid RoundId)
         *RoundId.ToString(), HasSlashCapsule(), HasSlashRegistered(),
         *CoopRPG::Debug::DescribePlayerRequestContext(Hero, ANSI_TO_TCHAR(__FUNCTION__)));
     StageRecoverySupplies = FIntPoint(1, 1);
-    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
-    const auto* Identity = GetPlayerState<APlayerState>();
-    const bool bCapacityReward = Mode && Identity && Mode->HasHealthPotionCapacityReward(Identity->GetUniqueId());
-    StageRecoveryUsesRemaining = FIntPoint(bCapacityReward ? 2 : 1, 1);
+    RefreshPotionCapacityBonus();
+    StageRecoveryUsesRemaining = FIntPoint(1, 1) + PotionCapacityBonus;
     RefreshPartyRecoveryUses();
     UE_LOG(LogCoopRPGChestRequest, Log, TEXT("MartialPowerStageEntered Round=%s MartialPower=%d Scrolls=%d %s"),
         *RoundId.ToString(), GetMartialPower(), StatProgress.MartialPower.ScrollCount,
@@ -287,6 +286,15 @@ void ACoopRPGPlayerController::InitializeStageInventory(FGuid RoundId)
         *RoundId.ToString(), RecoveryCount, StageRecoverySupplies.X, StageRecoverySupplies.Y, StaminaRecoveryCount,
         RecoveryRegistration.bHealth, RecoveryRegistration.bStamina, StageRecoveryUsesRemaining.X, StageRecoveryUsesRemaining.Y,
         *CoopRPG::Debug::DescribePlayerRequestContext(GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
+void ACoopRPGPlayerController::RefreshPotionCapacityBonus()
+{
+    check(HasAuthority());
+    const auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
+    const auto* Identity = GetPlayerState<APlayerState>();
+    PotionCapacityBonus = Mode && Identity ? Mode->GetPotionCapacityBonus(Identity->GetUniqueId()) : FIntPoint::ZeroValue;
+    ForceNetUpdate();
 }
 
 void ACoopRPGPlayerController::LoadSessionGold(FGuid RoundId)
@@ -334,6 +342,7 @@ void ACoopRPGPlayerController::RequestShopTrade(ECoopRPGStorageItem Item, bool b
 
 void ACoopRPGPlayerController::LoadPersonalStorage()
 {
+    RefreshPotionCapacityBonus();
     const auto* Identity = GetPlayerState<APlayerState>();
     if (!HasAuthority() || !Identity || !Identity->GetUniqueId().IsValid())
     {

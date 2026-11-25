@@ -8,5 +8,6 @@ enum class ECoopRPGPuzzleReward : uint8
 {
     None,
     ExpeditionPower,
-    HealthPotionCapacity
+    HealthPotionCapacity,
+    StaminaPotionCapacity
 };

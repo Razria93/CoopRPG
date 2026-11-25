@@ -1100,6 +1100,14 @@ void FCoopRPGEquipmentPanel::DrawEquipment(AHUD& HUD, UCanvas& Surface, const AC
     }
 }
 
+void FCoopRPGEquipmentPanel::DrawRecoveryIcon(AHUD& HUD, FVector2D Position, double Size) const
+{
+    if (Skin.IsValid())
+    {
+        DrawItemIcon(HUD, 0, Position, Size, FLinearColor::White);
+    }
+}
+
 void FCoopRPGEquipmentPanel::DrawItemIcon(AHUD& HUD, int32 IconIndex, FVector2D Position, double Size, FLinearColor Tint) const
 {
     const float SourceX = 95.0f + IconIndex * 30.0f;
