@@ -29,6 +29,7 @@ public:
     const TArray<TObjectPtr<ACoopRPGEnemy>>& GetSkirmishEnemies() const { return SkirmishEnemies; }
     void UpdateLootRoundPhase(const AController* Leaving = nullptr);
     void AcknowledgeRoundResult(ACoopRPGPlayerController* Player, FGuid RoundId);
+    void RequestBossReturnRetry(ACoopRPGPlayerController& Player, FGuid RoundId);
     void SelectPuzzleReward(ACoopRPGPlayerController& Player, FGuid RoundId, ECoopRPGPuzzleReward Reward);
     FIntPoint GetPotionCapacityBonus(const FUniqueNetIdRepl& ConnectionId) const;
 
@@ -81,4 +82,7 @@ private:
     bool bExpeditionPuzzle = false;
     bool bExpeditionBoss = false;
     bool bExpeditionSkirmish = false;
+#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
+    int32 TestBossReturnFailuresRemaining = 0;
+#endif
 };

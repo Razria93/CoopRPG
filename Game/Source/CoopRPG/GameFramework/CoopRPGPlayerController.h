@@ -42,6 +42,9 @@ public:
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     void AcknowledgeRoundResult(FGuid RoundId);
+
+    UFUNCTION(Server, Reliable)
+    void ServerRetryBossReturn(FGuid RoundId);
     ECoopRPGPuzzleReward GetPuzzleReward() const { return PuzzleReward; }
     bool HasExpeditionPowerReward() const { return bExpeditionPowerReward; }
     bool FinalizePuzzleReward(ECoopRPGPuzzleReward Reward);

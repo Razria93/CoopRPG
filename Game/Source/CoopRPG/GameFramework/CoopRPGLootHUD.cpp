@@ -315,6 +315,8 @@ void ACoopRPGLootHUD::DrawHUD()
     FixedHudBoundsCount = 0;
     PuzzleRewardPanelBounds = FBox2D(ForceInit);
     ChestPanelBounds = FBox2D(ForceInit);
+    BossReturnPanelBounds = FBox2D(ForceInit);
+    BossReturnButtonBounds = FBox2D(ForceInit);
     const auto* Viewport = Cast<UCoopRPGGameViewportClient>(GetWorld()->GetGameViewport());
     if (Viewport && Viewport->HasConnectionNotice())
     {
@@ -644,7 +646,8 @@ bool ACoopRPGLootHUD::HandleHudPrimaryButton(ACoopRPGPlayerController& Controlle
         ExpeditionDashboard.Hide();
         ChestPanelBounds = FBox2D(ForceInit);
     }
-    return HandlePuzzleRewardPrimaryButton(Controller, Input)
+    return HandleBossReturnPrimaryButton(Controller, Input)
+        || HandlePuzzleRewardPrimaryButton(Controller, Input)
         || HandleChestPrimaryButton(Controller, Input)
         || EquipmentPanel.HandlePrimaryButton(Controller, Input)
         || ExpeditionDashboard.HandlePrimaryButton(Controller, Input);
@@ -681,9 +684,10 @@ bool ACoopRPGLootHUD::IsPointerOverHud(const ACoopRPGPlayerController& Controlle
             return true;
         }
     }
-    for (const FBox2D& Bounds : {EquipmentPanel.GetVisibleBounds(), ExpeditionDashboard.GetPanelBounds(),
+    for (const FBox2D& Bounds : {EquipmentPanel.GetVisibleBounds(), EquipmentPanel.GetServiceBounds(),
+        ExpeditionDashboard.GetPanelBounds(),
         ExpeditionDashboard.GetNoticeBounds(), ExpeditionDashboard.GetBossHealthBounds(), ChestPanelBounds,
-        PuzzleRewardPanelBounds})
+        PuzzleRewardPanelBounds, BossReturnPanelBounds})
     {
         if (ContainsPointer(Bounds))
         {
@@ -699,6 +703,8 @@ void ACoopRPGLootHUD::ReleaseHudPointer()
     ExpeditionDashboard.ReleasePointer();
     bOwnsPuzzleRewardPointer = false;
     PressedPuzzleReward = ECoopRPGPuzzleReward::None;
+    bOwnsBossReturnPointer = false;
+    bPressedBossReturnButton = false;
     bOwnsChestPointer = false;
     PressedChestControl = EChestControl::None;
 }
@@ -2224,6 +2230,36 @@ void ACoopRPGLootHUD::DrawPuzzleRewards(const ACoopRPGGameState& State, const AC
     }
 }
 
+bool ACoopRPGLootHUD::HandleBossReturnPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input)
+{
+    FVector2D Pointer;
+    const bool bInside = BossReturnPanelBounds.bIsValid && Controller.GetMousePosition(Pointer.X, Pointer.Y)
+        && BossReturnPanelBounds.IsInsideOrOn(Pointer);
+    const bool bOnButton = bInside && BossReturnButtonBounds.bIsValid && BossReturnButtonBounds.IsInsideOrOn(Pointer);
+    if (bOwnsBossReturnPointer)
+    {
+        if (Input.Event == IE_Released)
+        {
+            const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();
+            if (bPressedBossReturnButton && bOnButton && State
+                && State->GetBossReturnStatus() == ECoopRPGBossReturnStatus::RetryAvailable)
+            {
+                Controller.ServerRetryBossReturn(State->GetRoundId());
+            }
+            bOwnsBossReturnPointer = false;
+            bPressedBossReturnButton = false;
+        }
+        return true;
+    }
+    if (bInside && (Input.Event == IE_Pressed || Input.Event == IE_DoubleClick))
+    {
+        bOwnsBossReturnPointer = true;
+        bPressedBossReturnButton = bOnButton;
+        return true;
+    }
+    return false;
+}
+
 void ACoopRPGLootHUD::DrawExpeditionResult(const ACoopRPGGameState& State, int32 Stage)
 {
     using namespace CoopRPG::ExpeditionUI;
@@ -2247,6 +2283,8 @@ void ACoopRPGLootHUD::DrawExpeditionResult(const ACoopRPGGameState& State, int32
     default: break;
     }
 
+    const ECoopRPGBossReturnStatus ReturnStatus = State.GetBossReturnStatus();
+    const bool bCanRetryReturn = !bPlayerMissing && ReturnStatus == ECoopRPGBossReturnStatus::RetryAvailable;
     FString Next = TEXT("모든 스테이지를 완료했어요.");
     if (bPlayerMissing)
     {
@@ -2258,7 +2296,13 @@ void ACoopRPGLootHUD::DrawExpeditionResult(const ACoopRPGGameState& State, int32
     }
     else if (bFinished && !State.GetRoundTravelDestination().IsEmpty())
     {
-        Next = TEXT("잠시 후 원정 대기소로 돌아가요.");
+        switch (ReturnStatus)
+        {
+        case ECoopRPGBossReturnStatus::RetryAvailable: Next = TEXT("대기소로 이동하지 못했어요. 한 번 더 시도할 수 있어요."); break;
+        case ECoopRPGBossReturnStatus::Retrying: Next = TEXT("원정 대기소로 다시 이동하고 있어요."); break;
+        case ECoopRPGBossReturnStatus::RetryFailed: Next = TEXT("다시 이동하지 못했어요. 원정 결과와 보상은 확정됐어요."); break;
+        default: Next = TEXT("잠시 후 원정 대기소로 돌아가요."); break;
+        }
     }
     else if (!State.GetRoundTravelDestination().IsEmpty())
     {
@@ -2284,7 +2328,10 @@ void ACoopRPGLootHUD::DrawExpeditionResult(const ACoopRPGGameState& State, int32
     const double ScoreTop = DetailTop + Measure(*Canvas, Detail, BodyFont).Y + 7.0;
     const double DividerTop = ScoreTop + Measure(*Canvas, Score, ScoreFont).Y + DividerGap;
     const double NextTop = DividerTop + DividerHeight + DividerGap;
-    const double Height = NextTop + Measure(*Canvas, Next, BodyFont).Y + Padding;
+    constexpr double ButtonHeight = 32.0;
+    const double ButtonTop = NextTop + Measure(*Canvas, Next, BodyFont).Y + DividerGap;
+    const double Height = bCanRetryReturn ? ButtonTop + ButtonHeight + Padding
+        : NextTop + Measure(*Canvas, Next, BodyFont).Y + Padding;
     const double X = (Canvas->ClipX - Width) * 0.5;
     const double Y = FMath::Max(12.0, (Canvas->ClipY - Height) * 0.5);
     ExpeditionDashboard.DrawPanel(*this, FVector2D(X, Y), FVector2D(Width, Height));
@@ -2300,6 +2347,29 @@ void ACoopRPGLootHUD::DrawExpeditionResult(const ACoopRPGGameState& State, int32
     DrawCentered(Score, ScoreTop, ScoreFont, Ink);
     ExpeditionDashboard.DrawDivider(*this, FVector2D(X + Padding, Y + DividerTop), Width - 2.0 * Padding);
     DrawCentered(MoveTemp(Next), NextTop, BodyFont, Ink);
+
+    if (ReturnStatus != ECoopRPGBossReturnStatus::None)
+    {
+        BossReturnPanelBounds = FBox2D(FVector2D(X, Y), FVector2D(X + Width, Y + Height));
+        if (bCanRetryReturn)
+        {
+            const double ButtonWidth = FMath::Min(205.0, Width - 2.0 * Padding);
+            const double ButtonX = X + (Width - ButtonWidth) * 0.5;
+            BossReturnButtonBounds = FBox2D(FVector2D(ButtonX, Y + ButtonTop),
+                FVector2D(ButtonX + ButtonWidth, Y + ButtonTop + ButtonHeight));
+            DrawRect(FLinearColor(FColor(67, 87, 55)), ButtonX, Y + ButtonTop, ButtonWidth, ButtonHeight);
+            const FString ButtonLabel(TEXT("대기소 이동 재시도"));
+            DrawCentered(ButtonLabel, ButtonTop + (ButtonHeight - Measure(*Canvas, ButtonLabel, BodyFont).Y) * 0.5,
+                BodyFont, FLinearColor(FColor(255, 243, 208)));
+        }
+        if (LastBossReturnStatus != static_cast<uint8>(ReturnStatus))
+        {
+            LastBossReturnStatus = static_cast<uint8>(ReturnStatus);
+            UE_LOG(LogCoopRPGGameplayFeedback, Log, TEXT("BossReturnPanel Round=%s Status=%s Score=%d Button=%d X=%.0f Y=%.0f"),
+                *State.GetRoundId().ToString(), *StaticEnum<ECoopRPGBossReturnStatus>()->GetNameStringByValue(LastBossReturnStatus),
+                State.GetTeamScore(), bCanRetryReturn, BossReturnButtonBounds.GetCenter().X, BossReturnButtonBounds.GetCenter().Y);
+        }
+    }
 
     if (LastPresentedExpeditionResult != State.GetRoundId())
     {

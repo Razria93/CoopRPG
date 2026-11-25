@@ -64,6 +64,7 @@ private:
     void DrawRoundWaiting(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller, int32 Stage);
     bool HandlePuzzleRewardPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     void DrawPuzzleRewards(const ACoopRPGGameState& State, const ACoopRPGPlayerController& Controller);
+    bool HandleBossReturnPrimaryButton(ACoopRPGPlayerController& Controller, const FInputKeyEventArgs& Input);
     void DrawExpeditionResult(const ACoopRPGGameState& State, int32 Stage);
     void DrawRoundResult(const ACoopRPGGameState& State, ACoopRPGPlayerController& Controller, int32 Stage);
     void DrawExtractionStatus(const ACoopRPGGameState& State, float HintY);
@@ -92,6 +93,11 @@ private:
     bool bOwnsPuzzleRewardPointer = false;
     FGuid LastPresentedPuzzleRewardsRound;
     FGuid LastPresentedExpeditionResult;
+    FBox2D BossReturnPanelBounds{ForceInit};
+    FBox2D BossReturnButtonBounds{ForceInit};
+    bool bOwnsBossReturnPointer = false;
+    bool bPressedBossReturnButton = false;
+    uint8 LastBossReturnStatus = 0;
     FGuid LastPresentedPartyRound;
     struct FPartyCardValues
     {

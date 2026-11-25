@@ -800,6 +800,16 @@ void ACoopRPGGameState::OnRep_SkirmishDefeats()
         *RoundId.ToString(), SkirmishDefeats, CoopRPG::Expedition::SkirmishEnemyCount);
 }
 
+void ACoopRPGGameState::SetBossReturnStatus(ECoopRPGBossReturnStatus Status)
+{
+    check(HasAuthority());
+    if (RoundStatus.BossReturnStatus != Status)
+    {
+        RoundStatus.BossReturnStatus = Status;
+        ForceNetUpdate();
+    }
+}
+
 void ACoopRPGGameState::OnRep_RoundStatus(const FCoopRPGRoundStatus& PreviousStatus)
 {
     OnRep_ExtractionZone();

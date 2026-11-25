@@ -273,6 +273,23 @@ void ACoopRPGGameMode::AcknowledgeRoundResult(ACoopRPGPlayerController* Player, 
     }
 }
 
+void ACoopRPGGameMode::RequestBossReturnRetry(ACoopRPGPlayerController& Player, FGuid RoundId)
+{
+    auto* State = GetGameState<ACoopRPGGameState>();
+    const bool bAccepted = bExpeditionBoss && State && State->GetRoundId() == RoundId
+        && State->GetRoundEndReason() == ECoopRPGRoundEndReason::BossDefeated
+        && State->GetBossReturnStatus() == ECoopRPGBossReturnStatus::RetryAvailable
+        && !bParticipantDisconnected && IsRoundParticipant(&Player);
+    if (bAccepted)
+    {
+        State->SetBossReturnStatus(ECoopRPGBossReturnStatus::Retrying);
+        NextTravelTime = State->GetServerWorldTimeSeconds() + 0.5;
+        bTravelAttempted = false;
+    }
+    UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("BossReturnRetryRequested Round=%s Accepted=%d %s"),
+        *RoundId.ToString(), bAccepted, *CoopRPG::Debug::DescribePlayerRequestContext(Player.GetPawn(), ANSI_TO_TCHAR(__FUNCTION__)));
+}
+
 void ACoopRPGGameMode::SelectPuzzleReward(ACoopRPGPlayerController& Player, FGuid RoundId, ECoopRPGPuzzleReward Reward)
 {
     auto* State = GetGameState<ACoopRPGGameState>();
@@ -307,6 +324,13 @@ void ACoopRPGGameMode::InitGame(const FString& MapName, const FString& Options, 
     bExpeditionPuzzle = CurrentMap == CoopRPG::Expedition::PuzzleMap;
     bExpeditionBoss = CurrentMap == CoopRPG::Expedition::BossMap;
     bExpeditionSkirmish = CurrentMap == CoopRPG::Expedition::SkirmishMap;
+#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
+    if (bExpeditionBoss && FParse::Param(FCommandLine::Get(), TEXT("CoopCombatTest")))
+    {
+        FParse::Value(FCommandLine::Get(), TEXT("CoopTestBossReturnFailures="), TestBossReturnFailuresRemaining);
+        TestBossReturnFailuresRemaining = FMath::Clamp(TestBossReturnFailuresRemaining, 0, 2);
+    }
+#endif
     bEnemyCombat = !bExpeditionLobby && !bExpeditionPuzzle
         && (UGameplayStatics::HasOption(Options, TEXT("EnemyCombat")) || UsesPlacedRoundActors(CurrentMap));
 }
@@ -770,6 +794,17 @@ FString ACoopRPGGameMode::GetRoundJoinRejection(const FString& Options, const FU
     {
         return TEXT("UnsupportedJoin");
     }
+    if (UniqueId.IsValid())
+    {
+        for (const auto& Slot : PlayerSlots)
+        {
+            const auto* Identity = Slot.IsValid() ? Slot->GetPlayerState<APlayerState>() : nullptr;
+            if (Identity && Identity->GetUniqueId() == UniqueId)
+            {
+                return TEXT("PlayerAlreadyConnected");
+            }
+        }
+    }
     const FName Map(*UGameplayStatics::GetCurrentLevelName(this));
     const auto* Seats = GetGameInstance()->GetSubsystem<UCoopRPGRoundTravelSeats>();
     return Seats->Allows(Map, UniqueId) ? FString() : FString(TEXT("RoundTravelReserved"));
@@ -1041,7 +1076,17 @@ void ACoopRPGGameMode::AdvanceRoundIfReady(ACoopRPGGameState& State, const FStri
     }
 
     bTravelAttempted = true;
-    const bool bDestinationAvailable = FPackageName::DoesPackageExist(Destination);
+    const bool bBossReturn = bExpeditionBoss && State.GetRoundEndReason() == ECoopRPGRoundEndReason::BossDefeated;
+    bool bDestinationAvailable = FPackageName::DoesPackageExist(Destination);
+#if !UE_BUILD_SHIPPING && !UE_BUILD_TEST
+    if (bBossReturn && TestBossReturnFailuresRemaining > 0)
+    {
+        --TestBossReturnFailuresRemaining;
+        bDestinationAvailable = false;
+        UE_LOG(LogCoopRPGRoundTravel, Log, TEXT("TestBossReturnUnavailable Round=%s Remaining=%d"),
+            *State.GetRoundId().ToString(), TestBossReturnFailuresRemaining);
+    }
+#endif
     if (bDestinationAvailable && ReserveRoundTravelSeats(State, Destination))
     {
         const FString URL = Destination + TEXT("?EnemyCombat?NoSeamlessTravel");
@@ -1080,5 +1125,11 @@ void ACoopRPGGameMode::AdvanceRoundIfReady(ACoopRPGGameState& State, const FStri
         RoundPlayers.Reset();
         bTravelAttempted = false;
         PublishReadySlots(State);
+    }
+    else if (bBossReturn)
+    {
+        NextTravelTime = 0.0;
+        State.SetBossReturnStatus(State.GetBossReturnStatus() == ECoopRPGBossReturnStatus::Retrying
+            ? ECoopRPGBossReturnStatus::RetryFailed : ECoopRPGBossReturnStatus::RetryAvailable);
     }
 }

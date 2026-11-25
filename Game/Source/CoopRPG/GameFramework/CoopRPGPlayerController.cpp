@@ -734,6 +734,14 @@ void ACoopRPGPlayerController::ServerAcknowledgeRoundResult_Implementation(FGuid
     }
 }
 
+void ACoopRPGPlayerController::ServerRetryBossReturn_Implementation(FGuid RoundId)
+{
+    if (auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>())
+    {
+        Mode->RequestBossReturnRetry(*this, RoundId);
+    }
+}
+
 void ACoopRPGPlayerController::OpenSharedChest()
 {
     const auto* State = GetWorld()->GetGameState<ACoopRPGGameState>();

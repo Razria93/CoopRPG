@@ -9,6 +9,7 @@
 #include "CoopRPG/Combat/CoopRPGAttackTarget.h"
 #include "CoopRPG/Debug/CoopRPGLogContext.h"
 #include "CoopRPG/GameFramework/CoopRPGExtractionZone.h"
+#include "CoopRPG/GameFramework/CoopRPGExpeditionMaps.h"
 #include "CoopRPG/GameFramework/CoopRPGGameMode.h"
 #include "CoopRPG/GameFramework/CoopRPGGameState.h"
 #include "CoopRPG/GameFramework/CoopRPGPlayerController.h"
@@ -556,7 +557,7 @@ void UCoopRPGCombatProbeComponent::ServerPrepareMeleeLayout_Implementation(FName
     {
         auto* Mode = GetWorld()->GetAuthGameMode<ACoopRPGGameMode>();
         auto* Character = Cast<ACoopRPGCharacter>(GetOwner());
-        if (Mode && Mode->IsSkirmishEncounter() && Character)
+        if (Mode && Character && (Mode->IsSkirmishEncounter() || CoopRPG::Expedition::IsBoss(GetWorld())))
         {
             PreparePlayerGuardLayout(Layout, *Mode, *Character);
         }
@@ -795,7 +796,7 @@ void UCoopRPGCombatProbeComponent::PreparePlayerGuardLayout(
     }
 
     ACoopRPGEnemy* Attacker = nullptr;
-    for (ACoopRPGEnemy* Enemy : Mode.GetSkirmishEnemies())
+    const auto Freeze = [&Attacker](ACoopRPGEnemy* Enemy)
     {
         if (IsValid(Enemy) && !Enemy->IsDead())
         {
@@ -807,12 +808,24 @@ void UCoopRPGCombatProbeComponent::PreparePlayerGuardLayout(
                 Attacker = Enemy;
             }
         }
+    };
+    if (Mode.IsSkirmishEncounter())
+    {
+        for (ACoopRPGEnemy* Enemy : Mode.GetSkirmishEnemies())
+        {
+            Freeze(Enemy);
+        }
+    }
+    else if (auto* Boss = Cast<ACoopRPGEnemy>(Mode.GetMeleeTarget()); Boss && Boss->IsBlackKnight())
+    {
+        Freeze(Boss);
     }
     if (!bPause && Attacker)
     {
         const double Side = Character.GetDisplaySlot() == 1 ? -1.0 : 1.0;
         const FVector PlayerPosition(770.0, Side * 150.0, 90.15);
-        const FVector EnemyPosition(PlayerPosition.X + 103.0, PlayerPosition.Y, Attacker->GetActorLocation().Z);
+        const double Distance = Attacker->IsBlackKnight() ? Attacker->GetAttackDistanceOffset(Character) + 40.0 : 103.0;
+        const FVector EnemyPosition(PlayerPosition.X + Distance, PlayerPosition.Y, Attacker->GetActorLocation().Z);
         Attacker->TeleportTo(EnemyPosition, FRotator(0.0, 180.0, 0.0), false, true);
         Character.GetCharacterMovement()->StopMovementImmediately();
         Character.TeleportTo(PlayerPosition, FRotator(0.0, Angle, 0.0), false, true);
