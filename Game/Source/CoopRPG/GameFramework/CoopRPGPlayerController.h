@@ -66,11 +66,15 @@ public:
     const FString& GetStorageFeedback() const { return StorageFeedback; }
     void ClearStorageFeedback() { StorageFeedback.Reset(); }
     int32 GetStorageBagCount(ECoopRPGStorageItem Item) const;
+    int32 GetBagSlotsUsed() const;
+    int32 GetBagRoom(ECoopRPGStorageItem Item) const;
     void RequestStorageTransfer(ECoopRPGStorageItem Item, bool bPersonal, bool bDeposit);
     FCoopRPGRecoverySnapshot GetTravelRecovery(bool bRetry) const;
     FIntPoint GetStageRecoverySupplies() const { return StageRecoverySupplies; }
     FIntPoint GetStageRecoveryUsesRemaining() const { return StageRecoveryUsesRemaining; }
     bool IsRecoveryRegistered(bool bStamina) const;
+    int32 GetSelectedRecoveryStock(bool bStamina) const;
+    FIntPoint GetAvailableRecoveryUses() const;
     int32 GetMartialPower() const { return StatProgress.MartialPower.Level + static_cast<int32>(bExpeditionPowerReward); }
     int32 GetProtection() const { return StatProgress.Protection.Level; }
     int32 GetStatScrollCount(ECoopRPGScrollStat Stat) const;
@@ -163,7 +167,8 @@ private:
 
     const TCHAR* GetEnemyLootRejection(FGuid RoundId, FGuid DropId, const ACoopRPGEnemyLoot* Drop) const;
 
-    void SetRecoveryCount(int32 Count);
+    void SetPersonalRecoveryCount(bool bStamina, int32 Count);
+    void RefreshPartyRecoveryUses();
 
     void LogRecoveryRejection(const TCHAR* Reason, FGuid RoundId, bool bStamina) const;
 

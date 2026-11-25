@@ -590,6 +590,10 @@ void ACoopRPGLootHUD::ShowGameplayFeedback(const FCoopRPGGameplayFeedback& Feedb
         break;
     case ECoopRPGFeedbackKind::WeaponAcquired: Text = bExpedition ? TEXT("한손검 획득") : TEXT("Melee weapon acquired"); break;
     case ECoopRPGFeedbackKind::RecoveryAcquired: Text = bExpedition ? TEXT("회복 물약 획득") : TEXT("Recovery item acquired"); break;
+    case ECoopRPGFeedbackKind::BagFull:
+        Text = bExpedition ? CoopRPG::Bag::FullMessage : TEXT("Inventory full");
+        Color = FLinearColor(1.0f, 0.36f, 0.33f);
+        break;
     case ECoopRPGFeedbackKind::StaminaRecoveryAcquired: Text = TEXT("SP 회복 물약 획득"); break;
     case ECoopRPGFeedbackKind::RecoveryUsed:
         Text = bExpedition ? TEXT("회복 물약 사용") : TEXT("Recovery item used");
@@ -892,8 +896,8 @@ void ACoopRPGLootHUD::DrawChestPanel(const ACoopRPGGameState& State, const ACoop
         DrawChestRow(ChestSlashBounds, TEXT("슬래시 캡슐"), SlashStock, bSlashSelected);
     }
     const FString Detail = bSwordSelected ? FString(TEXT("가방에서 장착 · 최초 장착 시 귀속"))
-        : bPotionSelected ? FString::Printf(TEXT("HP %d 회복"), FMath::RoundToInt(UCoopRPGRecoveryEffect::HealthRestored))
-        : bStaminaSelected ? FString::Printf(TEXT("SP %d 회복"), FMath::RoundToInt(UCoopRPGStaminaRecoveryEffect::StaminaRestored))
+        : bPotionSelected ? FString::Printf(TEXT("HP %d 회복"), CoopRPG::Recovery::PersonalAmount)
+        : bStaminaSelected ? FString::Printf(TEXT("SP %d 회복"), CoopRPG::Recovery::PersonalAmount)
         : bScrollSelected || bProtectionSelected ? FString::Printf(TEXT("가방에서 사용 · %s +%d"),
             bProtectionSelected ? TEXT("수호") : TEXT("무력"), FCoopRPGStatProgress::PointsPerScroll)
         : bSlashSelected ? FString(TEXT("사용하면 2번 슬롯에 등록"))
@@ -1370,7 +1374,7 @@ void ACoopRPGLootHUD::DrawPartyStatus(const ACoopRPGGameState& State,
         const TCHAR* HeroName = Selected == ECoopRPGHero::Adventurer ? TEXT("어드벤처러")
             : Selected == ECoopRPGHero::AnimalHero ? TEXT("애니멀 히어로") : TEXT("캐릭터 준비 중");
         const bool bArmed = Hero->HasMeleeWeapon();
-        const int32 Recovery = Identity ? Identity->GetPartyRecoveryCount() : INDEX_NONE;
+        const int32 Recovery = Identity ? Identity->GetPartyRecoveryUses().X : INDEX_NONE;
         const FIntVector4 Values(FMath::CeilToInt(Hero->GetHealth()),
             bLocal ? FMath::CeilToInt(Hero->GetStamina()) : Hero->GetPartyStamina(), bArmed ? 1 : 0, Recovery);
         const double X = Margin + Index * (Width + CardGap);

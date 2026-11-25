@@ -787,8 +787,7 @@ void FCoopRPGEquipmentPanel::DrawInventory(AHUD& HUD, UCanvas& Surface, const AC
     }
 
     const auto* Hero = Cast<ACoopRPGCharacter>(Controller.GetPawn());
-    const auto* PartyState = Controller.GetPlayerState<ACoopRPGPlayerState>();
-    const int32 PotionCount = PartyState ? PartyState->GetPartyRecoveryCount() : Controller.GetRecoveryCount();
+    const int32 PotionCount = Controller.GetRecoveryCount();
     const int32 StaminaCount = Controller.GetStaminaRecoveryCount();
     const bool bHealthRegistered = Controller.IsRecoveryRegistered(false);
     const bool bStaminaRegistered = Controller.IsRecoveryRegistered(true);
@@ -848,26 +847,27 @@ void FCoopRPGEquipmentPanel::DrawInventory(AHUD& HUD, UCanvas& Surface, const AC
     RightLabel(GoldValue, Right - 7.0, Top + 23.0, BodyFont, Ink);
     HUD.DrawRect(Color(191, 157, 100), Left, Top + 41.0, Right - Left, 1.0);
     const FIntPoint Supplies = Controller.GetStageRecoverySupplies();
+    const FIntPoint AvailableUses = Controller.GetAvailableRecoveryUses();
     const FIntPoint Uses = Controller.GetStageRecoveryUsesRemaining();
     if (bStage)
     {
-        const auto Shortcut = [](bool bRegistered, int32 Personal, int32 Supply)
+        const auto Shortcut = [](bool bRegistered, int32 Personal, int32 Available)
         {
-            if (!bRegistered)
+            if (bRegistered && Personal == 0)
             {
-                return FString::Printf(TEXT("보급 ×%d"), Supply);
+                return FString(TEXT("재고 없음 · 0회"));
             }
-            return Personal > 0 ? FString::Printf(TEXT("등록 ×%d"), Personal) : FString(TEXT("품절"));
+            return FString::Printf(TEXT("%d회"), Available);
         };
-        const FString Health = Shortcut(bHealthRegistered, PotionCount, Supplies.X);
-        const FString Stamina = Shortcut(bStaminaRegistered, StaminaCount, Supplies.Y);
+        const FString Health = Shortcut(bHealthRegistered, PotionCount, AvailableUses.X);
+        const FString Stamina = Shortcut(bStaminaRegistered, StaminaCount, AvailableUses.Y);
         Label(FString::Printf(TEXT("[H] HP %s  ·  [J] SP %s"), *Health, *Stamina), Left, Top + 54.0, SmallFont, Muted);
     }
     else
     {
         Label(TEXT("내 아이템"), Left, Top + 54.0, SmallFont, Muted);
     }
-    const FString Capacity = FString::Printf(TEXT("%d / %d칸"), Items.Num(), InventorySlotCount);
+    const FString Capacity = FString::Printf(TEXT("%d / %d칸"), Controller.GetBagSlotsUsed(), InventorySlotCount);
     RightLabel(Capacity, Right - 9.0, Top + 54.0, SmallFont, Muted);
 
     for (int32 Index = 0; Index < VisibleInventorySlots; ++Index)
@@ -934,7 +934,7 @@ void FCoopRPGEquipmentPanel::DrawInventory(AHUD& HUD, UCanvas& Surface, const AC
     };
     if (bPotionSelected)
     {
-        const float Recovery = bStaminaSelected ? UCoopRPGStaminaRecoveryEffect::StaminaRestored : UCoopRPGRecoveryEffect::HealthRestored;
+        const float Recovery = CoopRPG::Recovery::PersonalAmount;
         if (bStage)
         {
             const bool bRegistered = bStaminaSelected ? bStaminaRegistered : bHealthRegistered;

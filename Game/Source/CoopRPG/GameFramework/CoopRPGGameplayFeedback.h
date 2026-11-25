@@ -15,7 +15,8 @@ enum class ECoopRPGFeedbackKind : uint8
     TeamLootAcquired,
     ShieldBlocked,
     StaminaRecovery,
-    StaminaRecoveryAcquired
+    StaminaRecoveryAcquired,
+    BagFull
 };
 
 UENUM()

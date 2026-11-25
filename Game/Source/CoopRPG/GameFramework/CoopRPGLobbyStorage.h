@@ -18,6 +18,43 @@ enum class ECoopRPGStorageItem : uint8
     Count UMETA(Hidden)
 };
 
+namespace CoopRPG::Bag
+{
+    inline constexpr int32 SlotCount = 16;
+    inline constexpr TCHAR FullMessage[] = TEXT("가방에 빈자리가 없어요.");
+
+    constexpr int32 StackSize(ECoopRPGStorageItem Item)
+    {
+        switch (Item)
+        {
+        case ECoopRPGStorageItem::HealthPotion:
+        case ECoopRPGStorageItem::StaminaPotion:
+        case ECoopRPGStorageItem::MartialScroll:
+        case ECoopRPGStorageItem::ProtectionScroll:
+            return 10;
+        default:
+            return 1;
+        }
+    }
+
+    constexpr int32 SlotsUsed(ECoopRPGStorageItem Item, int32 Count)
+    {
+        return Count > 0 ? (Count - 1) / StackSize(Item) + 1 : 0;
+    }
+
+    constexpr int32 RoomFor(ECoopRPGStorageItem Item, int32 Held, int32 UsedSlots)
+    {
+        if (UsedSlots > SlotCount)
+        {
+            return 0;
+        }
+
+        const int32 Stack = StackSize(Item);
+        const int32 PartialStackRoom = (Stack - Held % Stack) % Stack;
+        return (SlotCount - UsedSlots) * Stack + PartialStackRoom;
+    }
+}
+
 USTRUCT()
 struct FCoopRPGStorageStock
 {
