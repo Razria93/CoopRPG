@@ -1,4 +1,4 @@
-# CoopRPG
+# Project Waystone
 
 GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트폴리오 프로젝트. 프로젝트 스텔라의 자체 전투 구조 경험을 엔진 프레임워크·네트워크 영역으로 확장하고, AI 협업과 MVP 범위 통제 과정을 증거로 남기는 것이 목적이다.
 
@@ -37,7 +37,7 @@ GAS와 언리얼 데디케이트 서버를 활용하는 협동 액션 RPG 포트
 | [검증 색인](Docs/Validation/Index.md) | 시험 기준안·결과와 증거 기록 방식 |
 | [환경 조사](Docs/Validation/Environment.md) | 확인된 도구·환경과 미검증 항목 |
 | [검증 로그 도구](Docs/Validation/LogViewer.md) | 두 모니터 배치·통합/출처 탭·표시 규칙·요청 ID 설계 |
-| [빌드 원리](Docs/Learning/UnrealBuildPipeline.md) · [소스 엔진 선택](Docs/Learning/SourceEngineDecision.md) | CoopRPG의 타깃·모듈·의존성 및 전용 실행물 준비 경로 |
+| [빌드 원리](Docs/Learning/UnrealBuildPipeline.md) · [소스 엔진 선택](Docs/Learning/SourceEngineDecision.md) | Project Waystone의 타깃·모듈·의존성 및 전용 실행물 준비 경로 |
 | [서버 권한과 신뢰 경계](Docs/Architecture.md#server-authority) | 현재 이동 확인 범위와 상자·GAS 판정 설계 |
 | [GAS 단타 구현 읽기](Docs/Learning/GASMeleeAttack.md) | 입력·GA·GE·속성 복제 흐름과 실제 검증 범위 |
 | [기능 문서·세션 인계](Docs/Development.md#feature-documents) | 같은 기능 문서의 갱신·분리 기준, 실제 기여·학습·역할 인계 |
